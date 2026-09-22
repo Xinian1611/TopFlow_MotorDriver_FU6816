@@ -1,0 +1,603 @@
+C51 COMPILER V9.60.7.0   SMDU                                                              09/21/2026 11:30:58 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE SMDU
+OBJECT MODULE PLACED IN .\Output\SMDU.obj
+COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\User\source\Hardware\SMDU.c LARGE OMF2 OPTIMIZE(8,SPEED) BROWSE
+                    - INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include) DEBUG PRINT(.\Listings\SMDU.lst) TABS(2) OBJECT(.\Output\SMDU
+                    -.obj)
+
+line level    source
+
+   1          /**
+   2           * @copyright (C) COPYRIGHT 2022 Fortiortech Shenzhen
+   3           * @file      xxx.c
+   4           * @author    Fortiortech  Appliction Team
+   5           * @date      2022-07-13
+   6           * @brief     This file contains TSD function used for Motor Control.
+   7           */
+   8          
+   9          #include <SMDU.h>
+  10          /********************************************************************************
+  11              Internal Routine Prototypes
+  12          ********************************************************************************/
+  13          
+  14          /*  -------------------------------------------------------------------------------------------------
+  15              Function Name  : HW_One_PI
+  16              Description    : PI
+  17              Date           : 2021-08-08
+  18              Parameter      : Xn1: [输入]
+  19              ------------------------------------------------------------------------------------------------- */
+  20          int16 HW_One_PI(int16 Xn1)
+  21          {
+  22   1          PI1_EK =  Xn1;                                                                               //填入E
+             -K
+  23   1          SMDU_RunBlock(1, PI);
+  24   1          return PI1_UKH;
+  25   1      }
+  26          /*  -------------------------------------------------------------------------------------------------
+  27              Function Name : int16 HW_One_PI2(int16 Xn1, int16 Yn0, int16 Xn2)
+  28              Description   : PI控制
+  29              Input         : Xn1--E(K)
+  30              Output        : PI_UK--当前PI输出值,执行时间us
+  31              -------------------------------------------------------------------------------------------------*/
+  32          int16 HW_One_PI2(int16 Xn1)
+  33          {
+  34   1          PI2_EK =  Xn1;                                                                               //填入E
+             -K
+  35   1          SMDU_RunBlock(2, PI);
+  36   1          return PI2_UKH;
+  37   1      }
+  38          /*  -------------------------------------------------------------------------------------------------
+  39              Function Name : int16 HW_One_PI3(int16 Xn1, int16 Yn0, int16 Xn2)
+  40              Description   : PI控制
+  41              Input         : Xn1--E(K)
+  42              Output        : PI_UK--当前PI输出值,执行时间us
+  43              -------------------------------------------------------------------------------------------------*/
+  44          int16 HW_One_PI3(int16 Xn1)
+  45          {
+  46   1          PI3_EK =  Xn1;                                                                               //填入E
+             -K
+  47   1          SMDU_RunBlock(3, PI);
+  48   1          return PI3_UKH;
+  49   1      }
+  50          
+C51 COMPILER V9.60.7.0   SMDU                                                              09/21/2026 11:30:58 PAGE 2   
+
+  51          /*  -------------------------------------------------------------------------------------------------
+  52              Function Name  : LPFFunction
+  53              Description    : 低通滤波函数
+  54              Date           : 2021-08-08
+  55              Parameter      : Xn1: [输入]
+  56          **                   Xn0: [输入]
+  57          **                   K: [输入]
+  58              ------------------------------------------------------------------------------------------------- */
+  59          int16 LPFFunction(int16 Xn1, int16 Xn0, int8 K)
+  60          {
+  61   1          LPF0_K = K << 8;
+  62   1          LPF0_X = Xn1;
+  63   1          LPF0_YH = Xn0;
+  64   1          SMDU_RunBlock(0, LPF);
+  65   1          return LPF0_YH;
+  66   1      }
+  67          
+  68          
+  69          /*  -------------------------------------------------------------------------------------------------
+  70              Function Name  : Atan_Us_MDU
+  71              Description    : XX-XX-XX
+  72              Date           : 2021-11-06
+  73              Parameter      : Xn1: [输入/出]
+  74          **                 Xn0: [输入/出]
+  75          **                 K: [输入/出]
+  76              ------------------------------------------------------------------------------------------------- */
+  77          int16 Atan_Us_MDU(int16 Xn1, int16 Xn0)
+  78          {
+  79   1          SCAT1_COS = Xn1;
+  80   1          SCAT1_SIN = Xn0;
+  81   1          SCAT1_THE = 0;
+  82   1          SMDU_RunBlock(1, ATAN);
+  83   1          return SCAT1_RES1;
+  84   1      }
+  85          
+  86          /*  -------------------------------------------------------------------------------------------------
+  87              Function Name  : Atan_Us_MDU
+  88              Description    : XX-XX-XX
+  89              Date           : 2021-11-06
+  90              Parameter      : Xn1: [输入/出]
+  91          **                       Xn0: [输入/出]
+  92          **                       Yn:  [输入/出]
+  93              ------------------------------------------------------------------------------------------------- */
+  94          int16 DivQ_L_MDU(uint16 Xn1, uint16 Xn0, uint16 Yn)
+  95          {
+  96   1          DIV0_DAH = Xn1;
+  97   1          DIV0_DAL = Xn0;
+  98   1          DIV0_DB  = Yn;
+  99   1          SMDU_RunBlock(0, DIV);
+ 100   1          return DIV0_DQL;
+ 101   1      }
+ 102          
+ 103          /**
+ 104           * @brief        PI
+ 105           * @param[in]    Xn1，当前误差
+ 106           * @param[out]   PIx_UKH，PI计算结果高16位
+ 107           */
+ 108          int16 MDU_PI0(int16 Xn1)
+ 109          {
+ 110   1        PI0_EK = Xn1;                                                                               // Fill in EK
+ 111   1        SMDU_RunBlock(0, PI);
+ 112   1        return PI0_UKH;
+C51 COMPILER V9.60.7.0   SMDU                                                              09/21/2026 11:30:58 PAGE 3   
+
+ 113   1      }
+ 114          int16 MDU_PI1(int16 Xn1)
+ 115          {
+ 116   1        PI1_EK = Xn1;                                                                               // Fill in EK
+ 117   1        SMDU_RunBlock(1, PI);
+ 118   1        return PI1_UKH;
+ 119   1      }
+ 120          int16 MDU_PI2(int16 Xn1)
+ 121          {
+ 122   1        PI2_EK = Xn1;                                                                               // Fill in EK
+ 123   1        SMDU_RunBlock(2, PI);
+ 124   1        return PI2_UKH;
+ 125   1      }
+ 126          int16 MDU_PI3(int16 Xn1)
+ 127          {
+ 128   1        PI3_EK = Xn1;                                                                               // Fill in EK
+ 129   1        SMDU_RunBlock(3, PI);
+ 130   1        return PI3_UKH;
+ 131   1      }
+ 132          
+ 133          /**
+ 134           * @brief        低通滤波器
+ 135           * @param[in]    Xn1，滤波输入
+ 136           * @param[in]    Xn0，滤波输入
+ 137           * @Param[in]    K，滤波系数
+ 138           * @param[out]   LPFx_YH，滤波结果高16位
+ 139           */
+ 140          int16 MDU_LPF0(int16 Xn1, int16 Xn0, int8 K)
+ 141          {
+ 142   1        LPF0_K = K << 8;
+ 143   1        LPF0_X = Xn1;
+ 144   1        LPF0_YH = Xn0;
+ 145   1        SMDU_RunBlock(0, LPF);
+ 146   1        return LPF0_YH;
+ 147   1      }
+ 148          int16 MDU_LPF1(int16 Xn1, int16 Xn0, int8 K)
+ 149          {
+ 150   1        LPF1_K = K << 8;
+ 151   1        LPF1_X = Xn1;
+ 152   1        LPF1_YH = Xn0;
+ 153   1        SMDU_RunBlock(1, LPF);
+ 154   1        return LPF1_YH;
+ 155   1      }
+ 156          int16 MDU_LPF2(int16 Xn1, int16 Xn0, int8 K)
+ 157          {
+ 158   1        LPF2_K = K << 8;
+ 159   1        LPF2_X = Xn1;
+ 160   1        LPF2_YH = Xn0;
+ 161   1        SMDU_RunBlock(2, LPF);
+ 162   1        return LPF2_YH;
+ 163   1      }
+ 164          int16 MDU_LPF3(int16 Xn1, int16 Xn0, int8 K)
+ 165          {
+ 166   1        LPF3_K = K << 8;
+ 167   1        LPF3_X = Xn1;
+ 168   1        LPF3_YH = Xn0;
+ 169   1        SMDU_RunBlock(3, LPF);
+ 170   1        return LPF3_YH;
+ 171   1      }
+ 172          
+ 173          /**
+ 174           * @brief        幅值计算
+C51 COMPILER V9.60.7.0   SMDU                                                              09/21/2026 11:30:58 PAGE 4   
+
+ 175                          U = sqrt((Usinθ)^2 +  (Ucosθ)^2) 
+ 176                          θ = atan(Usinθ/Ucosθ)
+ 177           * @param[in]    Ucos，Cos
+ 178           * @param[in]    Usin，Sin
+ 179           * @param[out]   SCAT1_RES1 幅值计算结果
+ 180           */
+ 181          uint16 MDU_Atan0_GetAmp(int16 Usin, int16 Ucos)
+ 182          {
+ 183   1        SCAT0_COS = Ucos;
+ 184   1        SCAT0_SIN = Usin;
+ 185   1        SMDU_RunBlock(0, ATAN);
+ 186   1        return SCAT0_RES1;
+ 187   1      }
+ 188          uint16 MDU_Atan1_GetAmp(int16 Usin, int16 Ucos)
+ 189          {
+ 190   1        SCAT1_COS = Ucos;
+ 191   1        SCAT1_SIN = Usin;
+ 192   1        SMDU_RunBlock(1, ATAN);
+ 193   1        return SCAT1_RES1;
+ 194   1      }
+ 195          uint16 MDU_Atan2_GetAmp(int16 Usin, int16 Ucos)
+ 196          {
+ 197   1        SCAT2_COS = Ucos;
+ 198   1        SCAT2_SIN = Usin;
+ 199   1        SMDU_RunBlock(2, ATAN);
+ 200   1        return SCAT2_RES1;
+ 201   1      }
+ 202          uint16 MDU_Atan3_GetAmp(int16 Usin, int16 Ucos)
+ 203          {
+ 204   1        SCAT3_COS = Ucos;
+ 205   1        SCAT3_SIN = Usin;
+ 206   1        SMDU_RunBlock(3, ATAN);
+ 207   1        return SCAT3_RES1;
+ 208   1      }
+ 209          
+ 210          /**
+ 211           * @brief       角度计算
+ 212                          U = sqrt((Usinθ)^2 +  (Ucosθ)^2) 
+ 213                          θ = atan(Usinθ/Ucosθ)
+ 214           * @param[in]    Ucos，Cos
+ 215           * @param[in]    Usin，Sin
+ 216           * @param[out]   SCAT1_RES2 角度计算结果
+ 217           */
+ 218          uint16 MDU_Atan0_GetTheta(int16 Usin, int16 Ucos)
+ 219          {
+ 220   1        SCAT0_COS = Ucos;
+ 221   1        SCAT0_SIN = Usin;
+ 222   1        SMDU_RunBlock(0, ATAN);
+ 223   1        return SCAT0_RES2;
+ 224   1      }
+ 225          uint16 MDU_Atan1_GetTheta(int16 Usin, int16 Ucos)
+ 226          {
+ 227   1        SCAT1_COS = Ucos;
+ 228   1        SCAT1_SIN = Usin;
+ 229   1        SMDU_RunBlock(1, ATAN);
+ 230   1        return SCAT1_RES2;
+ 231   1      }
+ 232          uint16 MDU_Atan2_GetTheta(int16 Usin, int16 Ucos)
+ 233          {
+ 234   1        SCAT2_COS = Ucos;
+ 235   1        SCAT2_SIN = Usin;
+ 236   1        SMDU_RunBlock(2, ATAN);
+C51 COMPILER V9.60.7.0   SMDU                                                              09/21/2026 11:30:58 PAGE 5   
+
+ 237   1        return SCAT2_RES2;
+ 238   1      }
+ 239          uint16 MDU_Atan3_GetTheta(int16 Usin, int16 Ucos)
+ 240          {
+ 241   1        SCAT3_COS = Ucos;
+ 242   1        SCAT3_SIN = Usin;
+ 243   1        SMDU_RunBlock(3, ATAN);
+ 244   1        return SCAT3_RES2;
+ 245   1      }
+ 246          
+ 247          /** 
+ 248           * @brief     有符号乘法16x16
+ 249           * @param[in] Xn1 乘数0(16位)
+ 250           * @param[in] Xn0 乘数1(16位)
+ 251           * @return    积的高16位 
+ 252           * @date      2023-09-21
+ 253           */
+ 254          int16 MDU_MUL0_GetSH16(int16 Xn1, int16 Xn0)
+ 255          {
+ 256   1        MUL0_MA = Xn1;
+ 257   1        MUL0_MB = Xn0;
+ 258   1        SMDU_RunBlock(0, SMUL);
+ 259   1        return  (int16)MUL0_MCH;
+ 260   1      }
+ 261          int16 MDU_MUL1_GetSH16(int16 Xn1, int16 Xn0)
+ 262          {
+ 263   1        MUL1_MA = Xn1;
+ 264   1        MUL1_MB = Xn0;
+ 265   1        SMDU_RunBlock(1, SMUL);
+ 266   1        return (int16)MUL1_MCH;
+ 267   1      }
+ 268          int16 MDU_MUL2_GetSH16(int16 Xn1, int16 Xn0)
+ 269          {
+ 270   1        MUL2_MA = Xn1;
+ 271   1        MUL2_MB = Xn0;
+ 272   1        SMDU_RunBlock(2, SMUL);
+ 273   1        return (int16)MUL2_MCH;
+ 274   1      }
+ 275          int16 MDU_MUL3_GetSH16(int16 Xn1, int16 Xn0)
+ 276          {
+ 277   1        MUL3_MA = Xn1;
+ 278   1        MUL3_MB = Xn0;
+ 279   1        SMDU_RunBlock(3, SMUL);
+ 280   1        return (int16)MUL3_MCH;
+ 281   1      }
+ 282          
+ 283          /** 
+ 284           * @brief     有符号乘法16x16
+ 285           * @param[in] Xn1 乘数0(16位)
+ 286           * @param[in] Xn0 乘数1(16位)
+ 287           * @return    积的低16位 
+ 288           * @date      2023-09-21
+ 289           */
+ 290          int16 MDU_MUL0_GetSL16(int16 Xn1, int16 Xn0)
+ 291          {
+ 292   1        MUL0_MA = Xn1;
+ 293   1        MUL0_MB = Xn0;
+ 294   1        SMDU_RunBlock(0, SMUL);
+ 295   1        return (int16)MUL0_MCL;
+ 296   1      }
+ 297          int16 MDU_MUL1_GetSL16(int16 Xn1, int16 Xn0)
+ 298          {
+C51 COMPILER V9.60.7.0   SMDU                                                              09/21/2026 11:30:58 PAGE 6   
+
+ 299   1        MUL1_MA = Xn1;
+ 300   1        MUL1_MB = Xn0;
+ 301   1        SMDU_RunBlock(1, SMUL);
+ 302   1        return (int16)MUL1_MCL;
+ 303   1      }
+ 304          int16 MDU_MUL2_GetSL16(int16 Xn1, int16 Xn0)
+ 305          {
+ 306   1        MUL2_MA = Xn1;
+ 307   1        MUL2_MB = Xn0;
+ 308   1        SMDU_RunBlock(2, SMUL);
+ 309   1        return (int16)MUL2_MCL;
+ 310   1      }
+ 311          int16 MDU_MUL3_GetSL16(int16 Xn1, int16 Xn0)
+ 312          {
+ 313   1        MUL3_MA = Xn1;
+ 314   1        MUL3_MB = Xn0;
+ 315   1        SMDU_RunBlock(3, SMUL);
+ 316   1        return (int16)MUL3_MCL;
+ 317   1      }
+ 318          
+ 319          /** 
+ 320           * @brief     有符号乘法16x16
+ 321           * @param[in] Xn1 乘数0(16位)
+ 322           * @param[in] Xn0 乘数1(16位)
+ 323           * @return    积32位 
+ 324           * @date      2023-09-21
+ 325           */
+ 326          int32 MDU_MUL0_GetS32(uint16 Xn1, uint16 Xn0)
+ 327          {
+ 328   1        MUL0_MA = Xn1;
+ 329   1        MUL0_MB = Xn0;
+ 330   1        SMDU_RunBlock(0, SMUL);
+ 331   1      
+ 332   1        return* (int32*) & MUL0_MCH;
+ 333   1      }
+ 334          int32 MDU_MUL1_GetS32(uint16 Xn1, uint16 Xn0)
+ 335          {
+ 336   1        MUL1_MA = Xn1;
+ 337   1        MUL1_MB = Xn0;
+ 338   1        SMDU_RunBlock(1, SMUL);
+ 339   1      
+ 340   1        return* (int32*) & MUL1_MCH;
+ 341   1      }
+ 342          int32 MDU_MUL2_GetS32(uint16 Xn1, uint16 Xn0)
+ 343          {
+ 344   1        MUL2_MA = Xn1;
+ 345   1        MUL2_MB = Xn0;
+ 346   1        SMDU_RunBlock(2, SMUL);
+ 347   1      
+ 348   1        return* (int32*) & MUL2_MCH;
+ 349   1      }
+ 350          int32 MDU_MUL3_GetS32(uint16 Xn1, uint16 Xn0)
+ 351          {
+ 352   1        MUL3_MA = Xn1;
+ 353   1        MUL3_MB = Xn0;
+ 354   1        SMDU_RunBlock(3, SMUL);
+ 355   1      
+ 356   1        return* (int32*) & MUL3_MCH;
+ 357   1      }
+ 358          
+ 359          /** 
+ 360           * @brief     无符号乘法16x16
+C51 COMPILER V9.60.7.0   SMDU                                                              09/21/2026 11:30:58 PAGE 7   
+
+ 361           * @param[in] Xn1 乘数0(16位)
+ 362           * @param[in] Xn0 乘数1(16位)
+ 363           * @return    积的高16位 
+ 364           * @date      2023-09-21
+ 365           */
+ 366          uint16 MDU_MUL0_GetUH16(uint16 Xn1, uint16 Xn0)
+ 367          {
+ 368   1        MUL0_MA = Xn1;
+ 369   1        MUL0_MB = Xn0;
+ 370   1        SMDU_RunBlock(0, UMUL);
+ 371   1        return (uint16)MUL0_MCH;
+ 372   1      }
+ 373          uint16 MDU_MUL1_GetUH16(uint16 Xn1, uint16 Xn0)
+ 374          {
+ 375   1        MUL1_MA = Xn1;
+ 376   1        MUL1_MB = Xn0;
+ 377   1        SMDU_RunBlock(1, UMUL);
+ 378   1        return (uint16)MUL1_MCH;
+ 379   1      }
+ 380          
+ 381          uint16 MDU_MUL2_GetUH16(uint16 Xn1, uint16 Xn0)
+ 382          {
+ 383   1        MUL2_MA = Xn1;
+ 384   1        MUL2_MB = Xn0;
+ 385   1        SMDU_RunBlock(2, UMUL);
+ 386   1        return (uint16)MUL2_MCH;
+ 387   1      }
+ 388          
+ 389          uint16 MDU_MUL3_GetUH16(uint16 Xn1, uint16 Xn0)
+ 390          {
+ 391   1        MUL3_MA = Xn1;
+ 392   1        MUL3_MB = Xn0;
+ 393   1        SMDU_RunBlock(3, UMUL);
+ 394   1        return (uint16)MUL3_MCH;
+ 395   1      }
+ 396          
+ 397          /** 
+ 398           * @brief     无符号乘法16x16
+ 399           * @param[in] Xn1 乘数0(16位)
+ 400           * @param[in] Xn0 乘数1(16位)
+ 401           * @return    积的低16位 
+ 402           * @date      2023-09-21
+ 403           */
+ 404          uint16 MDU_MUL0_GetUL16(uint16 Xn1, uint16 Xn0)
+ 405          {
+ 406   1        MUL0_MA = Xn1;
+ 407   1        MUL0_MB = Xn0;
+ 408   1        SMDU_RunBlock(0, UMUL);
+ 409   1        return (uint16)MUL0_MCL;
+ 410   1      }
+ 411          
+ 412          uint16 MDU_MUL1_GetUL16(uint16 Xn1, uint16 Xn0)
+ 413          {
+ 414   1        MUL1_MA = Xn1;
+ 415   1        MUL1_MB = Xn0;
+ 416   1        SMDU_RunBlock(1, UMUL);
+ 417   1        return (uint16)MUL1_MCL;
+ 418   1      }
+ 419          uint16 MDU_MUL2_GetUL16(uint16 Xn1, uint16 Xn0)
+ 420          {
+ 421   1        MUL2_MA = Xn1;
+ 422   1        MUL2_MB = Xn0;
+C51 COMPILER V9.60.7.0   SMDU                                                              09/21/2026 11:30:58 PAGE 8   
+
+ 423   1        SMDU_RunBlock(2, UMUL);
+ 424   1        return (uint16)MUL2_MCL;
+ 425   1      }
+ 426          uint16 MDU_MUL3_GetUL16(uint16 Xn1, uint16 Xn0)
+ 427          {
+ 428   1        MUL3_MA = Xn1;
+ 429   1        MUL3_MB = Xn0;
+ 430   1        SMDU_RunBlock(3, UMUL);
+ 431   1        return (uint16)MUL3_MCL;
+ 432   1      }
+ 433          
+ 434          /** 
+ 435           * @brief     无符号乘法16x16
+ 436           * @param[in] Xn1 乘数0(16位)
+ 437           * @param[in] Xn0 乘数1(16位)
+ 438           * @return    积的32位 
+ 439           * @date      2023-09-21
+ 440           */
+ 441          uint32 MDU_MUL0_GetU32(uint16 Xn1, uint16 Xn0)
+ 442          {
+ 443   1        MUL0_MA = Xn1;
+ 444   1        MUL0_MB = Xn0;
+ 445   1        SMDU_RunBlock(0, UMUL);
+ 446   1        
+ 447   1        return *(uint32*)&MUL0_MCH;
+ 448   1      }
+ 449          uint32 MDU_MUL1_GetU32(uint16 Xn1, uint16 Xn0)
+ 450          {
+ 451   1        MUL1_MA = Xn1;
+ 452   1        MUL1_MB = Xn0;
+ 453   1        SMDU_RunBlock(1, UMUL);
+ 454   1      
+ 455   1        return* (uint32*) & MUL1_MCH;
+ 456   1      }
+ 457          uint32 MDU_MUL2_GetU32(uint16 Xn1, uint16 Xn0)
+ 458          {
+ 459   1        MUL2_MA = Xn1;
+ 460   1        MUL2_MB = Xn0;
+ 461   1        SMDU_RunBlock(2, UMUL);
+ 462   1      
+ 463   1        return* (uint32*) & MUL2_MCH;
+ 464   1      }
+ 465          uint32 MDU_MUL3_GetU32(uint16 Xn1, uint16 Xn0)
+ 466          {
+ 467   1        MUL3_MA = Xn1;
+ 468   1        MUL3_MB = Xn0;
+ 469   1        SMDU_RunBlock(3, UMUL);
+ 470   1      
+ 471   1        return* (uint32*) & MUL3_MCH;
+ 472   1      }
+ 473          
+ 474          /**
+ 475           * @brief        32位/16位除法，求商，只取低位
+ 476           * @param[in]    daH 被除数高16位
+ 477           * @param[in]    daL 被除数低16位
+ 478           * @param[in]    Yn  除数
+ 479           * @param[out]   DIV0_DQL 商低16位
+ 480           */
+ 481          uint16 MDU_DIV0_GetQL16(uint16 daH, uint16 daL, uint16 Yn)
+ 482          {
+ 483   1        DIV0_DAH = daH;
+ 484   1        DIV0_DAL = daL;
+C51 COMPILER V9.60.7.0   SMDU                                                              09/21/2026 11:30:58 PAGE 9   
+
+ 485   1        DIV0_DB = Yn;
+ 486   1        SMDU_RunBlock(0, DIV);
+ 487   1        return DIV0_DQL;
+ 488   1      }
+ 489          uint16 MDU_DIV1_GetQL16(uint16 daH, uint16 daL, uint16 Yn)
+ 490          {
+ 491   1        DIV1_DAH = daH;
+ 492   1        DIV1_DAL = daL;
+ 493   1        DIV1_DB = Yn;
+ 494   1        SMDU_RunBlock(1, DIV);
+ 495   1        return DIV1_DQL;
+ 496   1      }
+ 497          uint16 MDU_DIV2_GetQL16(uint16 daH, uint16 daL, uint16 Yn)
+ 498          {
+ 499   1        DIV2_DAH = daH;
+ 500   1        DIV2_DAL = daL;
+ 501   1        DIV2_DB = Yn;
+ 502   1        SMDU_RunBlock(2, DIV);
+ 503   1        return DIV2_DQL;
+ 504   1      }
+ 505          uint16 MDU_DIV3_GetQL16(uint16 daH, uint16 daL, uint16 Yn)
+ 506          {
+ 507   1        DIV3_DAH = daH;
+ 508   1        DIV3_DAL = daL;
+ 509   1        DIV3_DB = Yn;
+ 510   1        SMDU_RunBlock(3, DIV);
+ 511   1        return DIV3_DQL;
+ 512   1      }
+ 513          
+ 514          /**
+ 515           * @brief        32位/16位除法，求商，取32位
+ 516           * @param[in]    daH 被除数高16位
+ 517           * @param[in]    daL 被除数低16位
+ 518           * @param[in]    Yn  除数
+ 519           * @param[out]   DIV0_DQL 商32位
+ 520           */
+ 521          uint32 MDU_DIV0_GetQ32(uint16 daH, uint16 daL, uint16 Yn)
+ 522          {
+ 523   1        DIV0_DAH = daH;
+ 524   1        DIV0_DAL = daL;
+ 525   1        DIV0_DB = Yn;
+ 526   1        SMDU_RunBlock(0, DIV);
+ 527   1        return *(uint32*)&DIV0_DQH;
+ 528   1      }
+ 529          
+ 530          uint32 MDU_DIV1_GetQ32(uint16 daH, uint16 daL, uint16 Yn)
+ 531          {
+ 532   1        DIV1_DAH = daH;
+ 533   1        DIV1_DAL = daL;
+ 534   1        DIV1_DB = Yn;
+ 535   1        SMDU_RunBlock(1, DIV);
+ 536   1        return* (uint32*) & DIV1_DQH;
+ 537   1      }
+ 538          uint32 MDU_DIV2_GetQ32(uint16 daH, uint16 daL, uint16 Yn)
+ 539          {
+ 540   1        DIV2_DAH = daH;
+ 541   1        DIV2_DAL = daL;
+ 542   1        DIV2_DB = Yn;
+ 543   1        SMDU_RunBlock(2, DIV);
+ 544   1        return* (uint32*) & DIV2_DQH;
+ 545   1      }
+ 546          uint32 MDU_DIV3_GetQ32(uint16 daH, uint16 daL, uint16 Yn)
+C51 COMPILER V9.60.7.0   SMDU                                                              09/21/2026 11:30:58 PAGE 10  
+
+ 547          {
+ 548   1        DIV3_DAH = daH;
+ 549   1        DIV3_DAL = daL;
+ 550   1        DIV3_DB = Yn;
+ 551   1        SMDU_RunBlock(3, DIV);
+ 552   1        return* (uint32*) & DIV3_DQH;
+ 553   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1984    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----      10
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

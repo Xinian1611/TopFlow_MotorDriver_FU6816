@@ -1,0 +1,1 @@
+"..\User\source\Hardware\WDT.c" LARGE OMF2 OPTIMIZE (8,SPEED) BROWSE INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include) DEBUG PRINT(.\Listings\WDT.lst) TABS (2) OBJECT(.\Output\WDT.obj)

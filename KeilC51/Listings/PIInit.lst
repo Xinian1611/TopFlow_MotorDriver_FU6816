@@ -1,0 +1,95 @@
+C51 COMPILER V9.60.7.0   PIINIT                                                            09/21/2026 17:11:31 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE PIINIT
+OBJECT MODULE PLACED IN .\Output\PIInit.obj
+COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\User\source\Hardware\PIInit.c LARGE OMF2 OPTIMIZE(8,SPEED) BROW
+                    -SE INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include) DEBUG PRINT(.\Listings\PIInit.lst) TABS(2) OBJECT(.\Output\
+                    -PIInit.obj)
+
+line level    source
+
+   1          /**
+   2           * @copyright (C) COPYRIGHT 2022 Fortiortech Shenzhen
+   3           * @file      xxx.c
+   4           * @author    Fortiortech  Appliction Team
+   5           * @since     Create:2022-08-05
+   6           * @date      Last modify:2022-08-05
+   7           * @note      Last modify author is Leo.li
+   8           * @brief
+   9           */
+  10           
+  11          /* Includes -------------------------------------------------------------------------------------*/
+  12          #include <MyProject.h>
+  13          
+  14          
+  15          
+  16          
+  17          /** 
+  18           * @brief        PI初始化,PI1用于外环
+  19           * @date         2022-09-13
+  20           */
+  21          void PI_Init(void)
+  22          {
+  23   1          PI1_KP          = SKP;
+  24   1          PI1_KI          = SKI;
+  25   1          PI1_EK1         =0;
+  26   1          PI1_EK          =0;
+  27   1          PI1_UKH         =0;
+  28   1          PI1_UKL         =0;
+  29   1          PI1_UKMAX       = SOUTMAX;
+  30   1          PI1_UKMIN       = SOUTMIN;
+  31   1      }
+  32          
+  33          /**
+  34              @brief        PI2用于母线限流
+  35              @date         2022-07-14
+  36          */
+  37          void PI2_Init(void)
+  38          {
+  39   1          PI2_KP          = LimitCurrent_KP;
+  40   1          PI2_KI          = LimitCurrent_KI;
+  41   1          PI2_EK1         =0;
+  42   1          PI2_EK          =0;
+  43   1          PI2_UKH         =0;
+  44   1          PI2_UKL         =0;
+  45   1          PI2_UKMAX       = QOUTMAX;
+  46   1          PI2_UKMIN       = 0;
+  47   1          PI2_KD          = 0;             
+  48   1          PI2_EK2         = 0;                    
+  49   1      }
+  50          /**
+  51              @brief        PI3用于弱磁增速
+  52              @date         2022-07-14
+  53          */
+C51 COMPILER V9.60.7.0   PIINIT                                                            09/21/2026 17:11:31 PAGE 2   
+
+  54          void PI3_Init(void)
+  55          {
+  56   1          PI3_KP          = AKP;
+  57   1          PI3_EK1         = 0;
+  58   1          PI3_EK          = 0;
+  59   1          PI3_KI          = AKI;
+  60   1          PI3_UKH         = 0;
+  61   1          PI3_UKL         = 0;
+  62   1          PI3_UKMAX       = A_Value(AMAX);
+  63   1          PI3_UKMIN       = A_Value(AMIN);
+  64   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    166    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

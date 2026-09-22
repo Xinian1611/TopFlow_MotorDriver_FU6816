@@ -1,0 +1,1 @@
+"..\User\source\Hardware\DMA.c" LARGE OMF2 OPTIMIZE (8,SPEED) BROWSE INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include) DEBUG PRINT(.\Listings\DMA.lst) TABS (2) OBJECT(.\Output\DMA.obj)

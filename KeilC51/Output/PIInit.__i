@@ -1,0 +1,1 @@
+"..\User\source\Hardware\PIInit.c" LARGE OMF2 OPTIMIZE (8,SPEED) BROWSE INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include) DEBUG PRINT(.\Listings\PIInit.lst) TABS (2) OBJECT(.\Output\PIInit.obj)

@@ -1,0 +1,1042 @@
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE MOTORCONTROLFUNCTION
+OBJECT MODULE PLACED IN .\Output\MotorControlFunction.obj
+COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\User\source\Function\MotorControlFunction.c LARGE OMF2 OPTIMIZE
+                    -(8,SPEED) BROWSE INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include) DEBUG PRINT(.\Listings\MotorControlFunction.l
+                    -st) TABS(2) OBJECT(.\Output\MotorControlFunction.obj)
+
+line level    source
+
+   1          /**
+   2           * @copyright (C) COPYRIGHT 2022 Fortiortech Shenzhen
+   3           * @file      MotorControlFunction.c
+   4           * @author    Fortiortech  Appliction Team
+   5           * @since     Create:2021-11-07
+   6           * @date      Last modify:2022-07-14
+   7           * @note      Last modify author is Kris.huang
+   8           * @brief
+   9           */
+  10          
+  11          
+  12          #include <MyProject.h>
+  13          
+  14          CurrentOffset      xdata mcCurOffset;  ///< 电流采样偏置电压采集缓存
+  15          
+  16          /**
+  17           * @brief      对FOC的相关寄存器进行配置,先清理寄存器，后配置，最后使能
+  18           * @exception  初始化FOC，需要先关闭DRVIVER，对FOC寄存器配置完成后，使能FOC再打开
+             -DRVIVER,否则可能导致第一拍电流采样错误
+  19           * @date       2022-07-14
+  20           */
+  21          void FOC_Init(void)
+  22          {
+  23   1          DRV_CMR         = 0x0ABF;  // UH/VH/WH UL/VL/WL 互补并使能
+  24   1          /* 使能FOC */
+  25   1          ClrBit(DRV_CR, DRVEN);                                // 关闭DRVIVER 计时器,防止第一拍采样
+             -出错
+  26   1          ClrBit(DRV_CR, FOCEN);
+  27   1          SetBit(DRV_CR, FOCEN);
+  28   1          ClrBit(FOC_CR0, MERRS1);
+  29   1          SetBit(FOC_CR0, MERRS0);
+  30   1          #if (VOLTAGE_MODE == INTERNAL)       //必须在FOC使能后才能切换ADC通道
+                  {
+                      SetBit(FOC_CR0, UCSEL);         //UDC采样通道选择0：AD2 1:AD15
+                  }
+                  #endif
+  35   1          FOC_EOMEKLPF    = _Q8(1.0);                            // FOC内部 速度滤波系数
+  36   1          /* 配置FOC寄存器 */
+  37   1          FOC_CR1         = 0;                                   // 清零 FOC_CR1
+  38   1          FOC_CR2         = 0;                                   // 清零 FOC_CR2
+  39   1          FOC_IDREF       = 0;                                   // 清零 Id
+  40   1          FOC_IQREF       = 0;                                   // 清零 Iq
+  41   1          FOC__THETA      = 0;                                   // 清零 角度
+  42   1          FOC_RTHEACC     = 0;                                   // 清零 爬坡函数的初始加速度
+  43   1          FOC__RTHESTEP   = 0;                                   // 清零 爬坡速度
+  44   1          FOC_RTHECNT     = 0;                                   // 清零 爬坡次数
+  45   1          FOC_THECOMP     = _Q15(3.0 / 180.0);                   // SMO 估算补偿角
+  46   1          FOC_THECOR      = 0x04;                                // 误差角度补偿
+  47   1          FOC_EFREQACC    = 0;
+  48   1          FOC_EFREQMIN    = 0;
+  49   1          FOC_EFREQHOLD   = 0;
+  50   1          /* 电流环参数配置 */
+  51   1          FOC_DMAX        = DOUTMAX;
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 2   
+
+  52   1          FOC_DMIN        = DOUTMIN;
+  53   1          FOC_QMAX        = QOUTMAX;
+  54   1          FOC_QMIN        = QOUTMIN;
+  55   1          FOC_DKP             = DKP;
+  56   1          FOC_DKI             = DKI;
+  57   1          FOC_QKP             = QKP;
+  58   1          FOC_QKI             = QKI;
+  59   1          /* 位置估算参数配置 */
+  60   1          FOC_EK1         = OBS_K1T;
+  61   1          FOC_EK2         = OBS_K2T;
+  62   1          FOC_EK3         = OBS_K3T;
+  63   1          FOC_EK4         = OBS_K4T;
+  64   1          /* -----AO/PLL/SMO ----- */
+  65   1          #if (EstimateAlgorithm == AO)
+  66   1          {
+  67   2              ClrBit(FOC_CR2, ESEL);
+  68   2              FOC_KSLIDE      = OBS_KSLIDE;
+  69   2              FOC_EKLPFMIN    = OBS_EA_KS1;
+  70   2              SetBit(FOC_CR0, ESCMS);
+  71   2              SetBit(FOC_CR3, MFP_EN);
+  72   2          }
+  73   1          #elif (EstimateAlgorithm == SMO)
+                  {
+                      ClrBit(FOC_CR2, ESEL);
+                      FOC_KSLIDE      = OBS_KSLIDE;
+                      FOC_EKLPFMIN    = OBS_EA_KS;
+                  }
+                  #elif (EstimateAlgorithm == PLL)
+                  {
+                      SetBit(FOC_CR2, ESEL);
+                      FOC_KSLIDE      = OBSE_PLLKP_GAIN;
+                      FOC_EKLPFMIN    = OBSE_PLLKI_GAIN;
+                  }
+                  #else
+                  {
+              #error " EstimateAlgorithm  ERR"
+                  }
+                  #endif
+  90   1          FOC_FBASE       = OBS_FBASE;                            // 由速度计算角度增量的系数
+  91   1          FOC_OMEKLPF     = SPEED_KLPF;                           // 估算器内速度低通滤波系数
+  92   1          FOC_TGLI        = PWM_TGLI_LOAD;                        // 死区配置
+  93   1          SetBit(FOC_CR1, SVPWMEN);                               // SVPWM模式
+  94   1          
+  95   1          if (mcFocCtrl.FR == CW)
+  96   1          {
+  97   2              ClrBit(DRV_CR, DDIR);                               // 反转标志位
+  98   2          }
+  99   1          else
+ 100   1          {
+ 101   2              SetBit(DRV_CR, DDIR);                               // 反转标志位
+ 102   2          }
+ 103   1          
+ 104   1          /* 过调制 */
+ 105   1          #if (OverModulation == Enable)
+                  {
+                      SetBit(FOC_CR1, OVMDL);                             // 过调制
+                  }
+                  #endif //end OverModulation
+ 110   1          /* 单电阻采样； 需要最小采样窗,FOC_TRGDLY为0，七段式SVPWM方式 */
+ 111   1          #if (Shunt_Resistor_Mode == Single_Resistor)
+ 112   1          {
+ 113   2          #if (Single_Resistor_Mode == SVPWM_OPTIM)
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 3   
+
+                  {
+                    SetReg(FOC_CR1, CSM0 | CSM1, CSM1);                 // 新单电阻采样配置
+                          FOC_TRGDLY = SVPWM_OPTIM_TRGDLY;                    // 采样时刻在中点，一般考虑开
+             -关噪声影响，会设置延迟；
+                  }
+                  #else
+ 119   2          {
+ 120   3                  FOC_TRGDLY = SVPWM_COMMOM_TRGDLY;                   // 采样时刻在中点，一般考虑开
+             -关噪声影响，会设置延迟；
+ 121   3            SetReg(FOC_CR1, CSM0 | CSM1, 0);                    // 单电阻采样配置
+ 122   3          }
+ 123   2              #endif
+ 124   2              FOC_TSMIN  = PWM_TS_LOAD;                           // 最小采样窗口
+ 125   2              // 如：0x0c表示延迟12个clock，提前用反码形式，如0x84表示提前12个clock。
+ 126   2              ClrBit(FOC_CR2, F5SEG);                             // 7段式，单电阻仅支持7段式
+ 127   2          }
+ 128   1          /* 双电阻采样，可设置死区补偿值，在下降沿结束前开始采样Ia Ib */
+ 129   1          #elif (Shunt_Resistor_Mode == Double_Resistor)          // double resistor sample
+                  {
+                      SetReg(FOC_CR1, CSM0 | CSM1, CSM0);
+                      FOC_TSMIN       = PWM_DT_LOAD;                      // 死区补偿值
+                      FOC_TRGDLY      = 0x86;                             // ADC采样的时刻，采样时刻在计数�
+             -��零点附近与单电阻不同
+                      // 如：0x83为下降沿结束前3个clock采样Ia 0x01为上升沿开始后第一个clock开始�
+             -��样。根据实际情况调整。
+                      FOC_TBLO        = PWM_DLOWL_TIME;                   // 下桥臂最小脉冲，保证采样
+                      /*五段式或七段式选择*/
+                      #if (SVPMW_Mode == SVPWM_7_Segment)
+                      {
+                          ClrBit(FOC_CR2, F5SEG);                         // 7段式
+                      }
+                      #elif (SVPMW_Mode == SVPWM_5_Segment)
+                      {
+                          SetBit(FOC_CR2, F5SEG);                         // 5段式
+                      }
+                      #endif
+                      #if (DouRes_Sample_Mode == DouRes_1_Cycle)
+                      {
+                          ClrBit(FOC_CR2, DSS);                           // 7段式
+                      }
+                      #elif (DouRes_Sample_Mode == DouRes_2_Cycle)
+                      {
+                          SetBit(FOC_CR2, DSS);                           // 5段式
+                      }
+                      #endif //end DouRes_Sample_Mode
+                  }
+                  /*三电阻采样*/
+                  #elif (Shunt_Resistor_Mode == Three_Resistor)           // signel resistor sample
+                  {
+                      SetReg(FOC_CR1, CSM0 | CSM1, CSM0 | CSM1);          // 三电阻
+                      FOC_TSMIN  = PWM_DT_LOAD;                           // 死区补偿值
+                      FOC_TRGDLY = 0x06;                                  // ADC采样的时刻，采样时刻在计数�
+             -��零点附近与单电阻不同。
+                      // 如：0x83为下降沿结束前3个clock采样Ia，0x01为上升沿开始后第一个clock开�
+             -�采样。根据实际情况调整。
+                      FOC_TBLO = PWM_OVERMODULE_TIME;                     // 过调制电流采样处理的TB脉宽
+                      /* 五段式或七段式选择 */
+                      #if (SVPMW_Mode == SVPWM_7_Segment)
+                      {
+                          ClrBit(FOC_CR2, F5SEG);                         // 7段式
+                      }
+                      #elif (SVPMW_Mode == SVPWM_5_Segment)
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 4   
+
+                      {
+                          SetBit(FOC_CR2, F5SEG);                         // 5段式
+                      }
+                      #endif // end SVPMW_Mode
+                      #if (DouRes_Sample_Mode == DouRes_1_Cycle)
+                      {
+                          ClrBit(FOC_CR2, DSS);                           // 7段式
+                      }
+                      #elif (DouRes_Sample_Mode == DouRes_2_Cycle)
+                      {
+                          SetBit(FOC_CR2, DSS);                           // 5段式
+                      }
+                      #endif // end DouRes_Sample_Mode
+                  }
+                  #endif  // end Shunt_Resistor_Mode
+ 185   1          /* 使能电流基准校正 */
+ 186   1          #if (CalibENDIS == Enable)
+ 187   1          {
+ 188   2              if (mcCurOffset.OffsetFlag == 1)
+ 189   2              {
+ 190   3                  #if (Shunt_Resistor_Mode == Single_Resistor)    // 单电阻校正
+ 191   3                  {
+ 192   4                      /*set ibus current sample offset*/
+ 193   4                      SetReg(FOC_CR2, CSOC0 | CSOC1, 0x00);
+ 194   4                      FOC_CSO = mcCurOffset.Iw_busOffset;         // 写入Ibus的偏置
+ 195   4                  }
+ 196   3                  #elif (Shunt_Resistor_Mode == Double_Resistor)  // 双电阻校正
+                          {
+                              /*set ia, ib current sample offset*/
+                              SetReg(FOC_CR2, CSOC0 | CSOC1, CSOC0);
+                              FOC_CSO  = mcCurOffset.IuOffset;            // 写入IA的偏置
+                          
+                              SetReg(FOC_CR2, CSOC0 | CSOC1, CSOC1);
+                              FOC_CSO  = mcCurOffset.IvOffset;            // 写入IB的偏置
+                          }
+                          #elif (Shunt_Resistor_Mode == Three_Resistor)   // 三电阻校正
+                          {
+                              /*set ibus current sample offset*/
+                              SetReg(FOC_CR2, CSOC0 | CSOC1, CSOC0);
+                              FOC_CSO = mcCurOffset.IuOffset;             // 写入IA的偏置
+                          
+                              SetReg(FOC_CR2, CSOC0 | CSOC1, CSOC1);
+                              FOC_CSO = mcCurOffset.IvOffset;             // 写入IB的偏置
+                          
+                              SetReg(FOC_CR2, CSOC0 | CSOC1, 0x00);
+                              FOC_CSO = mcCurOffset.Iw_busOffset;         // 写入IC的偏置
+                          }
+                          #endif  //end Shunt_Resistor_Mode
+ 218   3              }
+ 219   2          }
+ 220   1          #endif  //end CalibENDIS
+ 221   1          ClrBit(FOC_CR2, UDD);
+ 222   1          ClrBit(FOC_CR2, UQD);
+ 223   1          /*  -------------------------------------------------------------------------------------------------
+ 224   1              DRV_CTL：PWM来源选择
+ 225   1              OCS = 0, DRV_COMR
+ 226   1              OCS = 1, FOC/SVPWM/SPWM
+ 227   1              -------------------------------------------------------------------------------------------------*
+             -/
+ 228   1          /*计数器比较值来源FOC*/
+ 229   1          SetBit(DRV_CR, DRVEN);  // 计数器使能      0-->Disable 1-->Enable
+ 230   1          SetBit(DRV_CR, OCS);
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 5   
+
+ 231   1      }
+ 232          
+ 233          
+ 234          /**
+ 235           * @brief     预充电分三步，第一步是对U相进行预充电，第二步是对V两相进行预充
+             -电;第三步是对W三相进行预充电。
+ 236           * @brief     低压应用一般不需要预充电，在customer.h禁止预充电功能寄即可
+ 237           * @exception 在低功率高压应用中，过流值较小，充电电流过大可能导致触发硬件�
+             -�流, 需要注意检查
+ 238           * @date      2022-07-14
+ 239           */
+ 240          void Motor_Charge(void)
+ 241          {
+ 242   1          if (McStaSet.SetFlag.ChargeSetFlag == 0)
+ 243   1          {
+ 244   2              McStaSet.SetFlag.ChargeSetFlag = 1;
+ 245   2              SetBit(DRV_CR, DRVEN);  // 计数器使能      0-->Disable 1-->Enable
+ 246   2              DRV_DR = CHARGE_DUTY * DRV_ARR;              //下桥臂10% duty
+ 247   2              DRV_CMR &= 0x0000;
+ 248   2              /*  ----------------------------------------------------------------------------------------------
+             ----
+ 249   2                  DRV_CTL：PWM来源选择
+ 250   2                  OCS = 0, DRV_COMR
+ 251   2                  OCS = 1, FOC/SVPWM/SPWM
+ 252   2                  ----------------------------------------------------------------------------------------------
+             ----*/
+ 253   2              ClrBit(DRV_CR, OCS);
+ 254   2              mcFocCtrl.ChargeStep = 0;
+ 255   2          }
+ 256   1          
+ 257   1          if ((mcFocCtrl.State_Count < CHARGE_TIME) && (mcFocCtrl.ChargeStep == 0))
+ 258   1          {
+ 259   2              mcFocCtrl.ChargeStep = 1;
+ 260   2              DRV_CMR |= 0x01;                          // U相下桥臂通
+ 261   2              MOE = 1;
+ 262   2          }
+ 263   1          
+ 264   1          if (( mcFocCtrl.State_Count <= (CHARGE_TIME << 1) / 3) && (mcFocCtrl.ChargeStep == 1))
+ 265   1          {
+ 266   2              mcFocCtrl.ChargeStep = 2;
+ 267   2              DRV_CMR |= 0x04;                         // V相下桥臂通
+ 268   2          }
+ 269   1          
+ 270   1          if ((mcFocCtrl.State_Count <= CHARGE_TIME / 3) && (mcFocCtrl.ChargeStep == 2))
+ 271   1          {
+ 272   2              mcFocCtrl.ChargeStep = 3;
+ 273   2              DRV_CMR |= 0x10;                          // W相下桥臂通
+ 274   2          }
+ 275   1          
+ 276   1          #if (IPMTEST ==Enable)
+                  {
+                      if (mcFocCtrl.ChargeStep == 3)
+                      {
+                          mcFocCtrl.ChargeStep = 4;
+                          DRV_CMR = 0x0ABF;
+                      }
+                  }
+                  #endif
+ 285   1      }
+ 286          
+ 287          
+ 288          /**
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 6   
+
+ 289           * @brief     开启次功能启动时候会将电机强拉到 设定角度，之后再启动
+ 290           * @date      2022-07-14
+ 291           */
+ 292          void Motor_Align(void)
+ 293          {
+ 294   1          if (McStaSet.SetFlag.AlignSetFlag == 0)
+ 295   1          {      
+ 296   2              McStaSet.SetFlag.AlignSetFlag = 1;
+ 297   2              /* -----FOC初始化----- */
+ 298   2              FOC_Init();
+ 299   2              FOC_EKP     = OBSW_KP_GAIN_START;
+ 300   2              FOC_EKI     = OBSW_KI_GAIN_START;
+ 301   2              FOC__EOME   = 0;        
+ 302   2              SetBit(FOC_CR2, UDD);
+ 303   2              SetBit(FOC_CR2, UQD);
+ 304   2              if (mcFocCtrl.mcDcbusFlt < (UD_Align_Duty_Voltage - 650))
+ 305   2              {
+ 306   3                  mcFocCtrl.ud_align_ref = UD_Align_Duty_Max + ((mcFocCtrl.mcDcbusFlt + 650 - UD_Align_Duty_Max_
+             -Voltage) * ((float)(UD_Align_Duty - UD_Align_Duty_Max)/(float)(UD_Align_Duty_Voltage - UD_Align_Duty_Max_Voltage)));
+ 307   3              }
+ 308   2              else
+ 309   2              {
+ 310   3                  mcFocCtrl.ud_align_ref = UD_Align_Duty + ((mcFocCtrl.mcDcbusFlt + 650 - UD_Align_Duty_Voltage)
+             - * ((float)(UD_Align_Duty_Min - UD_Align_Duty)/(float)(UD_Align_Duty_Min_Voltage - UD_Align_Duty_Voltage)));
+ 311   3              }
+ 312   2              /* 配置预定位的电压、KP、KI */
+ 313   2              //FOC__UD     = mcFocCtrl.ud_align_ref;
+ 314   2              
+ 315   2              mcFocCtrl.ud_align = 0;
+ 316   2              FOC__UQ     = UQ_Align_Duty;
+ 317   2              FOC_DKP     = DQKP_Alignment;
+ 318   2              FOC_DKI     = DQKI_Alignment;
+ 319   2              FOC_QKP     = DQKP_Alignment;
+ 320   2              FOC_QKI     = DQKI_Alignment;
+ 321   2      
+ 322   2              /*配置预定位角度*/
+ 323   2              if (mcFocCtrl.FR == CW)
+ 324   2              {
+ 325   3                  mcFocCtrl.AlignAngle           = Align_Theta_CW;
+ 326   3                  mcFocCtrl.AlignAngle_Temp      = Align_Theta_CW;
+ 327   3              }
+ 328   2              else
+ 329   2              {
+ 330   3                  mcFocCtrl.AlignAngle           = Align_Theta_CCW;
+ 331   3                  mcFocCtrl.AlignAngle_Temp      = Align_Theta_CCW;
+ 332   3              }
+ 333   2              mcFocCtrl.ud_align_flag            = 0; 
+ 334   2              FOC__THETA  = mcFocCtrl.AlignAngle;
+ 335   2      
+ 336   2              /*********PLL或SMO**********/
+ 337   2      //        #if (EstimateAlgorithm == SMO )
+ 338   2      //        {
+ 339   2      //            FOC__ETHETA   = FOC__THETA - 4096;
+ 340   2      //        }
+ 341   2      //        #else
+ 342   2      //        {
+ 343   2      //            FOC__ETHETA   = FOC__THETA;
+ 344   2      //        }
+ 345   2      //        #endif //end    EstimateAlgorithm
+ 346   2              //SetReg(FOC_CR1, EFAE | RFAE | ANGM, ANGM);
+ 347   2              /*使能输出*/
+ 348   2              //        DRV_CMR |= 0x3F;                         // U、V、W相输出
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 7   
+
+ 349   2              MOE = 1;
+ 350   2              FOC__THETA  = mcFocCtrl.AlignAngle;
+ 351   2          }
+ 352   1      }
+ 353          
+ 354          /**
+ 355           * @brief     顺逆风处理函数
+ 356           * @date      2022-09-14
+ 357           */
+ 358          void Motor_TailWind(void)
+ 359          {
+ 360   1          if (McStaSet.SetFlag.TailWindSetFlag == 0) //初始化
+ 361   1          {
+ 362   2              SetBit(DRV_CR, DRVEN);  // 计数器使能      0-->Disable 1-->Enable
+ 363   2              McStaSet.SetFlag.TailWindSetFlag = 1;
+ 364   2              #if (TAILWIND_MODE == RSDMethod)
+                      RSDDetectInit();
+                      #elif (TAILWIND_MODE == BEMFMethod)
+                      BEMFDetectInit();
+                      #endif
+ 369   2          }
+ 370   1          
+ 371   1          #if (TAILWIND_MODE == RSDMethod)
+                  {
+                      if (mcFocCtrl.State_Count > 0)  // 顺逆风检测时间结束前判断转速
+                      {
+                          if (mcRsd.SpeedUpdate == 1)
+                          {
+                              if (mcRsd.Speed < S_Value(-100))  // 逆风
+                              {
+                                  mcFocCtrl.State_Count            = 2000;
+                                  mcFocCtrl.Start_Mode            = HEADWIND_START;      // 逆风启动
+                                  mcState                         = mcStart;             // 状态机切换到Start
+                                  ClrBit(CMP_CR2, CMP0EN);                               // 关闭比较器
+                                  ClrBit(TIM2_CR1, T2CEN);                               // 0，停止计数；1,使能�
+             -��数
+                              }
+              //                else if (mcRsd.Speed > MOTOR_LOOP_RPM)  //正转
+              //                {
+              //                    if (mcRsd.HighSpdStart == 2) //启动完成，切状态机
+              //                    {
+              //                        mcFocCtrl.Start_Mode    = TAILWIND_START;
+              //                        mcState                 = mcStart;
+              //                    }
+              //                    
+              //                    if (mcRsd.HighSpdStart == 0)
+              //                    {
+              //                        mcRsd.HighSpdStart = 1; // 设置启动
+              //                    }
+              //                }
+                              else if ((mcRsd.Speed > MOTOR_LOOP_RPM)&&(mcRsd.Speed < mcFocCtrl.Ref))  //正转,顺风�
+             -�速小于目标转速，允许启动
+                              {
+                                  if (mcRsd.HighSpdStart == 2) //启动完成，切状态机
+                                  {
+                                      mcFocCtrl.Start_Mode         = TAILWIND_START;
+                                      mcState                 = mcStart;
+                                  }
+                                  
+                                  if (mcRsd.HighSpdStart == 0)
+                                  {
+                                      mcRsd.HighSpdStart = 1; // 设置启动
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 8   
+
+                                  }
+                              }
+                              else if(mcRsd.Speed >= mcFocCtrl.Ref)           //顺风转速大于目标转速，开始循环
+             -检测顺风。
+                      {
+                                  ClrBit(CMP_CR2, CMP0EN);                               // 关闭比较器
+                                  ClrBit(TIM2_CR1, T2CEN);                               // 0，停止计数；1,使能�
+             -��数
+                                  mcState                 = mcReady;
+                      }
+                              else//其他，如静止
+                              {
+                                  ClrBit(CMP_CR2, CMP0EN);                               // 关闭比较器
+                                  ClrBit(TIM2_CR1, T2CEN);                               // 0，停止计数；1,使能�
+             -��数
+                                  mcFocCtrl.Start_Mode                = STATIC_START;
+                                  #if (ALIGN_MOME != ALIGN_DSIABLE)   
+                                  if (mcFocCtrl.FR == CW)
+                                  {
+                                      mcFocCtrl.mcPosCheckAngle           = Align_Angle_CW;
+                                  }
+                                  else
+                                  {
+                                      mcFocCtrl.mcPosCheckAngle           = Align_Angle_CCW;
+                                  }
+                                  mcState                             = mcAlign;
+                                  mcFocCtrl.State_Count               = Align_Time;
+                                  #else
+                                  mcState                             = mcStart;
+                                  #endif
+                              }
+                          }
+                      }
+                      else  // 时间结束 还未检测到有效转速 则当做静止启动
+                      {
+                          ClrBit(CMP_CR2, CMP0EN);                               // 关闭比较器
+                          ClrBit(TIM2_CR1, T2CEN);                               // 0，停止计数；1,使能计数
+                          mcFocCtrl.Start_Mode                = STATIC_START;
+                          #if (ALIGN_MOME != ALIGN_DSIABLE)   
+                          if (mcFocCtrl.FR == CW)
+                          {
+                              mcFocCtrl.mcPosCheckAngle           = Align_Angle_CW;
+                          }
+                          else
+                          {
+                              mcFocCtrl.mcPosCheckAngle           = Align_Angle_CCW;
+                          }
+                          mcState                             = mcAlign;
+                          mcFocCtrl.State_Count               = Align_Time;
+                          #else
+                          mcState                             = mcStart;
+                          #endif
+                      }
+                  }
+                  #elif (TAILWIND_MODE == BEMFMethod)
+                  {
+                      if (mcFocCtrl.State_Count > 0)  // 顺逆风检测时间结束前判断转速
+                      {
+                          if (mcBemf.SpeedUpdate == 1)
+                          {
+                              if (mcBemf.BEMFSpeed < S_Value(-100))  // 逆风
+                              {
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 9   
+
+                                  mcFocCtrl.State_Count            = 2000;
+                                  mcFocCtrl.Start_Mode            = HEADWIND_START;      // 逆风启动
+                                  mcState                         = mcStart;             // 状态机切换到Start
+                                  ClrBit(CMP_CR2, CMP0EN);                               // 关闭比较器
+                                  ClrBit(TIM2_CR1, T2CEN);                               // 0，停止计数；1,使能�
+             -��数
+                              }
+              //                else if ((mcBemf.BEMFSpeed > MOTOR_LOOP_RPM))  //正转
+              //                {
+              //                    if (mcBemf.HighSpdStart == 2) //启动完成，切状态机
+              //                    {
+              //                        mcFocCtrl.Start_Mode         = TAILWIND_START;
+              //                        mcState                 = mcStart;
+              //                    }
+              //                    
+              //                    if (mcBemf.HighSpdStart == 0)
+              //                    {
+              //                        mcBemf.HighSpdStart = 1; // 设置启动
+              //                    }
+              //                }
+                              else if ((mcBemf.BEMFSpeed > MOTOR_LOOP_RPM)&&(mcBemf.BEMFSpeed < mcFocCtrl.Ref))  //正�
+             -�,顺风转速小于目标转速，允许启动
+                              {
+                                  if (mcBemf.HighSpdStart == 2) //启动完成，切状态机
+                                  {
+                                      mcFocCtrl.Start_Mode         = TAILWIND_START;
+                                      mcState                 = mcStart;
+                                  }
+                                  
+                                  if (mcBemf.HighSpdStart == 0)
+                                  {
+                                      mcBemf.HighSpdStart = 1; // 设置启动
+                                  }
+                              }
+                              else if(mcBemf.BEMFSpeed >= mcFocCtrl.Ref)            //顺风转速大于d等于目标转速，
+             -开始循环检测顺风。
+                      {
+                                  ClrBit(CMP_CR2, CMP0EN);                               // 关闭比较器
+                                  ClrBit(TIM2_CR1, T2CEN);                               // 0，停止计数；1,使能�
+             -��数
+                                  mcState                 = mcReady;
+                      }
+                              else  //其他，如静止
+                              {
+                                  mcFocCtrl.Start_Mode                = STATIC_START;
+                                  #if (ALIGN_MOME != ALIGN_DSIABLE)   
+                                  if (mcFocCtrl.FR == CW)
+                                  {
+                                      mcFocCtrl.mcPosCheckAngle           = Align_Angle_CW;
+                                  }
+                                  else
+                                  {
+                                      mcFocCtrl.mcPosCheckAngle           = Align_Angle_CCW;
+                                  }
+                                  mcState                             = mcAlign;
+                                  mcFocCtrl.State_Count               = Align_Time;
+                                  #else
+                                  mcState                             = mcStart;
+                                  #endif
+                                  ClrBit(CMP_CR2, CMP0EN);  // 关闭比较器
+                                  ClrBit(TIM1_CR0, T1BCEN); // 关闭定时器
+                              }
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 10  
+
+                          }
+                      }
+                      else  // 时间结束 还未检测到有效转速 则当做静止启动
+                      {
+                          mcFocCtrl.Start_Mode                = STATIC_START;
+                          ClrBit(CMP_CR2, CMP0EN);  // 关闭比较器
+                          ClrBit(TIM1_CR0, T1BCEN); // 关闭定时器
+                          #if (ALIGN_MOME != ALIGN_DSIABLE)   
+                          if (mcFocCtrl.FR == CW)
+                          {
+                              mcFocCtrl.mcPosCheckAngle           = Align_Angle_CW;
+                          }
+                          else
+                          {
+                              mcFocCtrl.mcPosCheckAngle           = Align_Angle_CCW;
+                          }
+                          mcState                             = mcAlign;
+                          mcFocCtrl.State_Count               = Align_Time;
+                          #else
+                          mcState                             = mcStart;
+                          #endif
+                      }
+                  }
+                  #endif
+ 550   1      }
+ 551          
+ 552          
+ 553          
+ 554          
+ 555          /**
+ 556           * @brief     FOC计算方法顺逆风检测 的顺风启动配置函数
+ 557           * @date      2022-07-14
+ 558           */
+ 559          void Motor_FocTailWind_Open(void)
+ 560          {
+ 561   1          /* 启动方式选择 */
+ 562   1          FOC_EFREQACC        = 500;
+ 563   1          FOC_EFREQMIN        = MOTOR_OMEGA_RAMP_MIN;
+ 564   1          FOC_EFREQHOLD       = MOTOR_OMEGA_RAMP_END;
+ 565   1          //    SetBit(FOC_CR1, EFAE);
+ 566   1          //    ClrBit(FOC_CR1, RFAE);
+ 567   1          //    SetBit(FOC_CR1, ANGM);
+ 568   1          mcFocCtrl.State_Count   = 0;        // 取消ATO爬坡
+ 569   1          FOC_EKP                 = OBSW_KP_GAIN_RUN4;                       // 估算器里的PI的KP
+ 570   1          FOC_EKI                 = OBSW_KI_GAIN_RUN4;                       // 估算器里的PI的KI
+ 571   1      }
+ 572          
+ 573          
+ 574          /**
+ 575           * @brief     静止启动配置函数
+ 576           * @date      2022-07-14
+ 577           */
+ 578          void Motor_Static_Open(void)
+ 579          {
+ 580   1          FOC_Init();
+ 581   1          MOE = 1;
+ 582   1          /****启动初始角度赋值****/
+ 583   1          FOC__THETA          = mcFocCtrl.AlignAngle_Temp;              // 无初始位置检测，则用预定�
+             -��角
+ 584   1          FOC__ETHETA         = mcFocCtrl.AlignAngle_Temp - 4096;
+ 585   1          /*启动电流、KP、KI、FOC_EKP、FOC_EKI*/
+ 586   1          FOC_IDREF           = ID_Start_CURRENT;                         // D轴启动电流
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 11  
+
+ 587   1          mcFocCtrl.IqRef     = IQ_Start_CURRENT >> 3;                 // Q轴启动电流
+ 588   1          FOC__UD             = mcFocCtrl.ud_align;
+ 589   1          FOC_DKP             = DKP;
+ 590   1          FOC_DKI             = DKI;
+ 591   1          FOC_QKP             = QKP;
+ 592   1          FOC_QKI             = QKI;
+ 593   1          FOC_EKP             = OBSW_KP_GAIN_START;
+ 594   1          FOC_EKI             = OBSW_KI_GAIN_START;
+ 595   1          /*启动方式选择*/
+ 596   1          #if (Open_Start_Mode == Omega_Start)              // Omega 启动
+ 597   1          {
+ 598   2              FOC_EFREQACC        = MOTOR_OMEGA_RAMP_ACC;
+ 599   2              FOC_EFREQMIN        = MOTOR_OMEGA_RAMP_MIN;
+ 600   2              FOC_EFREQHOLD       = MOTOR_OMEGA_RAMP_END;
+ 601   2              SetReg(FOC_CR1, EFAE | RFAE | ANGM, EFAE | ANGM);
+ 602   2          }
+ 603   1          #elif (Open_Start_Mode == Open_Start)
+                  {
+                      FOC_RTHEACC         = MOTOR_OPEN_RAMP_ACC;      // 爬坡函数的初始加速度
+                      FOC__RTHESTEP       = MOTOR_OPEN_RAMP_MIN;      // 0.62 degree acce speed
+                      FOC_RTHECNT         = MOTOR_OPEN_RAMP_CNT;       // acce time
+                      SetReg(FOC_CR1, EFAE | RFAE | ANGM, RFAE);
+                  }
+                  #elif (Open_Start_Mode == Open_Omega_Start)
+                  {
+                      FOC_RTHEACC         = MOTOR_OPEN_RAMP_ACC;      // 爬坡函数的初始加速度
+                      FOC__RTHESTEP       = MOTOR_OPEN_RAMP_MIN;      // 0.62 degree acce speed
+                      FOC_RTHECNT         = MOTOR_OPEN_RAMP_CNT;       // acce time
+                      FOC_EFREQACC        = Motor_OMEGA_RAMP_ACC;
+                      FOC_EFREQMIN        = MOTOR_OMEGA_RAMP_MIN;
+                      FOC_EFREQHOLD       = MOTOR_OMEGA_RAMP_END;
+                      SetReg(FOC_CR1, EFAE | RFAE | ANGM, EFAE | RFAE | ANGM);
+                  }
+                  #endif //end Open_Start_Mode
+ 621   1          /*不同启动方式下，切换到MCRUN状态*/
+ 622   1          #if (Open_Start_Mode == Open_Start)         //OPEN状态启动时拖动多次
+                  {
+                      mcFocCtrl.State_Count   = 0;
+                      FOC_EKP                 = OBSW_KP_GAIN_RUN4;                            // 估算器里的PI的KP
+                      FOC_EKI                 = OBSW_KI_GAIN_RUN4;                            // 估算器里的PI的KI
+                  }
+                  #elif (Open_Start_Mode == Omega_Start)
+ 629   1          {
+ 630   2              /*********PLL或SMO**********/
+ 631   2              #if (EstimateAlgorithm == SMO  || EstimateAlgorithm == AO)
+ 632   2              {
+ 633   3                  mcFocCtrl.State_Count = ATO_START_HOLDTIME + (ATO_RAMP_PERIOD << 2); //ATO 爬坡控制时间
+ 634   3              }
+ 635   2              #elif (EstimateAlgorithm == PLL)
+                      {
+                          mcFocCtrl.State_Count   = 0;
+                          FOC_EKP                 = OBSW_KP_GAIN_RUN4;                       // 估算器里的PI的KP
+                          FOC_EKI                 = OBSW_KI_GAIN_RUN4;                       // 估算器里的PI的KI
+                      }
+                      #endif //end    EstimateAlgorithm
+ 642   2          }
+ 643   1          #endif //end Open_Start_Mode
+ 644   1          FOC_IQREF = mcFocCtrl.IqRef;                          // Q轴启动电流
+ 645   1      }
+ 646          
+ 647          
+ 648          /*  -------------------------------------------------------------------------------------------------
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 12  
+
+ 649              Function Name  : MC_Stop
+ 650              Description    : inital motor control parameter
+ 651              Date           : 2021-04-10
+ 652              Parameter      : None
+ 653              ------------------------------------------------------------------------------------------------- */
+ 654          void MC_Stop(void)
+ 655          {
+ 656   1          if ((mcFocCtrl.SpeedFlt < S_Value(3000.0)) || (mcFocCtrl.State_Count == 0))
+ 657   1          {
+ 658   2              #if (StopBrakeFlag == 0)
+                      {
+                          mcState = mcReady;
+                          MOE = 0;
+                          FOC_CR1 = 0x00;
+                          ClrBit(DRV_CR, FOCEN);
+                      }
+                      #else
+ 666   2              {
+ 667   3                  if (mcFocCtrl.SpeedFlt < Stop_MOTOR_SPEED_RPM)
+ 668   3                  {
+ 669   4                      MOE = 0;
+ 670   4                      MC_Break();          // 配置刹车代码
+ 671   4                      mcState               = mcBrake;
+ 672   4                      mcFocCtrl.State_Count = StopWaitTime;
+ 673   4                  }
+ 674   3              }
+ 675   2              #endif
+ 676   2          }
+ 677   1      }
+ 678          
+ 679          
+ 680          /**
+ 681           * @brief     三下桥刹车
+ 682           * @date      2022-07-14
+ 683           */
+ 684          void MC_Break(void)
+ 685          {
+ 686   1          MOE         = 1;
+ 687   1          ClrBit(DRV_CR, FOCEN);  // 关闭FOC
+ 688   1          /*  软件设置PWM占空比输出以上桥为参考，配置为互补输出时下桥反向 */
+ 689   1          ClrBit(DRV_CR, OCS);    // OCS = 0, DRV_COMR;  OCS = 1, FOC/SVPWM/SPWM
+ 690   1          SetBit(DRV_CR, DRVEN);  // 计数器使能      0-->Disable 1-->Enable
+ 691   1          DRV_CMR = 0x0015;       //  关闭上桥输出，开启下桥输出
+ 692   1          DRV_DR  = (DRV_ARR) + 4 ; // ARR+4为全开
+ 693   1      }
+ 694          
+ 695          
+ 696          /**
+ 697           * @brief     控制变量上电初始化,包括保护参数的初始化、电机状态初始化
+ 698           * @brief     上电只运行一次
+ 699           * @date      2022-07-14
+ 700           */
+ 701          void MotorcontrolInit(void)
+ 702          {
+ 703   1          /*****电机状态机时序变量***********/
+ 704   1          McStaSet.SetMode                    = 0;
+ 705   1          /**********电机目标方向*************/
+ 706   1          #if (FR_MODE == CW)
+ 707   1          {
+ 708   2              mcFocCtrl.FR                    = CW;
+ 709   2          }
+ 710   1          #else
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 13  
+
+                  {
+                      mcFocCtrl.FR                    = CCW;
+                  }
+                  #endif //end IRMODE
+ 715   1          /* -----电流偏置校准变量初始化----- */
+ 716   1          mcCurOffset.IuOffsetSum            = 16383;
+ 717   1          mcCurOffset.IvOffsetSum            = 16383;
+ 718   1          mcCurOffset.Iw_busOffsetSum        = 16383;
+ 719   1          mcPwmInput.TimerARR                = 65535;
+ 720   1          memset(&Fault, 0, sizeof(FaultVarible));         //保护变量清零
+ 721   1          memset(&Restart, 0, sizeof(FaultRecoverTypedef));//重启变量清零
+ 722   1      }
+ 723          
+ 724          
+ 725          /**
+ 726           * @brief     初始化电机参数，每次电机重启均会被调用
+ 727           * @warning   需要注意填写的变量是否可以在此时刻被初始化
+ 728           * @date      2022-07-14
+ 729           */
+ 730          void VariablesPreInit(void)
+ 731          {
+ 732   1          memset(&Fault, 0, sizeof(FaultVarible));                        //保护变量清零
+ 733   1          Fault.Voltage.OverVoltageVal        = OVER_VOLTAGE_PROTECT;
+ 734   1          Fault.Voltage.UnderVoltageVal       = UNDER_VOLTAGE_PROTECT;
+ 735   1          Fault.Stall.OverSpeedVal            = STALL_MAX_SPEED;
+ 736   1          Fault.Stall.UnderSpeedVal           = STALL_MIN_SPEED;
+ 737   1          McStaSet.SetMode                    = 0;                        ///< 整个配置模式使能位，每
+             -次电机重启清零                     
+ 738   1          mcFocCtrl.CtrlMode                  = 0;
+ 739   1          mcFocCtrl.ChargeStep                = 0;
+ 740   1          mcFocCtrl.Flg_ATORampEnd            = 0;
+ 741   1          mcFocCtrl.Start_Mode   = STATIC_START;                          //初始化为静止启动
+ 742   1          Flag_Single_Mode = 0;                                           //初始化为新单电阻     
+ 743   1          
+ 744   1      }
+ 745          
+ 746          
+ 747          
+ 748          
+ 749          /**
+ 750           * @brief     上电时，先对硬件电路的电流进行采集，写入对应的校准寄存器中。
+ 751                        调试时，需观察mcCurOffset结构体中对应变量是否在范围内。采集结束后
+             -，OffsetFlag置1。
+ 752           * @date      2022-07-14
+ 753           */
+ 754          void GetCurrentOffset(void)
+ 755          {
+ 756   1          SetBit(ADC_CR, ADCBSY);             // 使能ADC
+ 757   1          
+ 758   1          while (ReadBit(ADC_CR, ADCBSY));
+ 759   1          
+ 760   1          #if (Shunt_Resistor_Mode == Single_Resistor)                   //单电阻模式
+ 761   1          {
+ 762   2              mcCurOffset.Iw_busOffsetSum += ((ADC4_DR & 0x7ff8));
+ 763   2              mcCurOffset.Iw_busOffset     = mcCurOffset.Iw_busOffsetSum >> 4;
+ 764   2              mcCurOffset.Iw_busOffsetSum -= mcCurOffset.Iw_busOffset;
+ 765   2          }
+ 766   1          #elif (Shunt_Resistor_Mode == Double_Resistor)                 //双电阻模式
+                  {
+                      mcCurOffset.IuOffsetSum     += ((ADC0_DR & 0x7ff8));
+                      mcCurOffset.IuOffset         = mcCurOffset.IuOffsetSum >> 4;
+                      mcCurOffset.IuOffsetSum     -= mcCurOffset.IuOffset;
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 14  
+
+                      mcCurOffset.IvOffsetSum     += ((ADC1_DR & 0x7ff8));
+                      mcCurOffset.IvOffset         = mcCurOffset.IvOffsetSum >> 4;
+                      mcCurOffset.IvOffsetSum     -= mcCurOffset.IvOffset;
+                  }
+                  #elif (Shunt_Resistor_Mode == Three_Resistor)                 //三电阻模式
+                  {
+                      mcCurOffset.IuOffsetSum     += ((ADC0_DR & 0x7ff8));
+                      mcCurOffset.IuOffset         = mcCurOffset.IuOffsetSum >> 4;
+                      mcCurOffset.IuOffsetSum     -= mcCurOffset.IuOffset;
+                      mcCurOffset.IvOffsetSum     += ((ADC1_DR & 0x7ff8));
+                      mcCurOffset.IvOffset         = mcCurOffset.IvOffsetSum >> 4;
+                      mcCurOffset.IvOffsetSum     -= mcCurOffset.IvOffset;
+                      mcCurOffset.Iw_busOffsetSum += ((ADC4_DR & 0x7ff8));
+                      mcCurOffset.Iw_busOffset     = mcCurOffset.Iw_busOffsetSum >> 4;
+                      mcCurOffset.Iw_busOffsetSum -= mcCurOffset.Iw_busOffset;
+                  }
+                  #endif
+ 788   1          mcCurOffset.OffsetCount++;
+ 789   1          
+ 790   1          if (mcCurOffset.OffsetCount > Calib_Time)
+ 791   1          {
+ 792   2              mcCurOffset.OffsetFlag = 1;
+ 793   2          #if (OffsetProtectEn)
+                      {
+                          Fault_GetCurrentOffset();     //偏置电压保护
+                      }
+                      #endif
+ 798   2          }
+ 799   1      }
+ 800          
+ 801          
+ 802          
+ 803          /**
+ 804           * @brief     关闭输出，关闭FOC，电机切换到mcReady状态被调用一次
+ 805           * @date      2022-07-14
+ 806           */
+ 807          void Motor_Ready(void)
+ 808          {
+ 809   1          if (McStaSet.SetFlag.CalibFlag == 0)
+ 810   1          {
+ 811   2              McStaSet.SetFlag.CalibFlag = 1;
+ 812   2              MOE               = 0;
+ 813   2              ClrBit(DRV_CR, FOCEN);
+ 814   2              ClrBit(DRV_CR, DRVEN);
+ 815   2          }
+ 816   1      }
+ 817          
+ 818          
+ 819          /**
+ 820           * @brief     电机初始化，对电机相关变量、PI进行初始化设置,关闭FOC所需要使用�
+             -�的ADC
+ 821           * @note      关闭FOC所需要使用到的ADC，FOC模块会自动调用相应ADC 无需外部使能
+ 822           * @date      2022-07-14
+ 823           */
+ 824          
+ 825          void Motor_Init(void)
+ 826          {
+ 827   1          VariablesPreInit();                           // 电机相关变量初始化
+ 828   1      }
+ 829          
+ 830          void SquStartInit(void)
+ 831          {
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 15  
+
+ 832   1          if (SquStart.StartState == 1)
+ 833   1          {
+ 834   2              memset(&SquStart, 0, sizeof(SquStartVar));
+ 835   2              /* -----FOC初始化----- */
+ 836   2              FOC_Init();
+ 837   2              #if (Shunt_Resistor_Mode == Single_Resistor)
+ 838   2                  {
+ 839   3      //                #if (Start_Single_Resistor_Mode == SVPWM_OPTIM)
+ 840   3      //                {
+ 841   3      //                    SetReg(FOC_CR1, CSM0 | CSM1, CSM1);                 // 新单电阻采样配置
+ 842   3      //                    FOC_TRGDLY = SVPWM_OPTIM_TRGDLY;                    // 采样时刻在中点，一般考虑开
+             -关噪声影响，会设置延迟；
+ 843   3      //                }
+ 844   3      //                #else
+ 845   3      //                {
+ 846   3                          FOC_TRGDLY = SVPWM_COMMOM_TRGDLY;                   // 采样时刻在中点，一般考虑开�
+             -�噪声影响，会设置延迟；
+ 847   3                          SetReg(FOC_CR1, CSM0 | CSM1, 0);                    // 单电阻采样配置
+ 848   3      //                }
+ 849   3      //                #endif
+ 850   3                      FOC_TSMIN  = PWM_TS_LOAD;                           // 最小采样窗口
+ 851   3                      // 如：0x0c表示延迟12个clock，提前用反码形式，如0x84表示提前12个clock。
+ 852   3                      ClrBit(FOC_CR2, F5SEG);                             // 7段式，单电阻仅支持7段式
+ 853   3                  }
+ 854   2                  #endif
+ 855   2              /* 配置预定位的电流、KP、KI */
+ 856   2      
+ 857   2              SquStart.PWMFreqency = PWM_FREQUENCY;
+ 858   2              SquStart.FreqencyBase = (MOTOR_SPEED_BASE / 60.0);
+ 859   2              SquStart.SwitchSpeed = FOCSwitchSpeed;
+ 860   2              SquStart.IgnoreCount = (uint16)(10 * SquStart.PWMFreqency);
+ 861   2              SquStart.MainCurrentSumMin = 16000;
+ 862   2              SquStart.ACurrent1SumMin   = 16000;
+ 863   2              SquStart.ACurrent2SumMin   = 16000;
+ 864   2      //        SquStart.MotorSpeedCount1  = 10000;
+ 865   2              SquStart.MotorSpeedCount2  = StartCurrentTime;
+ 866   2              SquStart.MotorSpeedCount3  = 10000;
+ 867   2              SquStart.UqReady = 1;
+ 868   2              LPF1_K = 40 * 256;
+ 869   2              LPF1_YH = 0;
+ 870   2              LPF1_YL = 0;
+ 871   2              FOC__UQ = DeadTimeComCount;
+ 872   2              FOC__UD = _Q15(0.00);
+ 873   2              /*配置预定位角度*/
+ 874   2              FOC_IQREF = SquStartCurrent;
+ 875   2              SquStart.CurrentThreshold = StartCurrentAddThreshold;
+ 876   2              SquStart.ThetaOffset     = SquStartThetaOffset;
+ 877   2              SquStart.MinUq = MinUqSet;
+ 878   2              SquStart.StartSector     = SquStartSector;
+ 879   2              FOC__THETA               = SquStartTheta + SquStart.ThetaOffset;
+ 880   2              SquStart.StartCurrentThreshold = SquStartCurrent;
+ 881   2              SquStart.RotorTheta      = FOC__THETA;
+ 882   2              SquStart.ThetaRamp  = THETARAMP;
+ 883   2              /*********PLL或SMO**********/
+ 884   2              FOC__ETHETA   = FOC__THETA - 4096;
+ 885   2              /*使能输出*/
+ 886   2              SquStart.StartState = 3;
+ 887   2              MOE = 1;
+ 888   2          }
+ 889   1      }
+ 890          
+ 891          void SquToFOCInit(void)
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 16  
+
+ 892          {
+ 893   1          if (SquStart.StartState == 4)
+ 894   1          {
+ 895   2              SquStart.Temp = FOC__THETA;
+ 896   2              SquStart.Temp = SquStart.Temp + 150;
+ 897   2              SquStart.Temp1 = SquStart.Temp - (_Q15(91.0 / 180.0) + CW_THETA_BASE);
+ 898   2              
+ 899   2              if ((SquStart.Temp1 > 0) && (SquStart.Temp1 < (150 + 5)))
+ 900   2              {
+ 901   3                  #if (Shunt_Resistor_Mode == Single_Resistor)
+ 902   3                  {
+ 903   4                      #if (Start_Single_Resistor_Mode == SVPWM_OPTIM)
+ 904   4                      {
+ 905   5                          SetReg(FOC_CR1, CSM0 | CSM1, CSM1);                 // 新单电阻采样配置
+ 906   5                          FOC_TRGDLY = SVPWM_OPTIM_TRGDLY;                    // 采样时刻在中点，一般考虑开�
+             -�噪声影响，会设置延迟；
+ 907   5                      }
+ 908   4                      #else
+                              {
+                                  FOC_TRGDLY = SVPWM_COMMOM_TRGDLY;                   // 采样时刻在中点，一般考虑开�
+             -�噪声影响，会设置延迟；
+                                  SetReg(FOC_CR1, CSM0 | CSM1, 0);                    // 单电阻采样配置
+                              }
+                              #endif
+ 914   4                      FOC_TSMIN  = PWM_TS_LOAD;                           // 最小采样窗口
+ 915   4                      // 如：0x0c表示延迟12个clock，提前用反码形式，如0x84表示提前12个clock。
+ 916   4                      ClrBit(FOC_CR2, F5SEG);                             // 7段式，单电阻仅支持7段式
+ 917   4                  }
+ 918   3                  #endif
+ 919   3                  SquStart.StartState = 0;
+ 920   3                  FOC__THETA = _Q15(91.0 / 180.0) + CW_THETA_BASE;
+ 921   3                  FOC__ETHETA = FOC__THETA  - 4096;
+ 922   3                  FOC_IDREF           = ID_Start_CURRENT;                         // D?????
+ 923   3                  mcFocCtrl.IqRef         = IQ_Start_CURRENT;
+ 924   3                  FOC_DKP             = DKP;
+ 925   3                  FOC_DKI             = DKI;
+ 926   3                  FOC_QKP             = QKP;
+ 927   3                  FOC_QKI             = QKI;
+ 928   3                  FOC_EKP    = OBSW_KP_GAIN_Switch;
+ 929   3                  FOC_EKI    = OBSW_KI_GAIN_Switch;
+ 930   3                  FOC_EFREQACC  = 300;
+ 931   3                  FOC_EFREQMIN  = 0.8 * FOCSwitchSpeed / Pole_Pairs;
+ 932   3                  FOC_EFREQHOLD = FOCSwitchSpeed / Pole_Pairs;
+ 933   3                  SetReg(FOC_CR1, EFAE | RFAE | ANGM, EFAE | ANGM);
+ 934   3                  mcFocCtrl.State_Count = 25 + (ATO_RAMP_PERIOD << 2);
+ 935   3                  FOC_OMEKLPF        = SPEED_KLPF;
+ 936   3                  FOC__EOME = SquStart.MotorSpeed / (uint8)(Pole_Pairs);
+ 937   3                  FOC__UQ = SquStart.StartUq;
+ 938   3                  FOC_IQREF = mcFocCtrl.IqRef;                          // Q?????
+ 939   3                  ClrBit(FOC_CR2, UQD);
+ 940   3                  ClrBit(FOC_CR2, UDD);
+ 941   3                  mcState = mcRun;
+ 942   3              }
+ 943   2              else
+ 944   2              {
+ 945   3                  FOC__THETA = SquStart.Temp;
+ 946   3              }
+ 947   2          }
+ 948   1      }
+ 949          
+
+
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 17  
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   2169    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =     21    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

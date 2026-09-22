@@ -1,0 +1,191 @@
+C51 COMPILER V9.60.7.0   SLEEP                                                             09/21/2026 17:11:31 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE SLEEP
+OBJECT MODULE PLACED IN .\Output\SLEEP.obj
+COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\User\source\Function\SLEEP.c LARGE OMF2 OPTIMIZE(8,SPEED) BROWS
+                    -E INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include) DEBUG PRINT(.\Listings\SLEEP.lst) TABS(2) OBJECT(.\Output\SL
+                    -EEP.obj)
+
+line level    source
+
+   1          /**
+   2           * @copyright (C) COPYRIGHT 2022 Fortiortech Shenzhen
+   3           * @file      MotorControlFunction.c
+   4           * @author    Fortiortech  Appliction Team
+   5           * @since     Create:2022-08-05
+   6           * @date      Last modify:2022-08-05
+   7           * @note      Last modify author is Leo.li
+   8           * @brief
+   9           */
+  10          #include <MyProject.h>
+  11          
+  12          
+  13          /** 
+  14           * @brief        外部中断睡眠引脚设置
+  15           * @date         2022-09-13
+  16           */
+  17          void SleepMode_Init(void)
+  18          {
+  19   1          #if ((LIN_PORTSELECTION == TXDGP00_RXDGP01) &&(LIN_TRANSCEIVER == EXTERNAL_LIN_DOUBLELINE))//配置唤
+             -醒口为GP01，外部中断0
+                      /*外部中断 INT0 接口选择
+                      000: P0.0
+                      001: P0.1
+                      010: P0.2
+                      011: P0.3
+                      100: P1.1
+                      101: P0.5
+                      110: P0.6*/
+                      ClrBit(LVSR, EXT0CFG2);             
+                      ClrBit(LVSR, EXT0CFG1);
+                      SetBit(LVSR, EXT0CFG0);
+                      ClrBit(P0_OE, P01);                     // 配置为输入
+                      SetBit(P0_PU, P01);                     // RXD注意是否有硬件上拉，可以配置软件上�
+             -��
+                      IF0 = 0; 
+                      IT01 = 1;
+                      IT00 = 0;                               // 00: posedge mode interrupt，01: negedge mode interrupt
+             -，1x: edge-change mode interrupt
+                      SetBit(IP0, PX01);
+                      SetBit(IP0, PX00);                      // 外部中断0中断优先级别3，中断优先级最�
+             -�
+                      EX0 = 1;                                // 使能外部中断0, P01位于外部中断输入硬件
+                      EA = 1;                                 // 使能全局中断
+                  #endif
+  41   1        #if ((LIN_PORTSELECTION == TXDGP10_RXDGP11) ||(LIN_TRANSCEIVER == INNER_LIN_SINGLELINE))//配置唤醒口
+             -为GP11，外部中断1
+  42   1              ClrBit(P1_OE, P11);                     // 配置为输入
+  43   1              ClrBit(P1_IF, P11);                     // clear P11 interrupt flag
+  44   1              ClrBit(P1_IE, P11);                     // config P11 as the source of EXTI1
+  45   1              IT11 = 1;
+  46   1              IT10 = 0;                               // 00: posedge mode interrupt，01: negedge mode interrupt
+             -，1x: edge-change mode interrupt
+  47   1              SetBit(IP0, PX11);
+C51 COMPILER V9.60.7.0   SLEEP                                                             09/21/2026 17:11:31 PAGE 2   
+
+  48   1              SetBit(IP0, PX10);                      // 外部中断1中断优先级别3，中断优先级最�
+             -�
+  49   1              EX1 = 1;                                // 使能外部中断1, P11位于外部中断输入硬件
+  50   1              SetBit(P1_IE, P11);                     // 休眠前使能外部中断
+  51   1              EA = 1;                                 // 使能全局中断
+  52   1        #endif
+  53   1      }
+  54          /**
+  55           * @brief        将控制器调到睡眠模式，休眠电流小于100uA，需注意每一个IO的配置�
+             -��否则会有漏电
+  56           * @date         2022-07-14
+  57           */
+  58          void sc_goToSleep(void) {
+  59   1      
+  60   1              SleepSet.SleepDelayCout++;
+  61   1              if ((SleepSet.SleepDelayCout >= 100)&&(SleepSet.SleepFlag ==0)) //最大65530，若要再大，需
+             -改数据类型，100ms进入休眠
+  62   1              {
+  63   2                  MOE     = 0;
+  64   2                                          
+  65   2                  /******睡眠模式初始化**********/
+  66   2                  /* 1.休眠前配置IO口为外部中断 */
+  67   2                  SleepMode_Init();      
+  68   2                  SetBit(P4_OE, P43);
+  69   2                  GP43 = 0;               /* 外置收发器休眠管脚使能配置，收发器休眠 */
+  70   2                  /* 2.配置为外部中断后允许唤醒 */
+  71   2                  SleepSet.SleepDelayCout = 0;
+  72   2                  SleepSet.SleepFlag = 1;
+  73   2                  
+  74   2                  /* 3.关闭相应外设，配置其余IO引脚状态 */
+  75   2                  ClrBit(DRV_CR, FOCEN);              //关闭FOC
+  76   2                  ClrBit(ADC_CR, ADCEN);              //关闭ADC
+  77   2                  ClrBit(CCFG1, WDT_EN);              //关闭WDT
+  78   2                  //关闭运放
+  79   2                  ClrBit(AMP_CR0, AMP0EN);         //AMP0 Enable
+  80   2                  ClrBit(AMP_CR0, AMP1EN);         //AMP1 Enable
+  81   2                  ClrBit(AMP_CR0, AMP2EN);         //AMP2 Enable
+  82   2                  //关闭比较器
+  83   2                  ClrBit(CMP_CR1, CMP3EN);    //CMP3 Enable
+  84   2                  CMP_CR3 = 0;                //CMP_CR3  关闭Debug信号配置
+  85   2                  //关闭VREF
+  86   2                  SetBit(VREF_VHALF_CR, 0x00);
+  87   2      
+  88   2                  
+  89   2      //            /*- WLK175-PCB02-1产品板，没有引出的IO配置上拉，引出IO每个都需要有固�
+             -��状态—-*/
+  90   2      //            P0_PU = P00 | P01 | P02 | P03 | P04 | P05 | P06| P07; // 需确认这些端口能接受上�
+             -�
+  91   2      //            
+  92   2      //            /*-  P10和P11为开漏硬件上需要根据实际加上拉,P11配置为外部中断引脚�
+             -�不需要再配置 -*/
+  93   2      //            P1_OE =  P10 | P12 | P13 | P14 | P15 | P15 | P17;
+  94   2      //            GP10 =0; GP12 =0; GP13 = 0; GP14 =0;GP15 = 0; GP16 =0;GP17 =0;
+  95   2      //            SetBit(P1_PU, P11HV_EN);  // P11 高压输入模式，保持使能
+  96   2      //            SetBit(P1_PU, P10HV_EN);  // P10 高压输入模式，保持使能            
+  97   2      
+  98   2      //            P2_PU = P20 | P21| P24;
+  99   2      //            P2_OE = P22 | P23 | P25| P26| P27;
+ 100   2      //            GP22 = 0; GP23 = 0; GP25 = 0; GP26 = 0; GP27 = 0; 
+ 101   2      //            
+ 102   2      //            P3_PU = P34 | P35| P36| P37;                         // 需确认这些端口能接受上拉
+ 103   2      //            P3_OE = P30 | P31| P32| P33;
+C51 COMPILER V9.60.7.0   SLEEP                                                             09/21/2026 17:11:31 PAGE 3   
+
+ 104   2      //            GP30 = 0; GP31 = 0;GP32 = 0;GP33 = 0;
+ 105   2      //            
+ 106   2      //            P4_PU = P44 | P45|P46;                                // 需确认这些端口能接受上�
+             -�
+ 107   2      //            P4_OE = P43;  
+ 108   2      //            GP43 = 0;
+ 109   2                                    
+ 110   2                  #if (1)
+ 111   2                  /*- FU6866Q1_V2.0Demo板配置：悬空引脚配置为上拉，反电动势配置为输出0，
+             -输入检测引脚配置为输出0—-*/
+ 112   2                  /*- 没有引出的IO配置上拉，引出IO每个都需要有固定状态—-*/
+ 113   2                  P2_OE = P20| P21 | P22 | P23 | P24 | P25 | P26 | P27;
+ 114   2                  GP21 = 0;GP21 = 0; GP22 = 0; GP23 = 0; GP24 = 0;GP25 = 0; GP26 = 0;  GP27 = 0;
+ 115   2                  
+ 116   2                  P3_OE = P30 | P31 | P32 | P34 | P35;
+ 117   2                  P3_PU = P33 | P34;            // 需确认这些端口能接受上拉
+ 118   2                  GP30 = 0; GP31 = 0; GP32 = 0; GP34 = 0; GP35 = 0;       
+ 119   2                  
+ 120   2                   /*-  P01,P00口为LIN口，不再配置 -*/
+ 121   2                  P0_OE = P02 | P03 | P04 | P05 | P06 | P07;
+ 122   2                  GP02 = 1; GP03 = 1; GP04 = 1;   GP05 = 1 ;GP06 = 1;GP07 = 1;       
+ 123   2                  
+ 124   2                  /*-  P10和P11为开漏硬件上需要根据实际加上拉 -*/
+ 125   2                  P1_OE = P10  | P12 | P13 | P14 | P15 | P16 | P17;
+ 126   2                  GP10 =0; GP12 =0; GP13 = 0; GP14 =0; GP15 = 0; GP16 =0; GP17 = 0; //反电动势端口需要�
+             -�出为0，1会漏电
+ 127   2                  SetBit(P1_PU, P11HV_EN);  // P11 高压输入模式，保持使能
+ 128   2                  SetBit(P1_PU, P10HV_EN);  // P10 高压输入模式，保持使能
+ 129   2                  
+ 130   2                  P4_OE = P44;
+ 131   2                  P4_PU = P41 | P42 | P45 | P46;
+ 132   2                  GP44 =0;                                                
+ 133   2                  /*- Demo板配置：悬空引脚配置为上拉，反电动势配置为输出0，输入检测�
+             -��脚配置为输出0—-*/  
+ 134   2                  #endif  
+ 135   2                  
+ 136   2                  /* 4.休眠 */
+ 137   2                  SetBit(CCFG1, VBB_DIS);          // 关闭HVIC供电，即VDRV引脚的供电，VDD5不会关�
+             -��
+ 138   2                  SetBit(PCON, STOP);              // MCU睡眠使能
+ 139   2      
+ 140   2              }  
+ 141   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    270    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

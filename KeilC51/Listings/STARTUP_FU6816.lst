@@ -1,0 +1,117 @@
+A51 MACRO ASSEMBLER  STARTUP_FU6816                                                       09/21/2026 10:12:05 PAGE     1
+
+
+MACRO ASSEMBLER A51 V8.02b
+OBJECT MODULE PLACED IN .\Output\STARTUP_FU6816.obj
+ASSEMBLER INVOKED BY: C:\Keil_v5\C51\BIN\A51.EXE ..\FU68xx_Hardware_Driver\Source\STARTUP_FU6816.A51 INCDIR(..\User\incl
+                      ude;..\FU68xx_Hardware_Driver\Include) SET(LARGE) DEBUG PRINT(.\Listings\STARTUP_FU6816.lst) OBJEC
+                      T(.\Output\STARTUP_FU6816.obj) EP
+
+LOC  OBJ            LINE     SOURCE
+
+                       1     $nomod51 
+                       2     
+  0100                 3     IDATALEN        EQU     256
+                       4     
+  0000                 5     XDATASTART      EQU     0
+  1000                 6     XDATALEN        EQU     4096
+                       7     
+  0000                 8     IBPSTACK        EQU     0
+  0100                 9     IBPSTACKTOP     EQU     IDATALEN
+                      10     
+  0000                11     XBPSTACK        EQU     0
+  1000                12     XBPSTACKTOP     EQU     XDATALEN
+                      13     
+  00E0                14     ACC     DATA    0E0H
+  00F0                15     B       DATA    0F0H
+  0081                16     SP      DATA    81H
+  0082                17     DPL     DATA    82H
+  0083                18     DPH     DATA    83H
+                      19     
+                      20                     NAME    ?C_STARTUP
+                      21     ?C_C51STARTUP   SEGMENT   CODE
+                      22     ?STACK          SEGMENT   IDATA
+                      23     
+----                  24                     RSEG    ?STACK
+0000                  25                     DS      1
+                      26     
+                      27                     EXTRN CODE (?C_START)
+                      28                     PUBLIC  ?C_STARTUP
+                      29     
+----                  30                     CSEG    AT     0000H
+0000 020000   F       31     ?C_STARTUP:     LJMP    STARTUP1
+                      32     
+----                  33                     RSEG    ?C_C51STARTUP
+0000                  34     STARTUP1:
+                      35     
+                      36     IF IDATALEN <> 0
+0000 78FF             37                     MOV     R0,#IDATALEN - 1
+0002 E4               38                     CLR     A
+0003 F6               39     IDATALOOP:      MOV     @R0,A
+0004 D8FD             40                     DJNZ    R0,IDATALOOP
+                      41     ENDIF
+                      42     
+                      43     IF XDATALEN <> 0
+0006 900000           44                     MOV     DPTR,#XDATASTART
+0009 7F00             45                     MOV     R7,#LOW(XDATALEN)
+                      46       IF (LOW (XDATALEN)) <> 0
+                                             MOV     R6,#HIGH(XDATALEN) +1
+                               ELSE
+000B 7E10             49                     MOV     R6,#HIGH(XDATALEN)
+                      50       ENDIF
+000D E4               51                     CLR     A
+000E F0               52     XDATALOOP:      MOVX    @DPTR,A
+000F A3               53                     INC     DPTR
+0010 DFFC             54                     DJNZ    R7,XDATALOOP
+0012 DEFA             55                     DJNZ    R6,XDATALOOP
+                      56     ENDIF
+A51 MACRO ASSEMBLER  STARTUP_FU6816                                                       09/21/2026 10:12:05 PAGE     2
+
+                      57     
+                      58     IF IBPSTACK <> 0
+                             EXTRN DATA (?C_IBP)
+                                             MOV     ?C_IBP,#LOW IBPSTACKTOP
+                             ENDIF
+                      62     
+                      63     IF XBPSTACK <> 0
+                             EXTRN DATA (?C_XBP)
+                                             MOV     ?C_XBP,#HIGH XBPSTACKTOP
+                                             MOV     ?C_XBP+1,#LOW XBPSTACKTOP
+                             ENDIF
+0014 758100   F       68                     MOV     SP, #?STACK-1
+0017 020000   F       69                     LJMP    ?C_START
+                      70     
+                      71                     END
+A51 MACRO ASSEMBLER  STARTUP_FU6816                                                       09/21/2026 10:12:05 PAGE     3
+
+SYMBOL TABLE LISTING
+------ ----- -------
+
+
+N A M E             T Y P E  V A L U E   ATTRIBUTES
+
+?C_C51STARTUP. . .  C SEG    001AH       REL=UNIT
+?C_START . . . . .  C ADDR   -----       EXT
+?C_STARTUP . . . .  C ADDR   0000H   A   
+?STACK . . . . . .  I SEG    0001H       REL=UNIT
+ACC. . . . . . . .  D ADDR   00E0H   A   
+B. . . . . . . . .  D ADDR   00F0H   A   
+DPH. . . . . . . .  D ADDR   0083H   A   
+DPL. . . . . . . .  D ADDR   0082H   A   
+IBPSTACK . . . . .  N NUMB   0000H   A   
+IBPSTACKTOP. . . .  N NUMB   0100H   A   
+IDATALEN . . . . .  N NUMB   0100H   A   
+IDATALOOP. . . . .  C ADDR   0003H   R   SEG=?C_C51STARTUP
+SP . . . . . . . .  D ADDR   0081H   A   
+STARTUP1 . . . . .  C ADDR   0000H   R   SEG=?C_C51STARTUP
+XBPSTACK . . . . .  N NUMB   0000H   A   
+XBPSTACKTOP. . . .  N NUMB   1000H   A   
+XDATALEN . . . . .  N NUMB   1000H   A   
+XDATALOOP. . . . .  C ADDR   000EH   R   SEG=?C_C51STARTUP
+XDATASTART . . . .  N NUMB   0000H   A   
+
+
+REGISTER BANK(S) USED: 0 
+
+
+ASSEMBLY COMPLETE.  0 WARNING(S), 0 ERROR(S)

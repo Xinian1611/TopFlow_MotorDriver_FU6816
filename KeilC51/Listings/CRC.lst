@@ -1,0 +1,72 @@
+C51 COMPILER V9.60.7.0   CRC                                                               09/21/2026 11:30:57 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE CRC
+OBJECT MODULE PLACED IN .\Output\CRC.obj
+COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\User\source\Hardware\CRC.c LARGE OMF2 OPTIMIZE(8,SPEED) BROWSE 
+                    -INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include) DEBUG PRINT(.\Listings\CRC.lst) TABS(2) OBJECT(.\Output\CRC.ob
+                    -j)
+
+line level    source
+
+   1          /**
+   2           * @copyright (C) COPYRIGHT 2022 Fortiortech Shenzhen
+   3           * @file      xxx.c
+   4           * @author    Fortiortech  Appliction Team
+   5           * @since     Create:2022-08-05
+   6           * @date      Last modify:2022-08-05
+   7           * @note      Last modify author is Leo.li
+   8           * @brief
+   9           */
+  10          
+  11          #include <CRC.h>
+  12          
+  13          
+  14          /****************************************************************************
+  15          CRC16_CCITT_FALSE 硬件实现
+  16          ****************************************************************************/
+  17          unsigned short CRC_Check(unsigned char start_sector , unsigned char offset_sector)
+  18          {
+  19   1          unsigned short crcresult = 0x0000;
+  20   1      
+  21   1          unsigned short tempH = 0x00;
+  22   1          unsigned short tempL = 0x00;
+  23   1      
+  24   1          SetBit(CRC_CR , CRCVAL);    //0-->0x0000  1-->0xffff
+  25   1          SetBit(CRC_CR , CRCDINI);   //1-->init success
+  26   1      
+  27   1          CRC_BEG = start_sector;     //起始扇区
+  28   1          CRC_CNT = offset_sector;  //扇区偏移量 0-->1个扇区
+  29   1      
+  30   1          //1个空扇区-->0x41E8   2个空扇区-->0x1634
+  31   1          //1个0xFF  -->0x5B2F  0x00~0xFF-->0x3FBD
+  32   1          SetBit(CRC_CR , AUTOINT);   //自动计算使能
+  33   1          /***************************************************/
+  34   1      
+  35   1          SetBit(CRC_CR , CRCPNT);  
+  36   1          tempH = CRC_DR;
+  37   1          ClrBit(CRC_CR , CRCPNT);  
+  38   1          tempL = CRC_DR;
+  39   1          crcresult = (unsigned short)(tempH << 8) + tempL;
+  40   1          return crcresult;
+  41   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =     64    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----       1
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+C51 COMPILER V9.60.7.0   CRC                                                               09/21/2026 11:30:57 PAGE 2   
+
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

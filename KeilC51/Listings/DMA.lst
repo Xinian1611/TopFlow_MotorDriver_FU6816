@@ -1,0 +1,232 @@
+C51 COMPILER V9.60.7.0   DMA                                                               09/21/2026 11:30:57 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE DMA
+OBJECT MODULE PLACED IN .\Output\DMA.obj
+COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\User\source\Hardware\DMA.c LARGE OMF2 OPTIMIZE(8,SPEED) BROWSE 
+                    -INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include) DEBUG PRINT(.\Listings\DMA.lst) TABS(2) OBJECT(.\Output\DMA.ob
+                    -j)
+
+line level    source
+
+   1          /**
+   2           * @copyright (C) COPYRIGHT 2022 Fortiortech Shenzhen
+   3           * @file      xxx.c
+   4           * @author    Fortiortech  Appliction Team
+   5           * @since     Create:2022-08-05
+   6           * @date      Last modify:2022-08-05
+   7           * @note      Last modify author is Leo.li
+   8           * @brief
+   9           */
+  10          
+  11          #include <DMA.h>
+  12          
+  13          
+  14          #define Switch_DMA(a)     SetBit(*(&DMA0_CR0 + a), DMAEN | DMABSY)
+  15          
+  16          void SetPipe_DMA0(eType_DMA_PIPE ePipe)
+  17          {
+  18   1          bool bTmp = false;
+  19   1      
+  20   1          if (ReadBit(DMA0_CR0 , DMAEN))
+  21   1          {
+  22   2              bTmp = true;
+  23   2              while (ReadBit(DMA0_CR0 , DMABSY));
+  24   2              ClrBit(DMA0_CR0 , DMAEN);
+  25   2          }
+  26   1      
+  27   1          SetReg(DMA0_CR0 , DMACFG2 | DMACFG1 | DMACFG0 , (uint8)ePipe);
+  28   1      
+  29   1          if (bTmp) SetBit(DMA0_CR0 , DMAEN);
+  30   1      }
+  31          
+  32          void SetPipe_DMA1(eType_DMA_PIPE ePipe)
+  33          {
+  34   1          bool bTmp = false;
+  35   1      
+  36   1          if (ReadBit(DMA1_CR0 , DMAEN))
+  37   1          {
+  38   2              bTmp = true;
+  39   2              while (ReadBit(DMA1_CR0 , DMABSY));
+  40   2              ClrBit(DMA1_CR0 , DMAEN);
+  41   2          }
+  42   1      
+  43   1          SetReg(DMA1_CR0 , DMACFG2 | DMACFG1 | DMACFG0 , (uint8)ePipe);
+  44   1      
+  45   1          if (bTmp) SetBit(DMA1_CR0 , DMAEN);
+  46   1      }
+  47          
+  48          void SetDataPackage_DMA0(unsigned short ulAddr , char cLen)
+  49          {
+  50   1          bool bTmp = false;
+  51   1      
+  52   1          if (ReadBit(DMA0_CR0 , DMAEN))
+  53   1          {
+C51 COMPILER V9.60.7.0   DMA                                                               09/21/2026 11:30:57 PAGE 2   
+
+  54   2              bTmp = true;
+  55   2      
+  56   2              while (ReadBit(DMA0_CR0 , DMABSY));
+  57   2              ClrBit(DMA0_CR0 , DMAEN);
+  58   2          }
+  59   1      
+  60   1          DMA0_LEN =  cLen;
+  61   1          DMA0_BA  =  ulAddr;
+  62   1      
+  63   1          if (bTmp) SetBit(DMA0_CR0, DMAEN);
+  64   1      }
+  65          
+  66          void SetDataPackage_DMA1(unsigned short ulAddr, char cLen)
+  67          {
+  68   1          bool bTmp = false;
+  69   1      
+  70   1          if (ReadBit(DMA1_CR0 , DMAEN))
+  71   1          {
+  72   2              bTmp = true;
+  73   2      
+  74   2              while (ReadBit(DMA1_CR0 , DMABSY));
+  75   2              ClrBit(DMA1_CR0 , DMAEN);
+  76   2          }
+  77   1      
+  78   1          DMA1_LEN = cLen;
+  79   1          DMA1_BA  = ulAddr;
+  80   1      
+  81   1          if (bTmp) SetBit(DMA1_CR0 , DMAEN);
+  82   1      }
+  83          
+  84          void SetEndian_DMA(eType_DMA_Endian eEndian)
+  85          {
+  86   1          bool bTmp = false, bTmp1 = false;
+  87   1      
+  88   1          if (ReadBit(DMA0_CR0 , DMAEN))
+  89   1          {
+  90   2              bTmp = true;
+  91   2      
+  92   2              while (ReadBit(DMA0_CR0 , DMABSY));
+  93   2              ClrBit(DMA0_CR0 , DMAEN);
+  94   2          }
+  95   1      
+  96   1          if (ReadBit(DMA1_CR0 , DMAEN))
+  97   1          {
+  98   2              bTmp1 = true;
+  99   2      
+ 100   2              while (ReadBit(DMA1_CR0 , DMABSY));
+ 101   2              ClrBit(DMA1_CR0 , DMAEN);
+ 102   2          }
+ 103   1      
+ 104   1          SetReg(DMA0_CR0, ENDIAN, (uint8)eEndian);
+ 105   1      
+ 106   1          if (bTmp)  SetBit(DMA0_CR0 , DMAEN);
+ 107   1          if (bTmp1) SetBit(DMA1_CR0 , DMAEN);
+ 108   1      }
+ 109          
+ 110          void SetIRQ_DMA(ebool eIRQ, eType_DMA_IRQ eIP)
+ 111          {
+ 112   1          SetReg(DMA0_CR0, DMAIE, eIRQ ? DMAIE : 0);
+ 113   1      
+ 114   1          if (!EA) EA = 1;
+ 115   1      
+C51 COMPILER V9.60.7.0   DMA                                                               09/21/2026 11:30:57 PAGE 3   
+
+ 116   1          if (eIRQ) SetReg(IP1 , PDMA1 | PDMA0 , (uint8)eIP);
+ 117   1      }
+ 118          
+ 119          void SetDbgMod_DMA(void)
+ 120          {
+ 121   1          bool bTmp = false;
+ 122   1      
+ 123   1          if (ReadBit(DMA1_CR0 , DMAEN))
+ 124   1          {
+ 125   2              bTmp = true;
+ 126   2      
+ 127   2              while (ReadBit(DMA1_CR0 , DMABSY));
+ 128   2              ClrBit(DMA1_CR0 , DMAEN);
+ 129   2          }
+ 130   1      
+ 131   1          SetBit(DMA1_CR0 , DBGEN);
+ 132   1          SetBit(DMA1_CR0 , ((uint8)DRAM_SPI));
+ 133   1          DMA1_LEN = 4;
+ 134   1      
+ 135   1          if (bTmp) SetBit(DMA1_CR0, DMAEN);
+ 136   1      }
+ 137          
+ 138          /**
+ 139           * 设置DMA1的DBG模式
+ 140           *
+ 141           * @param Addr   要DBG输出的地址
+ 142           */
+ 143          void Set_DBG_DMA(uint16 xdata*DMAAddr)
+ 144          {
+ 145   1          ClrBit(DMA1_CR0, DMAEN);                                // 禁止DMA1传输
+ 146   1          SetBit(DMA1_CR0, (DBGEN | (uint8)DRAM_SPI));                     // 设置DMA1使用DBG模式，XDATA�
+             -��送数据到SPI
+ 147   1          if (!ReadBit((uint16)DMAAddr, 0x4000)) SetBit(DMA1_CR0, DBGSW); //根据DMAAddr判断是否在XRAM区�
+             -��如果是则开启DBGSW
+ 148   1      
+ 149   1          DMA1_LEN = 7;                                           // 设置DMA1发送数量为8
+ 150   1          DMA1_BA = (uint16)DMAAddr & 0x07ff;                             // 设置DMA1发送首地址
+ 151   1      
+ 152   1          Switch_DMA(1);                                       // 启动DMA1
+ 153   1      }
+ 154          
+ 155          
+ 156          
+ 157          
+ 158          void SetDbgData_DMA(unsigned short ulAddr)
+ 159          {
+ 160   1          bool bTmp = false;
+ 161   1      
+ 162   1          if (ReadBit(DMA1_CR0, DMAEN))
+ 163   1          {
+ 164   2              bTmp = true;
+ 165   2      
+ 166   2              while (ReadBit(DMA1_CR0, DMABSY));
+ 167   2              ClrBit(DMA1_CR0, DMAEN);
+ 168   2          }
+ 169   1      
+ 170   1          if (ulAddr <= 0xfff) ulAddr += 0x70000000;
+ 171   1          DMA1_BA = ulAddr;
+ 172   1      
+ 173   1          if (bTmp) SetBit(DMA1_CR0, DMAEN);
+ 174   1      }
+ 175          
+C51 COMPILER V9.60.7.0   DMA                                                               09/21/2026 11:30:57 PAGE 4   
+
+ 176          void EnableRun_DMA0(void)
+ 177          {
+ 178   1          SetBit(DMA0_CR0 , DMAEN | DMABSY);
+ 179   1      }
+ 180          
+ 181          void EnableRun_DMA1(void)
+ 182          {
+ 183   1          SetBit(DMA1_CR0 , DMAEN | DMABSY);
+ 184   1      }
+ 185          
+ 186          bool GetStatus_DMA0(eType_DMA_Statu eStatu)
+ 187          {
+ 188   1          return ReadBit(DMA0_CR0 , (uint8)eStatu);
+ 189   1      }
+ 190          
+ 191          bool GetStatus_DMA1(eType_DMA_Statu eStatu)
+ 192          {
+ 193   1          return ReadBit(DMA1_CR0 , (uint8)eStatu);
+ 194   1      }
+ 195          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    462    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----       8
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

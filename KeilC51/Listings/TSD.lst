@@ -1,0 +1,82 @@
+C51 COMPILER V9.60.7.0   TSD                                                               09/21/2026 11:30:58 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE TSD
+OBJECT MODULE PLACED IN .\Output\TSD.obj
+COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\User\source\Hardware\TSD.c LARGE OMF2 OPTIMIZE(8,SPEED) BROWSE 
+                    -INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include) DEBUG PRINT(.\Listings\TSD.lst) TABS(2) OBJECT(.\Output\TSD.ob
+                    -j)
+
+line level    source
+
+   1          /**
+   2           * @copyright (C) COPYRIGHT 2022 Fortiortech Shenzhen
+   3           * @file      TSD.c
+   4           * @author    Fortiortech  Appliction Team
+   5           * @date      2022-07-13
+   6           * @brief     This file contains TSD function used for Motor Control.
+   7           */
+   8          
+   9          #include <TSD.h>
+  10          
+  11          uint8 Micro_TJ[] = { 70, 71, 72, 74, 75, 76, 77, 79, 80, 81,
+  12                             82, 83, 84, 86, 87, 88, 89, 91, 92, 93,
+  13                             95, 96, 97, 99, 100,101,102,104,105,107,
+  14                             108,110,111,112,114,115,117,118,120,121,
+  15                             123,124,126,128,129,131,132,134,136,137,
+  16                             139,141,142,144,146,148,149,151,152,154,
+  17                             156,158,160
+  18                             };
+  19          
+  20          /**
+  21           * @brief        TSD初始化函数
+  22           * @param        None
+  23           * @return       none
+  24           * @date         2022-09-13
+  25           * @version      1.0
+  26           * @property     Public
+  27          */
+  28          void TSD_Init(void)
+  29          {
+  30   1          SetBit(TSD_CR, TSDEN);        //温度保护使能
+  31   1          SetBit(TSD_CR, TSEN_EN);        //温度传感器使能
+  32   1      }
+  33          
+  34          /**
+  35           * @brief        TSD芯片内部温度
+  36           * @param        None
+  37           * @return       none
+  38           * @date         2023-
+  39          }3-24
+  40           * @version      1.0
+  41           * @property     Public
+  42          */
+  43          uint8 TSD_Gain(void)
+  44          {
+  45   1          uint8 SetTJ_Value = 0;
+  46   1        uint8 TJ_Value = TSEN_DR;
+  47   1        
+  48   1          SetTJ_Value = Micro_TJ[TJ_Value];
+  49   1        
+  50   1          return SetTJ_Value;
+  51   1      }
+
+
+C51 COMPILER V9.60.7.0   TSD                                                               09/21/2026 11:30:58 PAGE 2   
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =     28    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =     63    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

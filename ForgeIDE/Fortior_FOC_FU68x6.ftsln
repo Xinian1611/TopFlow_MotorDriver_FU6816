@@ -1,0 +1,28 @@
+# FortiorTech IDE Solution File, Format Version 1.0.0
+# Warning: do not edit or delete this solution file!
+
+# ////////////////////////////////////////////////////
+# Begin Solution
+<Solution>
+	NAME : Fortior_FOC_FU68x6
+	GUID : {F8374491-B6AC-4888-852C-1DACD62475E2}
+	STARTUP : {B088A254-91FD-4f8d-A905-4BD68F0CF2AC}
+	ACTIVECONFIGURATION : Debug
+</Solution>
+# End Solution
+
+# ////////////////////////////////////////////////////
+# Begin Project
+<Projects>
+	COUNT : 1
+	<Project1>
+		NAME : Fortior_FOC_FU68x6
+		GUID : {B088A254-91FD-4f8d-A905-4BD68F0CF2AC}
+		CLSID : {0D4D5604-6A52-4042-9F34-64D371B53EA6}
+		PATH : .\Fortior_FOC_FU68x6.ftproj
+		Dependencies : 
+	</Project1>
+</Projects>
+
+# End Project
+# ////////////////////////////////////////////////////

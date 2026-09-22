@@ -1,0 +1,331 @@
+/**************************** (C) COPYRIGHT 2018 Fortiortech shenzhen *****************************
+    File Name          : RSDDetect.c
+    Author             : Bruce,Fortiortech  RD
+    Version            : V1.0
+    Date               : 2018-07-01
+    Description        : This file contains init speed detection used for Motor Control.
+***************************************************************************************************
+    All Rights Reserved
+**************************************************************************************************/
+
+
+/* Includes -------------------------------------------------------------------------------------*/
+#include <MyProject.h>
+
+
+#if (TAILWIND_MODE == RSDMethod)
+
+
+
+    MotorRSDTypeDef    mcRsd; 
+
+static void Time2_RSD_Init(void);
+static void CMP_RSD_Init(void);
+static void RSDFOCCloseLoopStart(void);
+
+
+
+
+
+
+/** 
+ * @brief        RSD初始化函数，电机状态切入 顺逆风检测状态时 运行一次
+ * @date         2022-07-13
+ */
+void RSDDetectInit(void)
+{
+    MOE                         = 0;
+    mcRsd.SpeedUpdate           = 0;
+    mcRsd.Times                 = 0;
+    mcRsd.Period                = 0;
+    mcRsd.Count                 = 0;
+    mcRsd.CountPre              = 0;
+    mcRsd.State                 = STATIC;
+    mcRsd.Speed                 = 0;
+    mcRsd.HighSpdStart          = 0;
+    mcRsd.RSDStep               = 0;
+    mcRsd.SetFR                 = mcFocCtrl.FR;
+    
+    mcRsd.RSDSpeedBase          = RSDSpeedCalBase;
+    
+    ClrBit(DRV_CR, FOCEN);      // 关闭FOC
+    CMP_RSD_Init();
+    Time2_RSD_Init();           // RSD用的是Time2
+}
+
+
+
+/** 
+ * @brief        RSD 比较器初始化
+ * @date         2022-07-13
+ */
+static void CMP_RSD_Init(void)
+{
+    /*  -------------------------------------------------------------------------------------------------
+        CMP Input Pin Mode
+        P1.4--CMP0_IN+, P1.6--CMP1_IN+, P2.1--CMP2_IN+
+        P1.5--CMP0_IN-, P1.7--CMP1_IN-, P2.2--CMP2_IN-
+        P1.3--CMP1P2
+        -------------------------------------------------------------------------------------------------*/
+    SetBit(P1_AN, P14 | P15 | HBMOD);
+    ClrBit(P1_OE, P13);
+    /*  -------------------------------------------------------------------------------------------------
+        CMP0_MOD：
+        00： 无内置虚拟中心点电阻的BEMF模式
+        01： 内置虚拟中心点电阻的BEMF模式
+        10： 3差分比较器模式
+        11： 2比较器模式RSD
+        -------------------------------------------------------------------------------------------------*/
+    SetReg(CMP_CR2, CMP0MOD0 | CMP0MOD1, CMP0MOD0 | CMP0MOD1);
+    /*  -------------------------------------------------------------------------------------------------
+        比较器输出选择配置，与CMP0_MOD配合使用
+        CMP0_SEL[1:0]=00，比较器0工作在2比较器轮询模式，正端在CMP0P、CMP1P2之间自动轮流选择，负端固定接CMP0M，
+                      其输出结果分别送至CMP0_OUT、CMP1_OUT
+        CMP0_SEL[1:0]=01，比较器0选择CMP0对应的端口组合，即正端接CMP0P，负端接CMP0M，输出接CMP0_OUT
+        CMP0_SEL[1:0]=10，比较器0选择CMP1对应的端口组合，即正端接CMP1P2，负端接CMP0M，输出接CMP1_OUT
+        -----------------------------------------------------------------------------*/
+    SetReg(CMP_CR2, CMP0SEL0 | CMP0SEL1, 0x00);
+    /*  -------------------------------------------------------------------------------------------------
+    CMP0/1/2 迟滞电压选择:
+    00: 无迟滞
+    01: ±3mV
+    10: + 6mV
+    11: ±12mV
+        -------------------------------------------------------------------------------------------------*/
+    SetReg(CMP_CR1, CMP0HYS0 | CMP0HYS1, CMP0HYS0 | CMP0HYS1);
+    /*  -------------------------------------------------------------------------------------------------
+        CMP0的轮询时间设置
+        -------------------------------------------------------------------------------------------------*/
+    SetReg(CMP_CR1, CMP0CSEL0 | CMP0CSEL1, 0x00);
+    EA = 0;
+    /* ------------------------------------------------------
+        使能比较器CMP0,CMP1,CMP2和ADC在pwm on/off采样功能
+    
+        00：在on和off均采样，没有延迟采样开启
+        01：只在off采样，根据CMP_SAMR延迟采样开启
+        10：只在on采样，根据CMP_SAMR延迟采样开启
+        11：在on和off均采样，根据CMP_SAMR延迟采样开启
+        ---------------------------------------------------------**/
+    //    SetReg(CMP_CR3, SAMSEL0 | SAMSEL1, SAMSEL1);
+    /* 采样延迟设置 */
+    CMP_SAMR = 0x10;
+    SetBit(CMP_CR2, CMP0EN); //使能比较器
+}
+
+
+
+/** 
+ * @brief        Rsd Timer2功能初始化
+ * @date         2022-07-13
+ */
+static void Time2_RSD_Init(void)
+{
+    /*  -------------------------------------------------------------------------------------------------
+        先停止计数，配置完寄存器后，最后启动计数
+        -------------------------------------------------------------------------------------------------*/
+    ClrBit(TIM2_CR1, T2CEN);        // 0，停止计数；1,使能计数
+    /*  -------------------------------------------------------------------------------------------------
+        时钟分频设置(T2PSC)
+        000:cpuclk(24MHz)         001:cpuclk/2^1(12MHz)   010:cpuclk/2^2(6MHz)    011:cpuclk/2^3(3MHz)
+        100:cpuclk/2^4(1.5MHz)    101:cpuclk/2^5(750KHz)  110:cpuclk/2^6(375KHz)  111:cpuclk/2^7(187.5KHz)
+        -------------------------------------------------------------------------------------------------*/
+    SetReg(TIM2_CR0, T2PSC0 | T2PSC1 | T2PSC2, T2PSC0 | T2PSC1 | T2PSC2);
+    /*  -------------------------------------------------------------------------------------------------
+        /模式选择
+        T2MODE1，T2MODE0
+        00--输入Timer模式；01--输出模式
+        10--输入Count模式；11--QEP或者RSD模式
+        -------------------------------------------------------------------------------------------------*/
+    SetReg(TIM2_CR0, T2MOD0 | T2MOD1, T2MOD0 | T2MOD1);
+    ClrBit(TIM2_CR1, T2FE);                               // 滤波使能
+    /*  -------------------------------------------------------------------------------------------------
+        清除中断标志位
+        禁止PWM周期检测中断使能
+        使能计数器上溢中断使能
+    -----------------------------------------------------------------------------------------------------*/
+    ClrBit(TIM2_CR1, T2IR  | T2IF | T2IP);  // 清除中断标志位
+    ClrBit(TIM2_CR0, T2CES | T2IRE);       // 清零脉冲计数器不使能
+    SetBit(TIM2_CR1, T2IPE | T2IFE);       // 输入有效边沿变化中断使能和基本计数器上溢使能
+    /*  -------------------------------------------------------------------------------------------------
+        定时器2中断优先级配置及芯片中断总使能
+        PTIM231-PTIM230，中断优先级控制值从0-3依次表示优先级从最低到最高，共4级优化级控制
+        EA,芯片中断总使能
+        -------------------------------------------------------------------------------------------------*/
+    SetBit(IP1, PTIM21 );       // 输入有效边沿变化中断使能和基本计数器上溢使能
+    SetBit(IP1, PTIM20 );       // 输入有效边沿变化中断使能和基本计数器上溢使能
+    EA = 1;
+    /*  -------------------------------------------------------------------------------------------------
+        配置周期值、比较值、计数值
+        -------------------------------------------------------------------------------------------------*/
+    TIM2__CNTR = 0;
+    /*-----------启动计数------------------------------------------------*/
+    SetBit(TIM2_CR1, T2CEN);            //启动计数
+}
+
+
+
+
+/** 
+ * @brief        RSD检测函数，使用Timer2 RSD功能，QEP接口相同，运行于Timer2 IP中断
+ * @date         2022-07-13  
+ */
+void RsdProcess(void)
+{
+    uint16 temp_ARR         = 0;
+    int16  temp_speedCal    = 0;
+    
+
+    mcRsd.CountPre  = mcRsd.Count;
+    mcRsd.Count     = TIM2__CNTR;
+    mcRsd.Status     = CMP_SR & 0x03;
+    
+    if (mcRsd.CountPre < 0) // 上一个状态为正转
+    {
+        if (mcRsd.Count < mcRsd.CountPre) // 当前为继续正转
+        {
+            if (mcRsd.Count < -8)
+            {
+                /* 连续单方向转动，则取出周期时。 一个反电势周期是4个RSD跳变状态 */
+                mcRsd.Period = (mcRsd.StepTime[0]>>2) + (mcRsd.StepTime[1]>>2) + (mcRsd.StepTime[2]>>2) + (mcRsd.StepTime[3]>>2);
+                if (mcRsd.SetFR == CW)
+                {
+                    mcRsd.State  = FORWARD;
+                }
+                else
+                {
+                    mcRsd.State  = REVERSE;
+                }    
+            }
+            if (mcRsd.ArrCnt > 3)
+            {
+                mcRsd.ArrCnt = 0;
+            }
+            temp_ARR                        = TIM2__ARR;
+            mcRsd.StepTime[mcRsd.ArrCnt++]  = temp_ARR;    // 取出每个单独RSD电平状态对应的周期计数值
+        }
+        else //正转过程中发生反转
+        {
+            TIM2__CNTR              = 0;
+            mcRsd.Count             = 0;
+            mcRsd.Period            = 65535;
+        }
+    }
+    else if (mcRsd.CountPre > 0)              // 上一个状态为反转
+    {
+        if (mcRsd.Count > mcRsd.CountPre) // 当前为继续反转
+        {
+            if (mcRsd.Count > 8)
+            {
+                /* 连续单方向转动，则取出周期时。 一个周期反电势是4个RSD跳变状态 */
+                mcRsd.Period = (mcRsd.StepTime[0]>>2) + (mcRsd.StepTime[1]>>2) + (mcRsd.StepTime[2]>>2) + (mcRsd.StepTime[3]>>2);
+                if (mcRsd.SetFR == CW)
+                {
+                    mcRsd.State  = REVERSE;
+                }
+                else
+                {
+                    mcRsd.State  = FORWARD;
+                }      
+            }
+            if (mcRsd.ArrCnt > 3)
+            {
+                mcRsd.ArrCnt = 0;
+            }
+            
+            temp_ARR                        = TIM2__ARR;
+            mcRsd.StepTime[mcRsd.ArrCnt++]  = temp_ARR;    // 取出每个单独RSD电平状态对应的周期计数值
+        }
+        else //  反转过程中发生正转
+        {
+            TIM2__CNTR              = 0;
+            mcRsd.Count             = 0;
+            mcRsd.Period            = 65535;
+        }
+    }
+    else
+    {
+        mcRsd.State      = DETECTING;  // 检测中
+    }
+    
+    mcRsd.Times++;      // 多次中断次数
+    
+    if(mcRsd.SpeedUpdate == 0)
+    {
+        if (mcRsd.State == FORWARD || mcRsd.State == REVERSE )//处理速度
+        {
+            
+            if(mcRsd.Period < RSDSpeedCalMaxSpeed)
+            mcRsd.Period = RSDSpeedCalMaxSpeed ;// 防止mcRsd.Period 太小导致计算出错
+            
+                  
+            temp_speedCal = MDU_DIV0_GetQL16(mcRsd.RSDSpeedBase >> 16, mcRsd.RSDSpeedBase, mcRsd.Period);
+            
+            if (mcRsd.State == REVERSE)
+            {
+                mcRsd.Speed = -temp_speedCal;
+            }
+            else
+            {
+                mcRsd.Speed = temp_speedCal;
+            }
+            
+            mcRsd.SpeedUpdate  = 1;
+        }
+    }
+    
+    if(mcRsd.HighSpdStart == 1)             // 高速顺风启动
+    {
+        if (mcRsd.Status == 0x03)           // 03状态 对应90启动
+        {
+            ClrBit(CMP_CR2, CMP0EN);        // 关闭比较器
+            ClrBit(TIM2_CR1, T2CEN);        // 0，停止计数；1,使能计数
+
+            RSDFOCCloseLoopStart();
+            mcRsd.HighSpdStart = 2;         // 启动完成
+        }
+    }  
+}
+
+
+
+/** 
+ * @brief        RSD顺风启动函数
+ * @date         2022-07-13
+ */
+
+static void RSDFOCCloseLoopStart(void)
+{
+    /* FOC初始化 */
+    FOC_Init();
+    /* 启动电流、KP、KI */
+    FOC_IDREF           = ID_RUN_CURRENT;                      // D轴启动电流
+    FOC_IQREF           = IQ_RUN_CURRENT;                      // Q轴启动电流
+    mcFocCtrl.IqRef     = IQ_RUN_CURRENT;                      // Q轴启动电流
+    FOC_DKP             = _Q12(5.0);
+    FOC_DKI             = _Q15(0.5);
+    FOC_QKP             = _Q12(5.0);
+    FOC_QKI             = _Q15(0.5);
+    FOC_EFREQACC        = MOTOR_OMEGA_RAMP_ACC;
+    FOC_EFREQMIN        = MOTOR_OMEGA_RAMP_MIN;
+    FOC_EFREQHOLD       = MOTOR_OMEGA_RAMP_END;
+    SetBit(FOC_CR1, ANGM);                                     // 估算模式
+    ClrBit(FOC_CR1, RFAE);                                     // 禁止强拉
+    SetBit(FOC_CR1, EFAE);                                     // 估算器强制输出
+    FOC_EKP           = OBSW_KP_GAIN_WIND;
+    FOC_EKI           = OBSW_KI_GAIN_WIND;
+    FOC_OMEKLPF        = SPEED_KLPF_WIND;
+    FOC_EKLPFMIN    = OBS_EA_KS_WIND;
+    FOC__EOME           = mcRsd.Speed;
+    if (mcRsd.Status == 3)
+    {
+        FOC__ETHETA         =   _Q15(90 / 180.0);
+        FOC__THETA          =   _Q15(90 / 180.0);
+    }
+    mcFocCtrl.CtrlMode = 0;
+    /* 使能输出 */
+    DRV_CMR |= 0x3F;                         // U、V、W相输出
+    MOE = 1;
+    EA = 1;
+}
+#endif
+

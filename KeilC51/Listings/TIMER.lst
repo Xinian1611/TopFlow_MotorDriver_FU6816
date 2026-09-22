@@ -1,0 +1,141 @@
+C51 COMPILER V9.60.7.0   TIMER                                                             09/21/2026 17:11:32 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE TIMER
+OBJECT MODULE PLACED IN .\Output\TIMER.obj
+COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\User\source\Hardware\TIMER.c LARGE OMF2 OPTIMIZE(8,SPEED) BROWS
+                    -E INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include) DEBUG PRINT(.\Listings\TIMER.lst) TABS(2) OBJECT(.\Output\TI
+                    -MER.obj)
+
+line level    source
+
+   1          /**
+   2           * @copyright (C) COPYRIGHT 2022 Fortiortech Shenzhen
+   3           * @file      xxx.c
+   4           * @author    Fortiortech  Appliction Team
+   5           * @since     Create:2022-08-05
+   6           * @date      Last modify:2022-08-05
+   7           * @note      Last modify author is Leo.li
+   8           * @brief
+   9           */
+  10           
+  11          #include <MyProject.h>
+  12          
+  13          #include <TIMER.h>
+  14          
+  15          void Timer1_Init(void)
+  16          {
+  17   1          
+  18   1      }
+  19          
+  20          /** 
+  21           * @brief        Timer2初始化
+  22           * @date         2022-09-13
+  23           */
+  24          void Timer2_Init(void)
+  25          {
+  26   1        SetBit(PH_SEL , T2SEL);     //P10
+  27   1        SetBit(PH_SEL , T2SSEL);  //P07 
+  28   1        ClrBit(TIM2_CR0 , T2PSC2);  //计数器时钟分频选择
+  29   1        ClrBit(TIM2_CR0 , T2PSC1);  //000-->24M   001-->12M   010-->6M  011-->3M
+  30   1        ClrBit(TIM2_CR0 , T2PSC0);  //100-->1.5M  101-->750K    110-->375K  111-->187.5K
+  31   1        ClrBit(TIM2_CR0 , T2OCM);
+  32   1        SetBit(TIM2_CR0 , T2IRE); //比较匹配中断/脉宽检测中断0-->Disable  1-->Enable
+  33   1        ClrBit(TIM2_CR0 , T2CES); 
+  34   1        
+  35   1        ClrBit(TIM2_CR1 , T2IPE); //输入Timer PWM周期检测中断使能 0-->Disable  1-->Enable
+  36   1        ClrBit(TIM2_CR1 , T2IFE); //计数器上溢中断使能 0-->Disable  1-->Enable
+  37   1        ClrBit(TIM2_CR1 , T2FE);  //输入噪声滤波使能，小于4个时钟周期脉宽滤除
+  38   1        ClrBit(TIM2_CR1 , T2DIR); //QEP&ISD&步进模式专用：当前的方向 0-->正向 1-->反向  
+  39   1        
+  40   1        TIM2__DR = 1200;
+  41   1        TIM2__ARR = 2400;
+  42   1          ClrBit(TIM2_CR0 , T2MOD1);  //00-->输入Timer模式        01-->输出模式
+  43   1        SetBit(TIM2_CR0 , T2MOD0);  //10-->输入Counter模式      11-->QEP&ISD&步进模式
+  44   1          SetBit(TIM2_CR1 , T2CEN); //TIM2使能  0-->Disable  1-->Enable
+  45   1      }
+  46          
+  47          
+  48          /* -------------------------------------------------------------------------------------------------
+  49              Function Name  : Timer3_Init
+  50              Description    : 定时器3初始化
+  51              Date           : 2021-11-08
+  52              Parameter      : None
+  53          ------------------------------------------------------------------------------------------------- */
+C51 COMPILER V9.60.7.0   TIMER                                                             09/21/2026 17:11:32 PAGE 2   
+
+  54          void Timer3_Init(void)
+  55          {
+  56   1        SetBit(PH_SEL , T3SEL);     //Timer3端口使能
+  57   1          ClrBit(PH_SEL1 , T3CT0);     //默认端口为P11,功能转移后为P01,需TIMER4转移到P00
+  58   1          SetBit(P1_PU, P11HV_EN);  // P11 高压输入模式，保持使能，用于单线LIN电路
+  59   1        
+  60   1        SetBit(TIM3_CR0 , T3PSC2);  //计数器时钟分频选择
+  61   1        SetBit(TIM3_CR0 , T3PSC1);  //000-->24M   001-->12M   010-->6M  011-->3M
+  62   1        ClrBit(TIM3_CR0 , T3PSC0);  //100-->1.5M  101-->750K    110-->375K  111-->输入时为：48M
+  63   1        
+  64   1          ClrBit(TIM3_CR0 , T3OCM);
+  65   1        SetBit(TIM3_CR0 , T3IRE); //比较匹配中断/脉宽检测中断0-->Disable  1-->Enable
+  66   1        ClrBit(TIM3_CR0 , T3OPM); //0-->计数器不停止    1-->单次模式  
+  67   1        
+  68   1        SetBit(TIM3_CR1 , T3IPE); //输入Timer PWM周期检测中断使能 0-->Disable  1-->Enable
+  69   1        SetBit(TIM3_CR1 , T3IFE); //计数器上溢中断使能 0-->Disable  1-->Enable
+  70   1        ClrBit(TIM3_CR1 , T3NM1); //输入噪声脉宽选择
+  71   1        ClrBit(TIM3_CR1 , T3NM0); //00-->不滤波  01-->4cycles    10-->8cycles  11-->16cycles
+  72   1        
+  73   1      //  TIM3__DR = 1200;
+  74   1      //  TIM3__ARR = 2400;
+  75   1          ClrBit(TIM3_CR0 , T3MOD);   //0-->Timer模式       1-->输出模式
+  76   1          SetBit(TIM3_CR1 , T3EN);    //TIM3使能    0-->Disable  1-->Enable
+  77   1      }
+  78          //void Timer4_Init(void)
+  79          //{
+  80          //    ClrBit(PH_SEL , T4SEL);     //Timer4端口使能
+  81          //    ClrBit(PH_SEL1 , T4CT);     //默认端口为P11,功能转移后为P01,需TIMER4转移到P00
+  82          
+  83          //    ClrBit(TIM4_CR0 , T4PSC2);  //计数器时钟分频选择
+  84          //    ClrBit(TIM4_CR0 , T4PSC1);  //000-->24M   001-->12M   010-->6M  011-->3M
+  85          //    ClrBit(TIM4_CR0 , T4PSC0);  //100-->1.5M  101-->750K    110-->375K  111-->187.5K
+  86          
+  87          //    ClrBit(TIM4_CR0 , T4OCM);
+  88          //    ClrBit(TIM4_CR0 , T4IRE); //比较匹配中断/脉宽检测中断0-->Disable  1-->Enable
+  89          //    ClrBit(TIM4_CR0 , T4OPM); //0-->计数器不停止    1-->单次模式  
+  90          
+  91          //    ClrBit(TIM4_CR1 , T4IPE); //输入Timer PWM周期检测中断使能 0-->Disable  1-->Enable
+  92          //    ClrBit(TIM4_CR1 , T4IFE); //计数器上溢中断使能 0-->Disable  1-->Enable
+  93          //    ClrBit(TIM4_CR1 , T4NM1); //输入噪声脉宽选择
+  94          //    ClrBit(TIM4_CR1 , T4NM0); //00-->不滤波  01-->4cycles    10-->8cycles  11-->16cycles
+  95          
+  96          //    TIM4__ARR = 4800;
+  97          //    TIM4__DR = TIM4__ARR>>1 ;
+  98          //    TIM4__CNTR = 1;
+  99          
+ 100          //    PTIM41 = 1;
+ 101          //    PTIM40 = 1;
+ 102          //    SetBit(TIM4_CR0 , T4MOD);   //0-->Timer模式       1-->输出模式
+ 103          //    ClrBit(TIM4_CR1 , T4EN);    //TIM3使能    0-->Disable  1-->Enable
+ 104          //}
+ 105          void TIM4_Init_RF(void)
+ 106          {
+ 107   1      
+ 108   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    121    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+C51 COMPILER V9.60.7.0   TIMER                                                             09/21/2026 17:11:32 PAGE 3   
+
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

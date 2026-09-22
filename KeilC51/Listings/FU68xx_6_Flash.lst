@@ -1,0 +1,559 @@
+C51 COMPILER V9.60.7.0   FU68XX_6_FLASH                                                    09/21/2026 17:11:32 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE FU68XX_6_FLASH
+OBJECT MODULE PLACED IN .\Output\FU68xx_6_Flash.obj
+COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\User\source\Hardware\FU68xx_6_Flash.c LARGE OMF2 OPTIMIZE(8,SPE
+                    -ED) BROWSE INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include) DEBUG PRINT(.\Listings\FU68xx_6_Flash.lst) TABS(2) 
+                    -OBJECT(.\Output\FU68xx_6_Flash.obj)
+
+line level    source
+
+   1          /**
+   2           *                          @copyright (C) COPYRIGHT 2022 Fortiortech Shenzhen
+   3           * @file      FU68xx_6_Flash.c
+   4           * @author    leo.li
+   5           * @since     2022-10-01 22:24:50
+   6           * @date      2022-10-09 17:46:47
+   7           * @version
+   8           * <table>
+   9           * <tr><th>Date <th>Version <th>Author <th>Description </tr>
+  10           * </table>
+  11           * @brief
+  12           */
+  13          
+  14          
+  15          /******************************************************************************/// Including Header Files
+  16          #include <MyProject.h>
+  17          
+  18          MCUFlash xdata FlashTest;                 //flash²âÊÔ
+  19          
+  20          /******************************************************************************/// Define Macro
+  21          #define SEC_LEN_LOG  (8)
+  22          #define PAGE_LEN_LOG (3 + SEC_LEN_LOG)
+  23          #define FLASH_LEN    (32768)
+  24          
+  25          #define __SEC_LAST   ((FLASH_LEN >> SEC_LEN_LOG) - 1)
+  26          #define __PAGE_LAST  ((FLASH_LEN >> PAGE_LEN_LOG) - 1)
+  27          /******************************************************************************/// Define Global Symbols
+  28          /******************************************************************************/// Function Subject
+  29          /**
+  30           * @brief      Flash²Ù×÷º¯Êý
+  31           *
+  32           * @param[in]  eCmd   ²Ù×÷ÃüÁî
+  33           * @param[in]  wAddr  ±à³ÌµØÖ·
+  34           * @param[in]  ucDat  ±à³ÌÄÚÈÝ
+  35           *
+  36           * @return     Flash²Ù×÷½á¹û, @see ETypeFlashStatu
+  37           */
+  38          ETypeFlashStatu Flash_Ctrl(ETypeFlashCmd eCmd, unsigned short wAddr, unsigned char ucDat)
+  39          {
+  40   1          unsigned char data   ucCmd    = (unsigned char)eCmd;
+  41   1          unsigned short data  wAddrTmp = wAddr;
+  42   1          unsigned char data   ucDatTmp = ucDat;
+  43   1          unsigned char data   ucKey1   = 0x5a;
+  44   1          unsigned char data   ucKey2   = 0x1f;
+  45   1          bool                 bEA;
+  46   1          unsigned char data   ucCfg;
+  47   1          ETypeFlashStatu data eStatu = FLASH_UNKNOW;
+  48   1          
+  49   1          if ((ucCmd & FLAEN) == 0)
+  50   1          {
+  51   2              return FLASH_ERR_CMD;
+  52   2          }
+  53   1          else if ((ucCmd & (FLAERS | FLAPRE)) == (FLAERS | FLAPRE))
+C51 COMPILER V9.60.7.0   FU68XX_6_FLASH                                                    09/21/2026 17:11:32 PAGE 2   
+
+  54   1          {
+  55   2              return FLASH_ERR_CMD;
+  56   2          }
+  57   1          else if ((ucCmd & (FLAERS | FLAPRE | PAGE_EN)) == PAGE_EN)
+  58   1          {
+  59   2              return FLASH_ERR_CMD;
+  60   2          }
+  61   1          
+  62   1          if ((ucCmd & PAGE_EN) != 0 && (wAddr >> PAGE_LEN_LOG) >= __PAGE_LAST)
+  63   1          {
+  64   2              return FLASH_ERR_ADDR;
+  65   2          }
+  66   1          else if ((ucCmd & PAGE_EN) == 0 && (wAddr >> SEC_LEN_LOG) >= __SEC_LAST)
+  67   1          {
+  68   2              return FLASH_ERR_ADDR;
+  69   2          }
+  70   1          
+  71   1          if (FLA_KEY == 0x06)
+  72   1          {
+  73   2              return FLASH_FORZEN;
+  74   2          }
+  75   1          
+  76   1          bEA = EA;
+  77   1          EA  = 0;
+  78   1          ucCfg = CCFG1 & (WDT_EN | 0x08);
+  79   1          CCFG1 &= ~(WDT_EN | 0x08);
+  80   1          FLA_CR = ucCmd;
+  81   1          FLA_KEY = ucKey1;
+  82   1          FLA_KEY = ucKey2;
+  83   1          
+  84   1          if (FLA_KEY != 0x03)
+  85   1          {
+  86   2              eStatu = FLASH_ERR_UNLOCK;
+  87   2              goto exit;
+  88   2          }
+  89   1          
+  90   1          *(unsigned char xdata *)wAddrTmp = ucDatTmp;
+  91   1          FLA_CR = 0x08;
+  92   1          
+  93   1          if ((FLA_CR & FLAERR) != 0)
+  94   1          {
+  95   2              eStatu = FLASH_ERROR;
+  96   2              goto exit;
+  97   2          }
+  98   1          
+  99   1          eStatu = FLASH_SUCCESS;
+ 100   1      exit:
+ 101   1          EA    = bEA;
+ 102   1          CCFG1 |= ucCfg;
+ 103   1          return eStatu;
+ 104   1      }
+ 105          
+ 106          
+ 107          /**
+ 108           * @brief      FlashÒ³²Á³ýº¯Êý
+ 109           *
+ 110           * @param[in]  wAddr  ±à³ÌµØÖ·
+ 111           *
+ 112           * @return     Flash²Ù×÷½á¹û, @see ETypeFlashStatu
+ 113           */
+ 114          ETypeFlashStatu Flash_PageErase(unsigned short wAddr)
+ 115          {
+C51 COMPILER V9.60.7.0   FU68XX_6_FLASH                                                    09/21/2026 17:11:32 PAGE 3   
+
+ 116   1          ETypeFlashStatu eStatu;
+ 117   1          eStatu = Flash_Ctrl(FLASH_PAGE_PP, wAddr, 0xff);
+ 118   1          
+ 119   1          if (eStatu != FLASH_SUCCESS)
+ 120   1          {
+ 121   2              goto exit;
+ 122   2          }
+ 123   1          
+ 124   1          eStatu = Flash_Ctrl(FLASH_PAGE_ERS, wAddr, 0xff);
+ 125   1      exit:
+ 126   1          return eStatu;
+ 127   1      }
+ 128          
+ 129          /**
+ 130           * @brief      FlashÉÈÇø²Á³ýº¯Êý
+ 131           *
+ 132           * @param[in]  wAddr  ±à³ÌµØÖ·
+ 133           *
+ 134           * @return     Flash²Ù×÷½á¹û, @see ETypeFlashStatu
+ 135           */
+ 136          ETypeFlashStatu Flash_SectorErase(unsigned short wAddr)
+ 137          {
+ 138   1          ETypeFlashStatu eStatu;
+ 139   1          eStatu = Flash_Ctrl(FLASH_SEC_PP, wAddr, 0xff);
+ 140   1          
+ 141   1          if (eStatu != FLASH_SUCCESS)
+ 142   1          {
+ 143   2              goto exit;
+ 144   2          }
+ 145   1          
+ 146   1          eStatu = Flash_Ctrl(FLASH_SEC_ERS, wAddr, 0xff);
+ 147   1      exit:
+ 148   1          return eStatu;
+ 149   1      }
+ 150          
+ 151          
+ 152          /**
+ 153           * @brief        Ð´Èë1¸ö×Ö½Úµ½FLASH£¬
+ 154           * @Input        unsigned short FlashAddress£ºÄ¿±êFLASHµØÖ·
+ 155           * @Input        uint8 FlashData£º±»Ð´ÈëÊý¾Ý
+ 156           */
+ 157          void Flash_byte_Write(unsigned short FlashAddress, unsigned char FlashData)
+ 158          {
+ 159   1          unsigned char Write_status = 0;
+ 160   1          Write_status = (uint8)Flash_Ctrl(FLASH_PROGARM, FlashAddress, FlashData);
+ 161   1          
+ 162   1          if (Write_status)
+ 163   1          {
+ 164   2              ;
+ 165   2          }
+ 166   1      }
+ 167          
+ 168          /**
+ 169           * @brief        Flash Ð£ÑéCRC
+ 170           * @brief        CRC_BEG: ÉÈÇøÆðÊ¼
+ 171           * @brief        CRC_CNT: Ð£ÑéÉÈÇøÊý
+ 172           */
+ 173          void Flash_CRC_APP(void)
+ 174          {
+ 175   1          uint8 CRCL = 0;
+ 176   1          uint8 CRCH = 0;
+ 177   1          ClrBit(CRC_CR, AUTOINT); /* Í£Ö¹¼ÆËã */
+C51 COMPILER V9.60.7.0   FU68XX_6_FLASH                                                    09/21/2026 17:11:32 PAGE 4   
+
+ 178   1          SetBit(CRC_CR, CRCVAL);  /* ½« CRC ½á¹û³õÊ¼»¯Îª 0xFFFF */
+ 179   1          SetBit(CRC_CR, CRCDINI); /* ³õÊ¼»¯ÓÐÐ§ */
+ 180   1          CRC_BEG = 0;
+ 181   1          CRC_CNT = 127;
+ 182   1          SetBit(CRC_CR, AUTOINT); /* ¿ªÊ¼¼ÆËã */
+ 183   1          
+ 184   1          while (ReadBit(CRC_CR, CRCDONE) == 0)
+ 185   1          {
+ 186   2              ;
+ 187   2          }
+ 188   1          
+ 189   1          SetBit(CRC_CR, CRCPNT); /* È¡crc¸ßÎ» */
+ 190   1          CRCH = CRC_DR;
+ 191   1          FlashTest.FlashCRC = CRCH;
+ 192   1          FlashTest.FlashCRC = FlashTest.FlashCRC << 8;
+ 193   1          ClrBit(CRC_CR, CRCPNT); /* È¡crcµÍÎ» */
+ 194   1          CRCL = CRC_DR;
+ 195   1          FlashTest.FlashCRC = FlashTest.FlashCRC + CRCL;
+ 196   1      }
+ 197          
+ 198          
+ 199          /**
+ 200          * @brief        »ñÈ¡Ð´ÈëµØÖ·£¬±ØÐë±£Ö¤Ð´ÈëµÄµØÖ·ÖÐÊýÖµÈ«²¿Îª0
+ 201          * @brief        unsigned short FlashAddress£ºÄ¿±êFLASHÊ×µØÖ·
+ 202          * @brief        uint8 Write_Length£ºÐ´ÈëÊýÖµ³¤¶È
+ 203          */
+ 204          uint16 GetWrite_Black_Addr(unsigned short FlashAddress, uint8 Write_Length)
+ 205          {
+ 206   1          uint16 TempFlashAddress = 0;
+ 207   1          uint16 TempFirstAddress = 0;             //ÓÃÀ´±£´æ±£´æÊ×µØÖ·
+ 208   1          uint8  tempFlashData = 0xFF;
+ 209   1          uint8  Length = 0;
+ 210   1          TempFlashAddress = FlashAddress;
+ 211   1          TempFirstAddress = FlashAddress;
+ 212   1          
+ 213   1          while ((Length != Write_Length) && (TempFlashAddress < (TempFirstAddress + Write_Length))) //ÏÞ¶¨¶ÁÈ¡µ
+             -ØÖ·Îªµ±Ç°Ò³
+ 214   1          {
+ 215   2              tempFlashData = *(uint8 code *)(TempFlashAddress);  //¶ÁÈ¡Ä¿±êµØÖ·ÖÐÊýÖµÊÇ·ñÎª0
+ 216   2              
+ 217   2              if (tempFlashData == 0)
+ 218   2              {
+ 219   3                  Length ++;
+ 220   3                  TempFlashAddress += 1;
+ 221   3              }
+ 222   2              else
+ 223   2              {
+ 224   3                  TempFirstAddress += Write_Length;        //Ê×µØÖ·Ìø×ªWrite_Length×Ö½Ú
+ 225   3                  TempFlashAddress  = TempFirstAddress;
+ 226   3                  Length = 0;
+ 227   3              }
+ 228   2          }
+ 229   1          
+ 230   1          return TempFirstAddress;
+ 231   1      }
+ 232          
+ 233          /**
+ 234           * @brief        Ð´ÈëLength×Ö½Úµ½FLASH£¬
+ 235           * @Input        unsigned short FlashAddress£ºÐ´ÈëÄ¿±êFLASHÊ×µØÖ·
+ 236           * @Input        uint8 *str£º±»Ð´ÈëÊý¾Ý
+ 237           * @ruturn       1:ÉÈÇøÎ´Âú,Ð´ÈëÍê³É  0:ÉÈÇøÒÑÂú,Ð´ÈëÊ§°Ü
+ 238           * @note
+C51 COMPILER V9.60.7.0   FU68XX_6_FLASH                                                    09/21/2026 17:11:32 PAGE 5   
+
+ 239           */
+ 240          uint8 Write_LengthByte(unsigned short FlashAddress, uint8 Length, uint8 * str)
+ 241          {
+ 242   1          uint8 tempFlashData = 0;
+ 243   1          uint8 i = 0;
+ 244   1          uint16 tempNewFlashAddress = FlashAddress;
+ 245   1          
+ 246   1          for (i = 0; i < Length; i++)
+ 247   1          {
+ 248   2              Flash_byte_Write((tempNewFlashAddress + i), str[i]);
+ 249   2              tempFlashData = *(uint8 code *)(tempNewFlashAddress + i);
+ 250   2              
+ 251   2              if (tempFlashData != str[i])
+ 252   2              {
+ 253   3                  return 0;
+ 254   3              }
+ 255   2          }
+ 256   1          
+ 257   1          return 1;
+ 258   1      }
+ 259          
+ 260          
+ 261          /**
+ 262           * @brief        ¶ÁÈ¡Á½¸ö×Ö½ÚÊý¾Ý£¬
+ 263           * @Input        unsigned short BlockStartAddr£ºÄ¿±êFLASHÊ×µØÖ·
+ 264           * @Input        uint8 Length£ºÊýÖµ³¤¶È
+ 265           * @Input        uint8 * str £º¶Á»ØÊýÖµÐ´ÈëÊý×é
+ 266           * @ruturn       FlashÊý¾Ý
+ 267           */
+ 268          void ReadFromFlash(unsigned short BlockStartAddr, uint8 Length, uint8 * str)
+ 269          {
+ 270   1          uint8 i = 0;
+ 271   1          
+ 272   1          for (i = 0; i < Length; i++)
+ 273   1          {
+ 274   2              str[i] = *(uint8 code *)(BlockStartAddr + i);
+ 275   2          }
+ 276   1      }
+ 277          
+ 278          
+ 279          
+ 280          /**
+ 281          * @brief        »ñÈ¡µôµçÖ®Ç°µÄ´íÎóÊý¾Ý£¬ÊýÖµ³õÊ¼»¯
+ 282          * @brief
+ 283          * @brief
+ 284          */
+ 285          void Flash_DataInit(void)
+ 286          {
+ 287   1          uint16 ReadInfor_Addr = 0;                 //¶ÁÈ¡ÐÅÏ¢µØÖ·
+ 288   1          uint8 Check_code = 0;
+ 289   1        uint8 i = 0;
+ 290   1        
+ 291   1          memset(&FlashTest, 0, sizeof(MCUFlash));        // ±äÁ¿ÇåÁã
+ 292   1          /*È·ÈÏÐ´Èë¶ÔÓ¦³¤¶ÈµØÖ·ÄÚÊýÖµÈ«Îª0 */
+ 293   1          FlashTest.FlashWriteAddr = GetWrite_Black_Addr(USERCODEADDRESS, Flash_DATA_Length);
+ 294   1          
+ 295   1          /* »ñÈ¡ÉÏ´ÎµÄ±£´æÊýÖµ
+ 296   1          FlashTest.FlashWriteAddr£ºÐ´ÈëÊýÖµÊ×µØÖ· £¬Flash_DATA_Length£º¶ÁÈ¡×Ö½ÚÊý£¬¶ÁÈ¡Öµ·ÅÈëFlashTest.Flash_Re
+             -ad_DataÊý×éÖÐ */
+ 297   1          if (FlashTest.FlashWriteAddr > USERCODEADDRESS)
+ 298   1          {
+ 299   2              /*¶ÁÈ¡ÊýÖµÊ×µØÖ·*/
+C51 COMPILER V9.60.7.0   FU68XX_6_FLASH                                                    09/21/2026 17:11:32 PAGE 6   
+
+ 300   2              FlashTest.FlashReadAddr  = FlashTest.FlashWriteAddr - Flash_DATA_Length;
+ 301   2              
+ 302   2              /*»ñÈ¡×îÐÂÒ»´ÎÕýÈ·Ð´ÈëµÄÊýÖµ*/
+ 303   2              while ((FlashTest.FlashReadAddr > USERCODEADDRESS) && (Check_code != 0x55))
+ 304   2              {
+ 305   3                  /*¶ÁÈ¡ÊýÖµÐ£ÑéÎ»£¬È·ÈÏµ±Ç°ÊýÖµÔÚÐ´ÈëÊ±ÎªÕýÈ·Ð´Èë*/
+ 306   3                  ReadInfor_Addr = FlashTest.FlashReadAddr + Verify_Bit;
+ 307   3                  Check_code = *(uint8 code *)(ReadInfor_Addr + i);
+ 308   3                  
+ 309   3                  if (Check_code == 0x55)
+ 310   3                  {
+ 311   4                      ReadFromFlash(FlashTest.FlashReadAddr, Flash_DATA_Length, FlashTest.Flash_Read_Data);
+ 312   4                  }
+ 313   3                  else
+ 314   3                  {
+ 315   4                      FlashTest.FlashReadAddr  = FlashTest.FlashReadAddr - Flash_DATA_Length;
+ 316   4                  }
+ 317   3              }
+ 318   2          }
+ 319   1          else
+ 320   1          {
+ 321   2              FlashTest.FlashReadAddr  = FlashTest.FlashWriteAddr;
+ 322   2          }
+ 323   1          
+ 324   1          /*´íÎóÐÅÏ¢´ÓFlash¶ÁÈ¡µ½APP*/
+ 325   1          ReadInfor_Addr = FlashTest.FlashReadAddr + ((uint8)FaultHardOVCurrent - 1) * 2;
+ 326   1          FlashTest.FaultHardOVCurrentCount = *(uint16 code *)(ReadInfor_Addr);
+ 327   1          ReadInfor_Addr = FlashTest.FlashReadAddr + ((uint8)FaultSoftOVCurrent - 1) * 2;
+ 328   1          FlashTest.FaultSoftOVCurrentCount = *(uint16 code *)(ReadInfor_Addr);
+ 329   1          ReadInfor_Addr = FlashTest.FlashReadAddr + ((uint8)FaultOverVoltageDC - 1) * 2;
+ 330   1          FlashTest.FaultUnderVoltageCount = *(uint16 code *)(ReadInfor_Addr);
+ 331   1          ReadInfor_Addr = FlashTest.FlashReadAddr + ((uint8)FaultUnderVoltageDC - 1) * 2;
+ 332   1          FlashTest.FaultOverVoltageCount = *(uint16 code *)(ReadInfor_Addr);
+ 333   1          ReadInfor_Addr = FlashTest.FlashReadAddr + ((uint8)FaultPhaseLost - 1) * 2;
+ 334   1          FlashTest.FaultLossPhaseCount = *(uint16 code *)(ReadInfor_Addr);
+ 335   1          ReadInfor_Addr = FlashTest.FlashReadAddr + ((uint8)FaultStall - 1) * 2;
+ 336   1          FlashTest.FaultStartCount = *(uint16 code *)(ReadInfor_Addr);
+ 337   1          ReadInfor_Addr = FlashTest.FlashReadAddr + ((uint8)FaultNtcOTErr - 1) * 2;
+ 338   1          FlashTest.FaultStartCount = *(uint16 code *)(ReadInfor_Addr);
+ 339   1          ReadInfor_Addr = FlashTest.FlashReadAddr + ((uint8)FaultTSD - 1) * 2;
+ 340   1          FlashTest.FaultTSDCount = *(uint16 code *)(ReadInfor_Addr);
+ 341   1          
+ 342   1          /*FlashÈç¹û×¼±¸Ð´Âú£¬²ÁÐ´±êÖ¾Î»ÖÃ1.×¼±¸Ð¾Æ¬ÎÂ¶ÈÔÚµÍÓÚ105¡ã½øÐÐ²ÁÐ´*/
+ 343   1          if (FlashTest.FlashWriteAddr >= USERCODEADDRESS + 0x0FB0)                //²ÁÐ´Îª2Ò³£¨Ò»¹²4KµÄÊýÖµ£©µ½
+             -×îºóÒ»¸öÐ´Èë64×Ö½Ú³¢ÊÔ²ÁÐ´
+ 344   1          {
+ 345   2              for (i = 0; i < Flash_DATA_Length; i++)
+ 346   2              {
+ 347   3                  FlashTest.Flash_Write_Data[i] = FlashTest.Flash_Read_Data[i];
+ 348   3              }
+ 349   2              
+ 350   2              FlashTest.Flag_FlashErase = 1;
+ 351   2          }
+ 352   1      }
+ 353          
+ 354          /**
+ 355          * @brief        FlashµÄ²ÁÐ´
+ 356          * @brief        FlashTest.Flag_FlashEraseÈ·ÈÏÊÇ·ñ½øÐÐ
+ 357          * @brief
+ 358          */
+ 359          void Flash_Erase(void)
+ 360          {
+C51 COMPILER V9.60.7.0   FU68XX_6_FLASH                                                    09/21/2026 17:11:32 PAGE 7   
+
+ 361   1          uint8 FlashWriteStatus = 0;
+ 362   1          
+ 363   1          if ((((FlashTest.Flag_FlashErase == 1) && (mcFocCtrl.MCU_TEMP < 105))|| (FlashTest.Flag_FlashErase == 
+             -2)) 
+ 364   1          && (mcFocCtrl.mcDcbusFlt > Fault.Voltage.UnderVoltageVal))
+ 365   1          {
+ 366   2              FlashTest.Flag_FlashErase = 0;
+ 367   2              FlashTest.ReturnEraseStatus   = (uint8)Flash_PageErase(USERCODEADDRESS);            // Ä¿±êÒ³Ð´Âú£
+             -¬Çå³ýÄ¿±êÒ³
+ 368   2              FlashTest.FlashWriteAddr      = USERCODEADDRESS;                             // ÖØÐÂ¸øÐ´ÈëÊ×µØÖ·
+ 369   2              
+ 370   2              while (!FlashWriteStatus)                                               // ³õÊ¼Ð´Èë»òÕßÐ´ÈëÒì³£¡¢»
+             -»µ½ÏÂ¸öµØÖ·Ð´Èë
+ 371   2              {
+ 372   3                  /* FlashTest.FlashWriteAddr£ºÖ¸¶¨µØÖ· FlashTest.Flash_Write_Data:ÐèÒªÐ´ÈëµÄÊýÖµ
+ 373   3                  FlashWriteStatus£º·µ»ØÊýÖµ 1£ºÐ´ÈëÕýÈ·  0£ºÐ´Èë´íÎó */
+ 374   3                  
+ 375   3                  /* Ð´ÈëÕýÈ·Ê±×îºóÒ»Î»Ð´ÈëÐ£ÑéÎ» */
+ 376   3                  if (FlashWriteStatus == 0)   //µ±Ç°ÊýÖµÐ´Èë´íÎó
+ 377   3                  {
+ 378   4                      Flash_byte_Write((FlashTest.FlashWriteAddr + Verify_Bit), Verify_Error);
+ 379   4                  }
+ 380   3                  else if (FlashWriteStatus)    //µ±Ç°ÊýÖµÐ´ÈëÕýÈ·
+ 381   3                  {
+ 382   4                      Flash_byte_Write((FlashTest.FlashWriteAddr + Verify_Bit), Verify_Ture);
+ 383   4                  }
+ 384   3                  
+ 385   3                  //¸üÐÂ¶ÁÐ´Ê×µØÖ·
+ 386   3                  FlashTest.FlashReadAddr = FlashTest.FlashWriteAddr;
+ 387   3                  FlashTest.FlashWriteAddr = FlashTest.FlashWriteAddr + Flash_DATA_Length;
+ 388   3                  
+ 389   3                  if (FlashTest.FlashWriteAddr >= USERCODEADDRESS + 0x0800)
+ 390   3                  {
+ 391   4                      FlashWriteStatus = 1;     //È«²¿Ò³Ëð»µ£¬Ç¿ÐÐÌø×ª
+ 392   4                  }
+ 393   3              }
+ 394   2              
+ 395   2              FlashTest.ReturnEraseStatus   = (uint8)Flash_PageErase(USERCODEADDRESS + 0x0800);         //Ä¿±êÒ³
+             -Ð´Âú£¬Çå³ýÄ¿±êÒ³
+ 396   2          }
+ 397   1      }
+ 398          
+ 399          /**
+ 400          * @brief        ±£´æ´íÎó
+ 401          * @brief
+ 402          * @brief
+ 403          */
+ 404          void SaveFault_Flash(void)
+ 405          {
+ 406   1          uint16 Array_Loca = 0;
+ 407   1          uint8 FlashWriteStatus = 0;
+ 408   1          
+ 409   1          if (FlashTest.Flash_FaultSource_Updat)
+ 410   1          {
+ 411   2              FlashTest.Flash_FaultSource_Updat = 0;
+ 412   2              
+ 413   2              switch (mcFaultSource)
+ 414   2              {
+ 415   3                  case FaultHardOVCurrent:
+ 416   3                      FlashTest.FaultHardOVCurrentCount++;
+ 417   3                      Array_Loca = ((uint8)FaultHardOVCurrent - 1) * 2;
+ 418   3                      FlashTest.Flash_Write_Data[Array_Loca] = FlashTest.FaultHardOVCurrentCount >> 8;
+C51 COMPILER V9.60.7.0   FU68XX_6_FLASH                                                    09/21/2026 17:11:32 PAGE 8   
+
+ 419   3                      FlashTest.Flash_Write_Data[Array_Loca + 1] = FlashTest.FaultHardOVCurrentCount;
+ 420   3                      break;
+ 421   3                      
+ 422   3                  case FaultSoftOVCurrent:
+ 423   3                      FlashTest.FaultSoftOVCurrentCount++;
+ 424   3                      Array_Loca = ((uint8)FaultSoftOVCurrent - 1) * 2;
+ 425   3                      FlashTest.Flash_Write_Data[Array_Loca] = FlashTest.FaultSoftOVCurrentCount >> 8;
+ 426   3                      FlashTest.Flash_Write_Data[Array_Loca + 1] = FlashTest.FaultSoftOVCurrentCount;
+ 427   3                      break;
+ 428   3                      
+ 429   3                  case FaultOverVoltageDC:
+ 430   3                      FlashTest.FaultUnderVoltageCount++;
+ 431   3                      Array_Loca = ((uint8)FaultOverVoltageDC - 1) * 2;
+ 432   3                      FlashTest.Flash_Write_Data[Array_Loca] = FlashTest.FaultUnderVoltageCount >> 8;
+ 433   3                      FlashTest.Flash_Write_Data[Array_Loca + 1] = FlashTest.FaultUnderVoltageCount;
+ 434   3                      break;
+ 435   3                      
+ 436   3                  case FaultUnderVoltageDC:
+ 437   3                      FlashTest.FaultOverVoltageCount++;
+ 438   3                      Array_Loca = ((uint8)FaultUnderVoltageDC - 1) * 2;
+ 439   3                      FlashTest.Flash_Write_Data[Array_Loca] = FlashTest.FaultOverVoltageCount >> 8;
+ 440   3                      FlashTest.Flash_Write_Data[Array_Loca + 1] = FlashTest.FaultOverVoltageCount;
+ 441   3                      break;
+ 442   3                      
+ 443   3                  case FaultPhaseLost:
+ 444   3                      FlashTest.FaultLossPhaseCount++;
+ 445   3                      Array_Loca = ((uint8)FaultPhaseLost - 1) * 2;
+ 446   3                      FlashTest.Flash_Write_Data[Array_Loca] = FlashTest.FaultLossPhaseCount >> 8;
+ 447   3                      FlashTest.Flash_Write_Data[Array_Loca + 1] = FlashTest.FaultLossPhaseCount;
+ 448   3                      break;
+ 449   3                      
+ 450   3                  case FaultStall:
+ 451   3                      FlashTest.FaultStallCount++;
+ 452   3                      Array_Loca = ((uint8)FaultStall - 1) * 2;
+ 453   3                      FlashTest.Flash_Write_Data[Array_Loca] = FlashTest.FaultStallCount >> 8;
+ 454   3                      FlashTest.Flash_Write_Data[Array_Loca + 1] = FlashTest.FaultStallCount;
+ 455   3                      break;
+ 456   3                      
+ 457   3                  case FaultNtcOTErr:
+ 458   3                      FlashTest.FaultStartCount++;
+ 459   3                      Array_Loca = ((uint8)FaultNtcOTErr - 1) * 2;
+ 460   3                      FlashTest.Flash_Write_Data[Array_Loca]     = FlashTest.FaultStartCount >> 8;
+ 461   3                      FlashTest.Flash_Write_Data[Array_Loca + 1] = FlashTest.FaultStartCount;
+ 462   3                      break;
+ 463   3                      
+ 464   3                  case FaultTSD:
+ 465   3                      FlashTest.FaultTSDCount++;
+ 466   3                      Array_Loca = ((uint8)FaultTSD - 1) * 2;
+ 467   3                      FlashTest.Flash_Write_Data[Array_Loca] = FlashTest.FaultTSDCount >> 8;
+ 468   3                      FlashTest.Flash_Write_Data[Array_Loca + 1] = FlashTest.FaultTSDCount;
+ 469   3                      break;
+ 470   3                      
+ 471   3                  default:
+ 472   3                      break;
+ 473   3              }
+ 474   2              
+ 475   2              FlashTest.ReturnEraseStatus = 0;
+ 476   2              
+ 477   2              while (!FlashWriteStatus)   //Ð´ÈëÒì³££¬»»µ½ÏÂ¸öµØÖ·Ð´Èë
+ 478   2              {
+ 479   3                  /* FlashTest.FlashWriteAddr£ºÖ¸¶¨µØÖ· FlashTest.Flash_Write_Data:ÐèÒªÐ´ÈëµÄÊýÖµ
+ 480   3                  FlashWriteStatus£º·µ»ØÊýÖµ 1£ºÐ´ÈëÕýÈ·  0£ºÐ´Èë´íÎó */
+C51 COMPILER V9.60.7.0   FU68XX_6_FLASH                                                    09/21/2026 17:11:32 PAGE 9   
+
+ 481   3                  FlashWriteStatus = Write_LengthByte(FlashTest.FlashWriteAddr, Flash_DATA_Length, FlashTest.Fla
+             -sh_Write_Data);
+ 482   3                  
+ 483   3                  /* Ð´ÈëÕýÈ·Ê±×îºóÒ»Î»Ð´ÈëÐ£ÑéÎ» */
+ 484   3                  if (FlashWriteStatus == 0)   //µ±Ç°ÊýÖµÐ´Èë´íÎó
+ 485   3                  {
+ 486   4                      Flash_byte_Write((FlashTest.FlashWriteAddr + Verify_Bit), Verify_Error);
+ 487   4                  }
+ 488   3                  else   //µ±Ç°ÊýÖµÐ´ÈëÕýÈ·
+ 489   3                  {
+ 490   4                      Flash_byte_Write((FlashTest.FlashWriteAddr + Verify_Bit), Verify_Ture);
+ 491   4                  }
+ 492   3                  
+ 493   3                  //¸üÐÂ¶ÁÐ´Ê×µØÖ·
+ 494   3                  FlashTest.FlashReadAddr = FlashTest.FlashWriteAddr;
+ 495   3                  FlashTest.FlashWriteAddr = FlashTest.FlashWriteAddr + Flash_DATA_Length;
+ 496   3                  
+ 497   3                  /*Ð´µ½ÏàÓ¦µÄ¿Õ¼ä£¬²»¹ÜÖ®Ç°Ð´ÈëÊÇ·ñ×¼È·£¬Ö±½Ó½øÐÐÏà¹ØµÄ²Á³ý
+ 498   3                    ²Á³ýºó»áµ±¼´Ð´ÈëFlash*/
+ 499   3                  if (FlashTest.FlashWriteAddr >= USERCODEADDRESS + 0x0FD0) //&& (FlashWriteStatus == 0))
+ 500   3                  {
+ 501   4                      FlashTest.Flag_FlashErase = 1;    // ÖÃ²Á³ý±êÖ¾Î»
+ 502   4                      FlashWriteStatus = 1;             // Ã»ÓÐ¿Õ¼ä£¬Ç¿ÐÐÌø×ª
+ 503   4                  }
+ 504   3              }
+ 505   2          }
+ 506   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   2041    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =    154      31
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----       8
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----       1
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

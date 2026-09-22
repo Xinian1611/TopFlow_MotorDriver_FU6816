@@ -1,0 +1,32 @@
+".\Output\main.obj",
+".\Output\AddFunction.obj",
+".\Output\Interrupt.obj",
+".\Output\MotorControl.obj",
+".\Output\MotorControlFunction.obj",
+".\Output\MotorProtect.obj",
+".\Output\RSDDetect.obj",
+".\Output\BEMFDetect.obj",
+".\Output\SLEEP.obj",
+"..\User\source\Function\SquStart.LIB",
+".\Output\ADC.obj",
+".\Output\AMP.obj",
+".\Output\CMP.obj",
+".\Output\CRC.obj",
+".\Output\DMA.obj",
+".\Output\DRIVER.obj",
+".\Output\GPIO.obj",
+".\Output\PIInit.obj",
+".\Output\SPI.obj",
+".\Output\TIMER.obj",
+".\Output\UART.obj",
+".\Output\TSD.obj",
+".\Output\SMDU.obj",
+".\Output\Lin.obj",
+".\Output\CAN.obj",
+".\Output\FU68xx_6_Flash.obj",
+".\Output\WDT.obj",
+".\Output\STARTUP_FU6816.obj" 
+TO ".\Output\Fortior_FOC_FU68x6" 
+
+PRINT(".\Listings\Fortior_FOC_FU68x6.map") REMOVEUNUSED 
+CLASSES (XDATA (X:0x0-X:0xEF6), HDATA (X:0x0-X:0xEF6)) 

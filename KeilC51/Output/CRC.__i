@@ -1,0 +1,1 @@
+"..\User\source\Hardware\CRC.c" LARGE OMF2 OPTIMIZE (8,SPEED) BROWSE INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include) DEBUG PRINT(.\Listings\CRC.lst) TABS (2) OBJECT(.\Output\CRC.obj)

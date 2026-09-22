@@ -1,0 +1,69 @@
+C51 COMPILER V9.60.7.0   WDT                                                               09/21/2026 11:30:59 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE WDT
+OBJECT MODULE PLACED IN .\Output\WDT.obj
+COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\User\source\Hardware\WDT.c LARGE OMF2 OPTIMIZE(8,SPEED) BROWSE 
+                    -INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include) DEBUG PRINT(.\Listings\WDT.lst) TABS(2) OBJECT(.\Output\WDT.ob
+                    -j)
+
+line level    source
+
+   1          /**
+   2           * @copyright Copyright(C) 2023, Fortior Technology Co., Ltd. All rights reserved.
+   3           * @file      WDT.c
+   4           * @author    Fortiortech Application Team
+   5           * @date      2023-06-27
+   6           * @brief     This file contains WDT parameter used for WDT Control.
+   7           */
+   8           
+   9           #include "FU68xx_6_MCU.h"
+  10           #include "WDT_INIT.h"
+  11           
+  12           /**
+  13           * @function     WatchDogConfig
+  14           * @brief        看门狗初始化
+  15           * @param[in]    Value:[输入]----定时时间，单位ms，最小定时时间8ms，最大定时时间1800ms
+  16           * @return       None
+  17           * @date         2023-06-27
+  18          */
+  19          void WatchDogConfig(unsigned int Value)
+  20          {
+  21   1        SetBit(CCFG1, WDT_EN);          //看门狗使能
+  22   1        WDT_ARR = ((unsigned int)(65532 - (unsigned long int)Value * 32768 / 1000) >> 8);
+  23   1        RST_SR = 0x80;
+  24   1      //  ClrBit(RST_SR, RSTWDT);         //看门狗复位标志清零
+  25   1        SetBit(WDT_CR, WDTRF);          //看门狗初始化
+  26   1      }
+  27          
+  28           /**
+  29           * @function     WatchDogRefresh
+  30           * @brief        看门狗喂狗
+  31           * @param[in]    None
+  32           * @return       None
+  33           * @date         2023-06-27
+  34          */
+  35          void WatchDogRefresh(void)
+  36          {
+  37   1        SetBit(WDT_CR, WDTRF);        //看门狗复位标志位
+  38   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =     54    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+C51 COMPILER V9.60.7.0   WDT                                                               09/21/2026 11:30:59 PAGE 2   
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
