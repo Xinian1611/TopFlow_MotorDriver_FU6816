@@ -19,15 +19,15 @@
 #define COMPARE_DAC_MODE                    (0)                                     ///< DAC设置硬件过流值
 #define COMPARE_HW_MODE                     (1)                                     ///< 硬件设置硬件过流值
 #define COMPARE_MODE                        (COMPARE_DAC_MODE)                      ///< 硬件过流值的来源
-#define HWOCValue                           (150.0)                                  ///< (A) DAC模式下的硬件过流值
+#define HWOCValue                           (90.0)                                  ///< (A) DAC模式下的硬件过流值
 
 /* Faults processing Enable */
-#define SWCurrentProtectEn                  (0)                                     ///< 相电流软件过流保护使能： 0,不使能；1，使能
-#define VoltageProtectEn                    (0)                                     ///< 过欠压保护使能：   0,不使能；1，使能
-#define PhaseLossProtectEn                  (0)                                     ///< 缺相保护使能：     0,不使能；1，使能
+#define SWCurrentProtectEn                  (1)                                     ///< 相电流软件过流保护使能： 0,不使能；1，使能
+#define VoltageProtectEn                    (1)                                     ///< 过欠压保护使能：   0,不使能；1，使能
+#define PhaseLossProtectEn                  (1)                                     ///< 缺相保护使能：     0,不使能；1，使能
 #define OverTPProtectEn                     (0)                                     ///< 过温保护使能：     0,不使能；1，使能
-#define StallProtectEn                      (0)                                     ///< 堵转失速保护使能： 0,不使能；1，使能
-#define OffsetProtectEn                     (0)                                     ///< 偏置电压保护：     0,不使能；1，使能
+#define StallProtectEn                      (1)                                     ///< 堵转失速保护使能： 0,不使能；1，使能
+#define OffsetProtectEn                     (1)                                     ///< 偏置电压保护：     0,不使能；1，使能
 #define LVWProtectEn                        (0)                                     ///< 硬件低压预警(LVW)保护使能：0,不使能；1，使能
 
 /*  保护重启参数设置  */

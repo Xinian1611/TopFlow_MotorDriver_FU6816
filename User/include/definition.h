@@ -113,6 +113,7 @@
 
 
 /* 调速模式 */
+#define CANMODE                         (0x90)          ///< CAN通信调速
 #define NONEMODE                        (0xA0)          ///< 直接给定值，不调速
 #define PWMMODE                         (0xB0)          ///< PWM调速
 #define SREFMODE                        (0xC0)          ///< 模拟调速

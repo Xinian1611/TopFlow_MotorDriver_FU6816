@@ -9,6 +9,8 @@
  */
 
 #include <MyProject.h>
+#include <CanSlave.h>
+#include <AlarmMonitor.h>
 
 /* Public variables --------------------------------------------------------- */
 
@@ -158,7 +160,7 @@ void VSPSample(void)
     // 转速曲线计算
     if (isCtrlPowOn == true) //
     {
-#if (MOTOR_CTRL_MODE == SPEED_LOOP_CONTROL)
+        if (MOTOR_CTRL_MODE == SPEED_LOOP_CONTROL)
         {
             if (VSP <= MINPWMDuty) // 最小转速运行
             {
@@ -173,7 +175,6 @@ void VSPSample(void)
                 mcFocCtrl.Ref = MOTOR_SPEED_MAX_RPM;
             }
         }
-#endif
     }
     else
     {
@@ -211,19 +212,19 @@ void ONOFF_Test(void)
             if ((mcState != mcFault) && (mcState != mcStop))
             {
                 debug_ONOFFTest.State = 1; // 切换到开机状态
-#if (MOTOR_CTRL_MODE == SPEED_LOOP_CONTROL)
+                if (MOTOR_CTRL_MODE == SPEED_LOOP_CONTROL)
                 {
                     mcFocCtrl.Ref = ONOFFTEST_REF; // 固定转速赋值
                 }
-#elif (MOTOR_CTRL_MODE == POWER_LOOP_CONTROL)
+                else if (MOTOR_CTRL_MODE == POWER_LOOP_CONTROL)
                 {
                     mcFocCtrl.Ref = ONOFFTEST_PowerREF; // 固定功率赋值
                 }
-#elif (MOTOR_CTRL_MODE == CURRENT_LOOP_CONTROL)
+                else if (MOTOR_CTRL_MODE == CURRENT_LOOP_CONTROL)
                 {
                     mcFocCtrl.Ref = ONOFFTEST_CurrentREF; // 固定相电流赋值
                 }
-#endif
+
                 isCtrlPowOn = true; // 开机
 
                 //                if (mcFocCtrl.FR == CW)
@@ -245,6 +246,70 @@ void ONOFF_Test(void)
  */
 void TargetRef_Process(void)
 {
+#if (SPEED_MODE == CANMODE)
+    {
+        uint8_t target_fr;
+        isCtrlPowOn = g_run_state.is_started;
+        if (g_run_state.is_estop)
+        {
+            mcFocCtrl.Ref = 0;
+            isCtrlPowOn = false;
+            g_run_state.is_started = false;
+            g_run_state.reversal_braking = 0;  // 急停时退出换向
+        }
+
+        // 目标方向
+        target_fr = (g_run_state.direction == CW) ? CW : CCW;
+
+        // --- 换向减速处理 ---
+        // 原理: 电机正转动时收到反转指令，先减速到0，再切换方向加速到目标值
+        if (g_run_state.reversal_braking)
+        {
+            // 检查退出条件: 方向一致、停机、目标为0、或实际速度已降至接近0
+            if (target_fr == mcFocCtrl.FR || !g_run_state.is_started || g_run_state.ref == 0)
+            {
+                g_run_state.reversal_braking = 0;  // 条件变化，取消换向
+            }
+            else if (Abs_F16(mcFocCtrl.SpeedFlt) < S_Value(50.0))  // 速度低于50RPM视为停止
+            {
+                g_run_state.reversal_braking = 0;  // 减速到位，准备切换方向
+                              
+                // 应用旋转方向: 正数正转(CW), 负数反转(CCW)
+                if (g_run_state.direction == CW)
+                {
+                    mcFocCtrl.FR = CW;       // 正转
+                }
+                else
+                {
+                    mcFocCtrl.FR = CCW;      // 反转
+                }
+            }
+        }
+        else
+        {
+            // 正常模式: 检测是否需要启动换向减速
+            // 条件: 方向改变、电机正在运行、速度大于停止阈值
+            if (target_fr != mcFocCtrl.FR &&
+                g_run_state.is_started && !g_run_state.is_estop &&
+                g_run_state.ref > 0 &&
+                Abs_F16(mcFocCtrl.SpeedFlt) >= S_Value(50.0))
+            {
+                g_run_state.reversal_braking = 1;  // 启动换向减速
+                mcState = mcStop;
+            }
+
+            // 应用目标值
+            if (g_run_state.work_mode == EXT_WORK_MODE_SPEED)
+            {
+                mcFocCtrl.Ref = S_Value(g_run_state.ref);
+            }
+            else if (g_run_state.work_mode == EXT_WORK_MODE_CURRENT)
+            {
+                mcFocCtrl.Ref = I_Value(g_run_state.ref);
+            }            
+        }
+    }
+#endif
 #if (SPEED_MODE == PWMMODE)
     {
         PWMDutyCal();
@@ -283,19 +348,18 @@ void TargetRef_Process(void)
 #elif (SPEED_MODE == NONEMODE)
     {
         isCtrlPowOn = true; // 开机
-#if (MOTOR_CTRL_MODE == SPEED_LOOP_CONTROL)
+        if (MOTOR_CTRL_MODE == SPEED_LOOP_CONTROL)
         {
             mcFocCtrl.Ref = ONOFFTEST_REF; // 固定转速赋值
         }
-#elif (MOTOR_CTRL_MODE == POWER_LOOP_CONTROL)
+        else if (MOTOR_CTRL_MODE == POWER_LOOP_CONTROL)
         {
             mcFocCtrl.Ref = ONOFFTEST_PowerREF; // 固定功率赋值
         }
-#elif (MOTOR_CTRL_MODE == CURRENT_LOOP_CONTROL)
+        else if (MOTOR_CTRL_MODE == CURRENT_LOOP_CONTROL)
         {
             mcFocCtrl.Ref = ONOFFTEST_CurrentREF; // 固定相电流赋值
         }
-#endif
     }
 #elif (SPEED_MODE == ONOFFTEST)
     {
@@ -312,6 +376,7 @@ void TargetRef_Process(void)
 void Speed_response(void)
 {
     static int16 refRampOut = 0;
+    static int16 sqrtUdqFlt = 0;     // ← 新增：电压幅值滤波值
 
     if ((mcState == mcRun) || (mcState == mcStop))
     {
@@ -333,8 +398,8 @@ void Speed_response(void)
                     PI_Init();  // 速度环PI初始化
                     PI2_Init(); // 限流环PI初始化
                     PI3_Init(); // 弱磁PI初始化
-// 启动电流环与外环给定衔接
-#if (MOTOR_CTRL_MODE == SPEED_LOOP_CONTROL)
+                    // 启动电流环与外环给定衔接
+                    if (MOTOR_CTRL_MODE == SPEED_LOOP_CONTROL)
                     {
                         if (mcFocCtrl.Start_Mode == TAILWIND_START)
                         {
@@ -349,20 +414,27 @@ void Speed_response(void)
                             mcRefRamp.OutValue_float = mcFocCtrl.SpeedFlt;
                         }
                     }
-#elif (MOTOR_CTRL_MODE == POWER_LOOP_CONTROL)
+                    else if (MOTOR_CTRL_MODE == POWER_LOOP_CONTROL)
                     {
                         mcRefRamp.OutValue_float = mcFocCtrl.PowerFlt;
                     }
-#elif (MOTOR_CTRL_MODE == UQ_LOOP_CONTROL)
+                    else if (MOTOR_CTRL_MODE == UQ_LOOP_CONTROL)
                     {
                         mcRefRamp.OutValue_float = mcFocCtrl.UqFlt;
                         SetBit(FOC_CR2, UQD);
                     }
-#endif
                     FOC_THECOMP = _Q15(3.0 / 180.0);
                     mcFocCtrl.LoopTime = LOOP_TIME;
-                    mcRefRamp.IncValue = RAMP_INC;
-                    mcRefRamp.DecValue = RAMP_DEC;
+                    if (MOTOR_CTRL_MODE == CURRENT_LOOP_CONTROL)
+                    {
+                        mcRefRamp.IncValue = CURRENT_RAMP_INC;
+                        mcRefRamp.DecValue = CURRENT_RAMP_DEC;
+                    }
+                    else
+                    {
+                        mcRefRamp.IncValue = SPEED_RAMP_INC;
+                        mcRefRamp.DecValue = SPEED_RAMP_DEC;
+                    }
                     mcFocCtrl.IqRef = FOC_IQREF;
                     FOC_IDREF = ID_RUN_CURRENT;
                     PI1_UKH = mcFocCtrl.IqRef;
@@ -385,12 +457,12 @@ void Speed_response(void)
             {
                 mcFocCtrl.LoopTime = 0;
                 refRampOut = Motor_Ramp(mcFocCtrl.Ref); // 控制命令爬坡函数，用于实现调速信号之间平滑过渡
-#if (MOTOR_CTRL_MODE == CURRENT_LOOP_CONTROL)
+                if (MOTOR_CTRL_MODE == CURRENT_LOOP_CONTROL)
                 {
                     mcFocCtrl.IqRef = refRampOut;
                     FOC_IQREF = mcFocCtrl.IqRef;
                 }
-#elif (MOTOR_CTRL_MODE == SPEED_LOOP_CONTROL)
+                else if (MOTOR_CTRL_MODE == SPEED_LOOP_CONTROL)
                 {
 #if (Weak_MagneticEn == Disable)
                     {
@@ -427,11 +499,29 @@ void Speed_response(void)
                         {
                             mcFocCtrl.WeakRef = mcFocCtrl.IqSpeedRef;
                         }
-						  mcFocCtrl.WeakRef = mcFocCtrl.IqSpeedRef;
-                        // 计算(UD^2+UQ^2)开根号
-                        mcFocCtrl.sqrtUdq = SqrtUDQ(FOC__UD, FOC__UQ);
-                        // 根据计算Id Iq分配角度
-                        mcFocCtrl.Angle = MDU_PI3(_Q15(0.80) - mcFocCtrl.sqrtUdq);
+						//   mcFocCtrl.WeakRef = mcFocCtrl.IqSpeedRef;
+                        // // 计算(UD^2+UQ^2)开根号
+                        // mcFocCtrl.sqrtUdq = SqrtUDQ(FOC__UD, FOC__UQ);
+                        // // 根据计算Id Iq分配角度
+                        // mcFocCtrl.Angle = MDU_PI3(_Q15(0.80) - mcFocCtrl.sqrtUdq);
+                        {
+                            uint16 udqNow = SqrtUDQ(FOC__UD, FOC__UQ);
+                            if (udqNow > 0x7FFF)
+                            {
+                                udqNow = 0x7FFF;        // 幅值输出饱和保护，防止回绕成正数导致弱磁反向退出
+                            }
+                            sqrtUdqFlt = MDU_LPF0((int16)udqNow, sqrtUdqFlt, 40);
+                        }
+                        mcFocCtrl.sqrtUdq = (uint16)sqrtUdqFlt;
+                        /* |U|超过阈值 → 负误差 → PI3 输出 0 ~ AMIN 的弱磁角；低于阈值 → 角回 0 */
+                        if (mcFocCtrl.sqrtUdq >= Weak_Mag_UDQ_Ref)
+                        {
+                            mcFocCtrl.Angle = MDU_PI3(-(int16)(mcFocCtrl.sqrtUdq - Weak_Mag_UDQ_Ref));
+                        }
+                        else
+                        {
+                            mcFocCtrl.Angle = MDU_PI3((int16)(Weak_Mag_UDQ_Ref - mcFocCtrl.sqrtUdq));
+                        }
                         // 根据角度分配 Id Iq，实现自动弱磁
                         SinCal(mcFocCtrl.WeakRef, mcFocCtrl.Angle, &mcFocCtrl.IdRef, &mcFocCtrl.IqRef);
                         FOC_IQREF = mcFocCtrl.IqRef;
@@ -439,22 +529,21 @@ void Speed_response(void)
                     }
 #endif
                 }
-#elif (MOTOR_CTRL_MODE == POWER_LOOP_CONTROL)
+                else if (MOTOR_CTRL_MODE == POWER_LOOP_CONTROL)
                 {
                     mcFocCtrl.IqRef = MDU_PI1(refRampOut - mcFocCtrl.PowerFlt);
                     FOC_IQREF = mcFocCtrl.IqRef;
                 }
-#elif (MOTOR_CTRL_MODE == UQ_LOOP_CONTROL)
+                else if (MOTOR_CTRL_MODE == UQ_LOOP_CONTROL)
                 {
                     mcFocCtrl.IqRef = MDU_PI1(refRampOut - mcFocCtrl.UqFlt);
                     FOC__UQ = mcFocCtrl.IqRef;
                 }
-#else
+                else
                 {
                     /* ------------------自定义闭环START--------------------- */
                     /* ------------------自定义闭环 END--------------------- */
                 }
-#endif
             }
         }
         break;
@@ -705,6 +794,7 @@ void ATORamp(void)
 void TickCycle_1ms(void)
 {
     SetBit(ADC_CR, ADCBSY); // 使能ADC的DCBUS采样
+    while (ReadBit(ADC_CR, ADCBSY)); // ← 新增：等本次扫描转换完成
 
     if ((mcState != mcInit) && (mcState != mcReady))
     {
@@ -786,6 +876,7 @@ void TickCycle_1ms(void)
 #endif
 
     /* LIN状态检查 */
+#if (SPEED_MODE == LINMODE)          //★新增：CAN 模式下必须屏蔽，否则 10s 后 LINEN 会抢走 P0.0/P0.1
     if (LS.State == 1)
     {
         LS.OverTimeCnt++;
@@ -810,7 +901,12 @@ void TickCycle_1ms(void)
         LS.OverTimeCnt = 0;
         LS.BusLostCnt = 0;
     }
+#endif
     /*-------------*/
+
+    CAN_MsgParse();
+    ext_slave_periodic_send();
+    AlarmMonitor_Process();
 }
 
 uint16 SqrtUDQ(int16 sqrtUd, int16 sqrtUq)

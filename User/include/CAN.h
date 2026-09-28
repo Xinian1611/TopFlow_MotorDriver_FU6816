@@ -29,7 +29,9 @@ typedef struct
 
 extern CAN_Data xdata Can; 
 extern void CAN_Read(void);
-extern void CAN_Send(void);
+extern uint8 CAN_Send(void);
+extern uint8 can_hw_send(uint32 can_id, const uint8 *dat, uint8 len);
 extern void CAN_Init(void);
+extern void CAN_MsgParse(void);
 
 #endif

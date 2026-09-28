@@ -21,8 +21,8 @@ void GPIO_Init(void)
     #if (1)
     SetBit(P1_OE , P12);//FICD,下载口复用为GPIO测试引脚 
     GP12 = 1;	
-    SetBit(P0_OE , P07);//测试引脚，Debug用
-    GP07 = 1;		
+    SetBit(P0_OE , P04);//EEPROM_WP 写保护控制（引脚21）
+    GP04 = 1;
     SetBit(P0_OE , P05);//测试引脚，Debug用
     GP05 = 1;		
     SetBit(P0_OE , P06);//测试引脚，Debug用

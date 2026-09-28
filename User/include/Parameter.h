@@ -175,7 +175,7 @@
 #define MOTOR_OPEN_RAMP_MIN             S_Value(0.0)                            ///< 强拖启动的初始速度
 #define MOTOR_OPEN_RAMP_CNT             (100.0)                                 ///< 强拖启动的执行次数(MOTOR_OPEN_ACC_CNT*256)
 
-
+extern float xdata Ke;
 
 
 

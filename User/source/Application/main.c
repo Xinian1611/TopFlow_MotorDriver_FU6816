@@ -14,6 +14,8 @@
 ********************************************************************************/
 #include <MyProject.h>
 #include <SanityCheck.h>
+#include <CanSlave.h>
+#include <AlarmMonitor.h>
 
 uint8 data g_1mTick = 0;  ///< 1ms滴答信号，每隔1ms在SYSTICK定时器被置1，需在大循环使用处清零
 
@@ -45,7 +47,7 @@ static void DebugSet(void)
 	#elif (DBG_MODE ==  DBG_UART)
 		_nop_;
     #endif
-	
+
 	    /*******************Observation signal Select*********************/
     SetReg(CMP_CR3, DBGSEL0 | DBGSEL1, GP01_DBG_Conf);
 }
@@ -66,15 +68,15 @@ void HardwareInit(void)
     /*  硬件过流，比较器初始化，用于硬件过流比较保护  */
     CMP3_Init();
     /*  看门狗初始化 */
-    WatchDogConfig(500);  
-    /*  GPIO初始化 */    
+    WatchDogConfig(500);
+    /*  GPIO初始化 */
     GPIO_Init();
-    /* 先ADC初始化，后Driver初始化 */	
-	  ADC_Init();
+    /* 先ADC初始化，后Driver初始化 */
+		ADC_Init();
     Driver_Init();
-    /* 运放AMP初始化 */	
+    /* 运放AMP初始化 */
     AMP_Init();
-    /* TIM3初始化，用于信号PWM捕获 */	
+    /* TIM3初始化，用于信号PWM捕获 */
     #if (SPEED_MODE == PWMMODE)
     Timer3_Init();
     #endif
@@ -87,9 +89,10 @@ void HardwareInit(void)
     LIN_Init();
     #endif
 
-	
+
 	/*----- Can初始化 -----*/
-	//CAN_Init();
+	CAN_Init();
+
     /*  SYSTICK定时器配置  */
     ClrBit(IP2, PSYSTICK1);    //1ms定时中断优先级别为1
     SetBit(IP2, PSYSTICK0);
@@ -105,10 +108,27 @@ void HardwareInit(void)
  */
 void SoftwareInit(void)
 {
+    ExtSlaveConfig_t ext_cfg = {
+        EXT_SYS_MAIN,              // 系统编号: 主系统
+        EXT_CAT_POWER_ENGINE,      // 设备主类别: 动力驱动引擎
+        EXT_POWER_TROLL_MOTOR,     // 设备副类别: 拖钓电机
+        1                          // 设备编号: 1号电机
+    };
+
+    // 初始化电机控制模块
+    MotorCtrl_Init();              // 前置用户初始化
     MotorcontrolInit();
-	VariablesPreInit();                           // 电机相关变量初始化
+
+    // 初始化电机相关变量
+    VariablesPreInit();
     mcState         = mcReady;
     mcFaultSource   = FaultNoSource;
+
+    // CAN协议初始化
+    ext_slave_init(&ext_cfg);
+
+    // 告警模块初始化
+    AlarmMonitor_Init();
 }
 
 
@@ -182,18 +202,18 @@ void VREFConfigInit(void)
 void main(void)
 {
     uint16 PowerUpCnt = 0;
-    
+
     /* ----- 上电空指令延时 等待系统稳定 ----- */
     for (PowerUpCnt = 0; PowerUpCnt < SystemPowerUpTime; PowerUpCnt++);
-    
+
     /* ----- 部分变量初始化 ----- */
     SoftwareInit();
-	
+
     /* ----- 硬件初始化，配置MCU外设 ----- */
     HardwareInit();
     /* ----- debug配置(SPI调试)，量产程序可以删除 ----- */
     DebugSet();
-    
+
     while (1)
     {
         /* -----获取电流采样偏置电压----- */
@@ -206,11 +226,11 @@ void main(void)
             /* -----电机控制状态机----- */
             MC_Control();
         }
-        
+
         /* -----1ms处理函数----- */
         if (g_1mTick)
         {
-            GP12 = ~GP12;       //FICD,下载口复用为GPIO测试引脚 
+            GP12 = ~GP12;       //FICD,下载口复用为GPIO测试引脚
             WatchDogRefresh();  //喂狗,若不喂狗则MCU复位
             TickCycle_1ms();
             g_1mTick = 0;
