@@ -1,0 +1,210 @@
+C51 COMPILER V9.60.7.0   TSD                                                               10/20/2026 17:28:33 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE TSD
+OBJECT MODULE PLACED IN .\Output\TSD.obj
+COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\User\source\Hardware\TSD.c LARGE OMF2 OPTIMIZE(8,SPEED) BROWSE 
+                    -INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include;..\User\source\RingBuffer) DEBUG PRINT(.\Listings\TSD.lst) TABS
+                    -(2) OBJECT(.\Output\TSD.obj)
+
+line level    source
+
+   1          /**
+   2           * @copyright (C) COPYRIGHT 2022 Fortiortech Shenzhen
+   3           * @file      TSD.c
+   4           * @author    Fortiortech  Appliction Team
+   5           * @date      2022-07-13
+   6           * @brief     This file contains TSD function used for Motor Control.
+   7           */
+   8          
+   9          #include <MyProject.h> 
+  10          #include <math.h> 
+  11          
+  12          uint8 Micro_TJ[] = { 70, 71, 72, 74, 75, 76, 77, 79, 80, 81,
+  13                             82, 83, 84, 86, 87, 88, 89, 91, 92, 93,
+  14                             95, 96, 97, 99, 100,101,102,104,105,107,
+  15                             108,110,111,112,114,115,117,118,120,121,
+  16                             123,124,126,128,129,131,132,134,136,137,
+  17                             139,141,142,144,146,148,149,151,152,154,
+  18                             156,158,160
+  19                             };
+  20          
+  21          /**
+  22           * @brief        TSD初始化函数
+  23           * @param        None
+  24           * @return       none
+  25           * @date         2022-09-13
+  26           * @version      1.0
+  27           * @property     Public
+  28          */
+  29          void TSD_Init(void)
+  30          {
+  31   1          SetBit(TSD_CR, TSDEN);        //温度保护使能
+  32   1          SetBit(TSD_CR, TSEN_EN);        //温度传感器使能
+  33   1      }
+  34          
+  35          /**
+  36           * @brief        TSD芯片内部温度
+  37           * @param        None
+  38           * @return       none
+  39           * @date         2023-
+  40          }3-24
+  41           * @version      1.0
+  42           * @property     Public
+  43          */
+  44          uint8 TSD_Gain(void)
+  45          {
+  46   1          uint8 SetTJ_Value = 0;
+  47   1        uint8 TJ_Value = TSEN_DR;
+  48   1        
+  49   1          SetTJ_Value = Micro_TJ[TJ_Value];
+  50   1        
+  51   1          return SetTJ_Value;
+  52   1      }
+  53          
+C51 COMPILER V9.60.7.0   TSD                                                               10/20/2026 17:28:33 PAGE 2   
+
+  54          /* ==================== NTC 原值的 50 点截尾平均 ====================
+  55           * 为什么存 8 位：ADC2_DR 是"左次高位对齐"（ADCALIGN=1 → 结果在 [14:3]），取高 8 �
+             -�
+  56           *   （>>7）存进 50 字节缓冲；30 点平均后分辨率约 1/256 满量程
+  57           *   （4.5V 下 ≈17.6mV ≈ NTC 0.3℃），远优于测试文档 5% 的判据，
+  58           *   同时省 XDATA（存 15 位要 100 字节，本工程只剩约 100 字节）。
+  59           */
+  60          #define NTC_TRIM_POINTS     (50)
+  61          #define NTC_TRIM_DROP       (10)
+  62          
+  63          static uint8  xdata s_ntcBuf[NTC_TRIM_POINTS];
+  64          static uint8  xdata s_ntcCnt  = 0;
+  65          static uint16 xdata s_ntcTrim = 0;
+  66          
+  67          void NTC_TrimPush(uint8 v)
+  68          {
+  69   1          uint8  i, j, t;
+  70   1          uint16 sum;
+  71   1      
+  72   1          s_ntcBuf[s_ntcCnt++] = v;
+  73   1          if (s_ntcCnt < NTC_TRIM_POINTS)
+  74   1          {
+  75   2              return;                                 /* 还没满 50 点 */
+  76   2          }
+  77   1          s_ntcCnt = 0;
+  78   1      
+  79   1          /* 升序插入排序（50 点最坏约 1225 次比较；每 50ms 才跑一次，开销可忽略）*/
+  80   1          for (i = 1; i < NTC_TRIM_POINTS; i++)
+  81   1          {
+  82   2              t = s_ntcBuf[i];
+  83   2              j = i;
+  84   2              while ((j > 0) && (s_ntcBuf[j - 1] > t))
+  85   2              {
+  86   3                  s_ntcBuf[j] = s_ntcBuf[j - 1];
+  87   3                  j--;
+  88   3              }
+  89   2              s_ntcBuf[j] = t;
+  90   2          }
+  91   1      
+  92   1          /* 去掉最小的 10 个和最大的 10 个，取中间 30 个的平均 */
+  93   1          sum = 0;
+  94   1          for (i = NTC_TRIM_DROP; i < (NTC_TRIM_POINTS - NTC_TRIM_DROP); i++)
+  95   1          {
+  96   2              sum += s_ntcBuf[i];
+  97   2          }
+  98   1          s_ntcTrim = (uint16)(sum / (NTC_TRIM_POINTS - 2 * NTC_TRIM_DROP));   /* /30 */
+  99   1      }
+ 100          
+ 101          uint16 NTC_TrimValue(void)
+ 102          {
+ 103   1          return s_ntcTrim;
+ 104   1      }
+ 105          
+ 106          /* ==========================================================================
+ 107           *   新增：驱动模块温度换算（NTC 分压节点电压 mV → NTC 阻值 → B 公式温度 ℃�
+             -�
+ 108           *  与旧 GD32 工程 Motor_MD() 逐行对应，函数体一个字符没改；
+ 109           *  只换掉两个和芯片相关的入口：
+ 110           *    ① 入参 ch（旧工程有 ZXWD_DET / ZDWD_DET 两路）→ 本板只有一路 NTC，接 P2.4 = AD
+             -2
+ 111           *    ② ADC_Filter_GetChannelValueF(ch)（旧工程 DMA 多点去极值均值）
+ 112           *       → FU6866 是硬件自动扫通道，用本工程已经在跑的滤波器 mcFocCtrl.NTCTempFlt
+C51 COMPILER V9.60.7.0   TSD                                                               10/20/2026 17:28:33 PAGE 3   
+
+ 113           *  注：分压网络 5V 供电而 ADC 参考 4.5V（旧工程 3.3V，本板 4.5V，同样有饱和限制
+             -）
+ 114           * ========================================================================== */
+ 115          
+ 116          /**
+ 117           * @brief  驱动模块温度换算：NTC 分压节点电压(mV) → NTC 阻值 → B公式温度(°C)
+ 118           * @param  adc_filt_counts  NTC 通道的 ADC 滤波值（ADC counts）
+ 119           * @return 温度（℃）；读数不可信返回 MOTOR_MD_ERR
+ 120           * @note   旧工程这里收的是"已经换算好的 mV"，本板收的是 ADC counts，
+ 121           *         所以前面多一句码值→mV；系数直接用本工程的 Brake.c:60 同一套（VREF=4500
+             -mV / 32768）
+ 122           */
+ 123          float Motor_MD(uint16 adc_filt_counts)
+ 124          {
+ 125   1          float v_node_mv;
+ 126   1          float v_node;
+ 127   1          float r_ntc;
+ 128   1          float temperature;
+ 129   1      
+ 130   1          adc_filt_counts &= 0x7FFF;                      /* 15bit 有效，最高位是状态位 */
+ 131   1      
+ 132   1          /* ---- 码值 → 节点电压 mV（等价于旧工程的 ADC_Filter_GetChannelValueF(ch)）---- */
+ 133   1          v_node_mv = ((float)((uint32)adc_filt_counts * 4500UL)) / 32768.0f;
+ 134   1      
+ 135   1          /* ---- 饱和/开路判据，对应旧工程注释里那句"低温时节点电压饱和，读数失�
+             -�" ----
+ 136   1           *  本板 VREF=4.5V，所以饱和点比旧板（3.3V）更靠上：
+ 137   1           *    低于 0.05V → 上拉断路/通道没扫到
+ 138   1           *    高于 4.30V → 节点已经顶到参考，r_ntc 反解出来是假的
+ 139   1           *  旧工程没写返回什么，这里统一返回 MOTOR_MD_ERR，由调用者忽略 */
+ 140   1          if (v_node_mv < 50.0f)   { return MOTOR_MD_ERR; }
+ 141   1          if (v_node_mv > 4300.0f) { return MOTOR_MD_ERR; }
+ 142   1      
+ 143   1          /* ↓↓↓ 以下 3 行与旧工程完全一致，只是 v_node 由上面算出来 ↓↓↓ */
+ 144   1          v_node = v_node_mv / 1000.0f;                                   /* mV→V */
+ 145   1          r_ntc  = 10000.0f * v_node / (5.0f - v_node);                   /* 分压反解 NTC 阻值，Ω */
+ 146   1          // temperature = 1.0f / (1.0f / 298.15f + logf(r_ntc / 10000.0f) / 3450.0f) - 273.15f;
+ 147   1          temperature = 1.0f / (1.0f / 298.15f + (float)(log((double)(r_ntc / 10000.0f)) / 3450.0)) - 273.15f;
+ 148   1      
+ 149   1          return temperature;
+ 150   1      }
+ 151          
+ 152          /**
+ 153           * @brief  20ms 节拍调用：读 NTC → Motor_MD() → 存进 mcFocCtrl.NTCTempNum（0.1℃）
+ 154           * @note   float / log() 不进 1ms 任务，只在 main 大循环里跑
+ 155           */
+ 156          void Motor_MD_Sample(void)
+ 157          {
+ 158   1          float temp;
+ 159   1      
+ 160   1          /* NTC 电压的低通已经在 AddFunction.c:852（TickCycle_1ms）里做过了，这里直接用 */
+ 161   1          temp = Motor_MD((uint16)mcFocCtrl.NTCTempFlt);
+ 162   1      
+ 163   1          if (temp != MOTOR_MD_ERR)
+ 164   1          {
+ 165   2              /* ℃ → 0.1℃，四舍五入 */
+ 166   2              mcFocCtrl.NTCTempNum = (int16)(temp * 10.0f + ((temp >= 0.0f) ? 0.5f : -0.5f));
+ 167   2          }
+ 168   1          /* 读数不可信时保持上一次的值不动，不刷新 NTCTempNum */
+ 169   1      }
+
+
+C51 COMPILER V9.60.7.0   TSD                                                               10/20/2026 17:28:33 PAGE 4   
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    598    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =    116      14
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

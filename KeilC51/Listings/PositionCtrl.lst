@@ -1,0 +1,401 @@
+C51 COMPILER V9.60.7.0   POSITIONCTRL                                                      10/20/2026 17:28:31 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE POSITIONCTRL
+OBJECT MODULE PLACED IN .\Output\PositionCtrl.obj
+COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\User\source\Application\PositionCtrl.c LARGE OMF2 OPTIMIZE(8,SP
+                    -EED) BROWSE INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include;..\User\source\RingBuffer) DEBUG PRINT(.\Listings\P
+                    -ositionCtrl.lst) TABS(2) OBJECT(.\Output\PositionCtrl.obj)
+
+line level    source
+
+   1          /**
+   2           * @file    PositionCtrl.c
+   3           * @brief   最简位置环：读 MT6701 位置 -> 读当前速度 -> PID -> 输出目标速度
+   4           * @note    本文件只写 g_run_state.ref / direction / is_started，
+   5           *          不直接操作 FOC 电流、占空比、MOE；
+   6           *          本版先去掉限位、堵转、开环超时等逻辑，只保留位置闭环主干。
+   7           */
+   8          #include <MyProject.h>
+   9          #include "PositionCtrl.h"
+  10          #include <string.h>
+  11          
+  12          #define POS_DEBUG_EN    1   //0:POS_DEBUG_TARGET_POSITION不生效
+  13          
+  14          #if POS_DEBUG_EN
+  15          #define POS_DEBUG_TARGET_POSITION    18000   /* raw：18000 × 0.01° = 180.00° */
+  16          #endif
+  17          
+  18          /* ==================== 对外命令/状态 ==================== */
+  19          volatile uint16 xdata g_pos_cmd_raw   = 0xFFFF;  /* 目标 raw：转向0.01°/升降0.1%，0=零点；0xFF
+             -FF=无目标 */
+  20          volatile uint8  xdata g_pos_cmd_start = 0;       /* 启停命令：1=启动/继续，0=停止 */
+  21          volatile uint8  xdata g_pos_state     = POS_IDLE;/* 位置模块状态输出，给 TargetRef_Process 判�
+             -� */
+  22          volatile uint16 xdata g_pos_fb_raw    = 0xFFFF;  /* 闭环反馈 raw，给状态报文字节18-19；0xFFFF
+             -=无效 */
+  23          /* ==================== 内部状态 ==================== */
+  24          typedef struct                                   /* 位置环内部状态结构体 */
+  25          {
+  26              float target;                                /* 目标值：角度(°) 或 百分比(%) */
+  27              float fb;                                    /* 当前反馈值：角度(°) 或 百分比(%) */
+  28              float err;                                   /* 当前误差：target - fb */
+  29              float integ;                                 /* 位置积分项，单位 rpm */
+  30              float speedFb;                               /* 当前转速，单位 rpm，来自 mcFocCtrl.SpeedFlt 
+             -*/
+  31              float speedCmd;                              /* 位置环输出速度给定，rpm，带符号 */
+  32              float fbFilt;                                /* 单圈反馈的一阶低通值 */
+  33              uint16 tick;                                 /* 1ms 分频计数 */
+  34              uint16 inposCnt;                             /* 到位持续时间计数 */
+  35              uint16 lastRaw;                              /* 上一次目标 raw，用于判断目标是否变化 *
+             -/
+  36              uint8  fbValid;                              /* 1=反馈有效；0=反馈还没准备好 */
+  37              uint8  state;                                /* 位置环状态：PosState_t */
+  38          } PosCtrl_t;
+  39          static PosCtrl_t xdata s_pos;                    /* 位置环唯一实例，放 xdata，避免占用 data 
+             -段 */
+  40          /* ==================== 宏 ==================== */
+  41          #define POS_ABS_F(x)        (((x) < 0.0f) ? -(x) : (x))                    /* 浮点绝对值 */
+  42          #define POS_DT              ((float)POS_CTRL_PERIOD_MS / 1000.0f)           /* 位置环周期，单位 s 
+             -*/
+  43          #define POS_INPOS_CNT       (POS_INPOS_MS / POS_CTRL_PERIOD_MS)             /* 到位确认需要的周期
+             -数 */
+  44          #define POS_SPEED_RPM()     ((float)mcFocCtrl.SpeedFlt / 32767.0f * MOTOR_SPEED_BASE) /* Q15 转速 -> rpm
+             - */
+C51 COMPILER V9.60.7.0   POSITIONCTRL                                                      10/20/2026 17:28:31 PAGE 2   
+
+  45          /* ==================== 函数1：初始化 ==================== */
+  46          void PositionCtrl_Init(void)                     /* 初始化位置环 */
+  47          {
+  48   1          memset(&s_pos, 0, sizeof(s_pos));            /* 清空所有内部状态 */
+  49   1          s_pos.state   = POS_IDLE;                    /* 初始状态：空闲 */
+  50   1          s_pos.lastRaw = 0xFFFF;                      /* 还没有目标 raw */
+  51   1          g_pos_cmd_raw   = 0xFFFF;                    /* 清目标命令 */
+  52   1          g_pos_cmd_start = 0;                         /* 清启停命令 */
+  53   1          g_pos_state     = POS_IDLE;                  /* 状态输出置空闲 */
+  54   1          g_pos_fb_raw    = 0xFFFF;                    /* 反馈无效 */
+  55   1      }
+  56          /* ==================== 函数2：当前位置换算 ==================== */
+  57          /**
+  58           * @brief  读取 MT6701，换算成角度/百分比，写入 s_pos.fb
+  59           * @retval 1=反馈有效；0=反馈无效
+  60           */
+  61          uint8 PositionCtrl_Current(void)                 /* 读 MT6701 当前位置 */
+  62          {
+  63   1          float raw;                                   /* 原始单圈角度，单位 ° */
+  64   1          float rawFb;                                 /* 反馈 raw 临时值*/
+  65   1          //均值还没完成、电压高于上限：越界、电压低于下限：断线/越界
+  66   1          if (((g_mt6701_anaSt & 0x01) == 0) || (g_mt6701_mv < POS_FB_MV_MIN) || (g_mt6701_mv > POS_FB_MV_MAX))
+  67   1          {
+  68   2              s_pos.fbValid = 0;                       /* 标记反馈无效 */
+  69   2              g_pos_fb_raw  = 0xFFFF;                  /* 状态报文反馈无效 */
+  70   2              return 0;                                /* 返回无效 */
+  71   2          }
+  72   1          raw = (float)MT6701_GetAngle10() / 10.0f;    /* 0.1° -> 0° */
+  73   1      
+  74   1          if (s_pos.fbValid == 0)                      /* 第一次有效反馈 */
+  75   1          {
+  76   2              s_pos.fbFilt  = raw;                     /* 用当前值填种，避免从 0 拉起 */
+  77   2              s_pos.fbValid = 1;                       /* 标记反馈有效 */
+  78   2          }
+  79   1          else                                         /* 后续反馈 */
+  80   1          {
+  81   2              s_pos.fbFilt += POS_FB_LPF_ALPHA * (raw - s_pos.fbFilt); /* 一阶低通 */
+  82   2          }
+  83   1      
+  84   1          s_pos.fb = POS_FB_DIR * (s_pos.fbFilt - POS_FB_ZERO_DEG) * POS_FB_SCALE;   //当前反馈值
+  85   1      
+  86   1          /* 换算状态报文 raw */
+  87   1          rawFb = s_pos.fb / POS_CMD_RES + POS_CMD_ZERO; /* 角度×100 或 百分比×10 */
+  88   1          if (rawFb < 0.0f)       { rawFb = 0.0f; }      /* 下限保护 */
+  89   1          if (rawFb > 65535.0f)   { rawFb = 65535.0f; }  /* 上限保护 */
+  90   1          g_pos_fb_raw = (uint16)rawFb;                  /* 给状态报文字节18-19 */
+  91   1      
+  92   1          return 1;                                    /* 反馈有效 */
+  93   1      }
+  94          /* ==================== 函数3：PID 计算 ==================== */
+  95          /**
+  96           * @brief  位置 PI 计算，输出速度给定
+  97           * @retval 1=已在死区内/已到位，本周期不输出；0=已输出速度给定
+  98           * @note   只算位置环；限位、堵转、故障不在这里处理。
+  99           */
+ 100          uint8 PositionCtrl_PID(void)                     /* 位置 PI 计算 */
+ 101          {
+ 102   1          float out;                                   /* PI 输出，单位 rpm */
+ 103   1          s_pos.err = s_pos.target - s_pos.fb;         /* 计算误差：目标 - 反馈 */
+ 104   1      
+ 105   1          if (POS_ABS_F(s_pos.err) <= POS_DEADBAND)    /* 误差进入到位死区 */
+ 106   1          {
+C51 COMPILER V9.60.7.0   POSITIONCTRL                                                      10/20/2026 17:28:31 PAGE 3   
+
+ 107   2              s_pos.integ     = 0.0f;                  /* 清积分 */
+ 108   2              s_pos.speedCmd  = 0.0f;                  /* 清输出 */
+ 109   2              s_pos.state     = POS_INPOS;             /* 直接锁存到位，不再等速度确认 */
+ 110   2              g_run_state.ref = 0.0f;                  /* 速度给定 0 */
+ 111   2              g_run_state.is_started = 0;              /* 请求 mcStop，由 MC_Stop 减速/抱闸 */
+ 112   2              return 1;                                /* 本周期不输出 */
+ 113   2          }
+ 114   1      
+ 115   1          s_pos.inposCnt = 0;                          /* 误差出了死区，清到位计数 */
+ 116   1          out = POS_KP * s_pos.err;                    /* 比例项 */
+ 117   1          if (POS_ABS_F(s_pos.err) <= POS_I_ZONE)      /* 误差在积分区 */
+ 118   1          {
+ 119   2              s_pos.integ += POS_KI * s_pos.err * POS_DT; /* 积分累加 */
+ 120   2              if (s_pos.integ > POS_I_LIMIT)           /* 积分上限 */
+ 121   2              {
+ 122   3                  s_pos.integ = POS_I_LIMIT;           /* 限幅 */
+ 123   3              }
+ 124   2              else if (s_pos.integ < -POS_I_LIMIT)     /* 积分下限 */
+ 125   2              {
+ 126   3                  s_pos.integ = -POS_I_LIMIT;          /* 限幅 */
+ 127   3              }
+ 128   2          }
+ 129   1          else                                         /* 误差大，不用积分 */
+ 130   1          {
+ 131   2              s_pos.integ = 0.0f;                      /* 清积分，防饱和 */
+ 132   2          }
+ 133   1          out += s_pos.integ;                          /* P + I */
+ 134   1      
+ 135   1          if (out > POS_SPEED_MAX_RPM)                 /* 正向超限 */
+ 136   1          {
+ 137   2              out = POS_SPEED_MAX_RPM;                 /* 正向限幅 */
+ 138   2          }
+ 139   1          else if (out < -POS_SPEED_MAX_RPM)           /* 反向超限 */
+ 140   1          {
+ 141   2              out = -POS_SPEED_MAX_RPM;                /* 反向限幅 */
+ 142   2          }
+ 143   1      
+ 144   1          if ((out > 0.0f) && (out < POS_SPEED_MIN_RPM)) /* 正向小于最小速度 */
+ 145   1          {
+ 146   2              out = POS_SPEED_MIN_RPM;                 /* 抬到最小速度 */
+ 147   2          }
+ 148   1          if ((out < 0.0f) && (out > -POS_SPEED_MIN_RPM)) /* 反向小于最小速度 */
+ 149   1          {
+ 150   2              out = -POS_SPEED_MIN_RPM;                /* 抬到最小速度 */
+ 151   2          }
+ 152   1      
+ 153   1          s_pos.speedCmd = out;                        /* 保存输出，供观测 */
+ 154   1          g_run_state.direction  = (out >= 0.0f) ? CW : CCW; /* 符号 -> 方向 */
+ 155   1          g_run_state.ref        = POS_ABS_F(out);     /* 幅值 -> 速度给定 */
+ 156   1          g_run_state.is_started = 1;                  /* 允许运行 */
+ 157   1          s_pos.state            = POS_MOVING;         /* 标记正在调节 */
+ 158   1          return 0;                                    /* 已输出速度给定 */
+ 159   1      }
+ 160          
+ 161          /* ==================== 函数4：位置模块更新 ==================== */
+ 162          /**
+ 163           * @brief  位置环周期任务，1ms 调用一次，内部按 POS_CTRL_PERIOD_MS 分频
+ 164           * @note   只做：启停/故障判断、目标换算、读位置、读速度、调 PID。
+ 165           */
+ 166          void PositionCtrl_Update(void)                   /* 位置环周期任务 */
+ 167          {
+ 168   1          float t;                                     /* 解码后的目标值 */
+C51 COMPILER V9.60.7.0   POSITIONCTRL                                                      10/20/2026 17:28:31 PAGE 4   
+
+ 169   1          if (++s_pos.tick < POS_CTRL_PERIOD_MS)       /* 还没到位置环周期 */
+ 170   1          {
+ 171   2              return;                                  /* 直接返回 */
+ 172   2          }
+ 173   1          s_pos.tick = 0;                              /* 到周期，清分频计数 */
+ 174   1      
+ 175   1      #if POS_DEBUG_EN
+ 176   1          g_pos_cmd_start = 1;                         /* 调试：强制起控 */
+ 177   1          g_pos_cmd_raw   = POS_DEBUG_TARGET_POSITION; /* 调试：强制目标，覆盖 CAN */
+ 178   1      #endif
+ 179   1      
+ 180   1          /* 收到停止命令、没有目标 raw */
+ 181   1          if ((g_pos_cmd_start == 0) || (g_pos_cmd_raw == 0xFFFFU))
+ 182   1          {
+ 183   2              s_pos.state     = POS_IDLE;              /* 回空闲 */
+ 184   2              s_pos.integ     = 0.0f;                  /* 清积分 */
+ 185   2              s_pos.speedCmd  = 0.0f;                  /* 清输出 */
+ 186   2              g_pos_state     = POS_IDLE;              /* 状态输出空闲 */
+ 187   2              g_run_state.ref = 0.0f;                  /* 速度给定 0 */
+ 188   2              g_run_state.is_started = 0;              /* 启停位清 0 */
+ 189   2              return;                                  /* 本周期结束 */
+ 190   2          }
+ 191   1          /* 有故障源、状态机已进故障 */
+ 192   1          if ((mcFaultSource != FaultNoSource) || (mcState == mcFault))
+ 193   1          {
+ 194   2              s_pos.state     = POS_FAULT;             /* 位置环故障 */
+ 195   2              s_pos.integ     = 0.0f;                  /* 清积分 */
+ 196   2              s_pos.speedCmd  = 0.0f;                  /* 清输出 */
+ 197   2              g_pos_state     = POS_FAULT;             /* 状态输出故障 */
+ 198   2              g_run_state.ref = 0.0f;                  /* 速度给定 0 */
+ 199   2              g_run_state.is_started = 0;              /* 启停位清 0 */
+ 200   2              return;                                  /* 本周期结束 */
+ 201   2          }
+ 202   1          t = ((float)g_pos_cmd_raw - (float)POS_CMD_ZERO) * POS_CMD_RES; /* raw -> 角度/% */
+ 203   1      
+ 204   1          if ((t < POS_TARGET_MIN) || (t > POS_TARGET_MAX)) /* 目标超程 */
+ 205   1          {
+ 206   2              g_run_state.ref = 0.0f;                  /* 速度给定 0 */
+ 207   2              g_run_state.is_started = 0;              /* 不允许运行 */
+ 208   2              return;                                  /* 拒绝本次目标 */
+ 209   2          }
+ 210   1          s_pos.target = t;                            /* 保存新目标 */
+ 211   1      
+ 212   1          if (g_pos_cmd_raw != s_pos.lastRaw)          /* 目标 raw 变了 */
+ 213   1          {
+ 214   2              s_pos.lastRaw  = g_pos_cmd_raw;          /* 记录本次 raw */
+ 215   2              s_pos.integ    = 0.0f;                   /* 清积分，防旧目标积分拖累 */
+ 216   2              s_pos.inposCnt = 0;                      /* 清到位计数 */
+ 217   2              s_pos.state = POS_MOVING;                /* 新目标，清到位/限位锁存 */
+ 218   2          }
+ 219   1      
+ 220   1      #if MOTOR_LIMIT_SWITCH
+                  if (s_pos.state == POS_LIMIT)                /* 已经限位：锁住，等新目标 */
+                  {
+                      g_pos_state     = POS_LIMIT;             /* 保持限位状态 */
+                      g_run_state.ref = 0.0f;                  /* 速度给定 0 */
+                      g_run_state.is_started = 0;              /* 保持停机 */
+                      return;                                  /* 本周期结束 */
+                  }
+              #endif
+ 229   1      
+ 230   1          if (PositionCtrl_Current() == 0)             /* 反馈无效 */
+C51 COMPILER V9.60.7.0   POSITIONCTRL                                                      10/20/2026 17:28:31 PAGE 5   
+
+ 231   1          {
+ 232   2              s_pos.state     = POS_FAULT;             /* 位置环故障 */
+ 233   2              s_pos.integ     = 0.0f;                  /* 清积分 */
+ 234   2              s_pos.speedCmd  = 0.0f;                  /* 清输出 */
+ 235   2              g_pos_state     = POS_FAULT;             /* 状态输出故障 */
+ 236   2              g_run_state.ref = 0.0f;                  /* 速度给定 0 */
+ 237   2              g_run_state.is_started = 0;              /* 启停位清 0 */
+ 238   2              return;                                  /* 本周期结束 */
+ 239   2          }
+ 240   1          s_pos.speedFb = POS_SPEED_RPM();             /* 读当前速度：Q15 -> rpm */
+ 241   1          s_pos.err     = s_pos.target - s_pos.fb;     /* 先算一次误差，决定是否允许启动 */
+ 242   1      
+ 243   1          if (s_pos.state == POS_INPOS)                /* 已经到位：锁住，不自动重起 */
+ 244   1          {
+ 245   2              if (POS_ABS_F(s_pos.err) <= POS_REENGAGE_BAND)
+ 246   2              {
+ 247   3                  g_pos_state     = POS_INPOS;         /* 保持到位 */
+ 248   3                  g_run_state.ref = 0.0f;              /* 速度给定 0 */
+ 249   3                  g_run_state.is_started = 0;          /* 保持停机 */
+ 250   3                  return;                              /* 本周期结束 */
+ 251   3              }
+ 252   2              s_pos.state = POS_MOVING;                /* 漂移超过回差，才重新调节 */
+ 253   2          }
+ 254   1          if (POS_ABS_F(s_pos.err) > POS_DEADBAND)     /* 误差在死区外，需要运动 */
+ 255   1          {
+ 256   2              s_pos.state     = POS_MOVING;            /* 进入位置调节 */
+ 257   2              g_pos_state     = POS_MOVING;            /* 通知 TargetRef 允许启动 */
+ 258   2              g_run_state.is_started = 1;              /* 请求状态机启动 */
+ 259   2          }
+ 260   1          else if (mcState != mcRun)                   /* 已在死区且本来就没运行 */
+ 261   1          {
+ 262   2              s_pos.state     = POS_INPOS;             /* 直接报到位 */
+ 263   2              g_pos_state     = POS_INPOS;             /* 状态输出到位 */
+ 264   2              g_run_state.ref = 0.0f;                  /* 速度给定 0 */
+ 265   2              g_run_state.is_started = 0;              /* 不为一个已在死区的目标启动 FOC */
+ 266   2              return;                                  /* 本周期结束 */
+ 267   2          }
+ 268   1      
+ 269   1              if (mcState != mcRun)                        /* 状态机还没进运行态 */
+ 270   1          {
+ 271   2              s_pos.integ    = 0.0f;                   /* 清积分 */
+ 272   2              s_pos.speedCmd = 0.0f;                   /* 清输出 */
+ 273   2              g_run_state.ref = 0.0f;                  /* 速度给定 0，先不控 */
+ 274   2              return;                                  /* 本周期结束 */
+ 275   2          }
+ 276   1      
+ 277   1      #if MOTOR_LIMIT_SWITCH
+                  /* 限位：到软件 MAX/MIN 且目标还往外 → 立即停机，和速度无关 */
+                  if (PositionProtect_LimitCheck(s_pos.target, s_pos.fb, 1) == POS_PROTECT_LIMIT)
+                  {
+                      s_pos.state     = POS_LIMIT;             /* 锁存限位 */
+                      s_pos.integ     = 0.0f;
+                      s_pos.speedCmd  = 0.0f;
+              
+                      g_pos_state     = POS_LIMIT;             /* 状态输出限位 */
+                      g_run_state.ref = 0.0f;                  /* 速度给定 0 */
+                      g_run_state.is_started = 0;              /* 立即 mcStop */
+                      return;
+                  }
+              #endif
+ 291   1      
+ 292   1          (void)PositionCtrl_PID();                    /* PID 计算并输出目标速度 */
+C51 COMPILER V9.60.7.0   POSITIONCTRL                                                      10/20/2026 17:28:31 PAGE 6   
+
+ 293   1          g_pos_state = s_pos.state;                   /* 同步状态：MOVING 或 INPOS */
+ 294   1      }
+ 295          
+ 296          static uint8 xdata s_speedLimitLatch = 0;        /* 速度模式限位锁存 */
+ 297          /**
+ 298           * @brief  纯速度模式下的软件限位判断
+ 299           * @retval POS_PROTECT_LIMIT / POS_PROTECT_NONE
+ 300           * @note   位置模式由 PositionCtrl_Update() 里的 LimitCheck 处理；
+ 301           *         这里只处理 work_mode == SPEED 的情况。
+ 302           */
+ 303          uint8 PositionCtrl_SpeedLimitCheck(void)
+ 304          {
+ 305   1      #if MOTOR_LIMIT_SWITCH
+                  if (g_run_state.work_mode != EXT_WORK_MODE_SPEED)
+                  {
+                      return POS_PROTECT_NONE;
+                  }
+              
+                  /* 已经锁存：只有方向往回、或者速度给定为 0，才解除 */
+                  if (s_speedLimitLatch)
+                  {
+                      if ((g_run_state.ref <= 0.0f) ||
+                          ((s_pos.fb >= POS_LIMIT_MAX) && (g_run_state.direction == CCW)) ||
+                          ((s_pos.fb <= POS_LIMIT_MIN) && (g_run_state.direction == CW)))
+                      {
+                          s_speedLimitLatch = 0;
+                      }
+                      else
+                      {
+                          return POS_PROTECT_LIMIT;
+                      }
+                  }
+              
+                  if (PositionCtrl_Current() == 0)             /* 读 MT6701，刷新 s_pos.fb */
+                  {
+                      return POS_PROTECT_NONE;                 /* 反馈无效，没法判 */
+                  }
+              
+                  if ((s_pos.fb >= POS_LIMIT_MAX) &&
+                      (g_run_state.is_started != 0) &&
+                      (g_run_state.ref > 0.0f) &&
+                      (g_run_state.direction == CW))
+                  {
+                      s_speedLimitLatch = 1;
+                      return POS_PROTECT_LIMIT;
+                  }
+              
+                  if ((s_pos.fb <= POS_LIMIT_MIN) &&
+                      (g_run_state.is_started != 0) &&
+                      (g_run_state.ref > 0.0f) &&
+                      (g_run_state.direction == CCW))
+                  {
+                      s_speedLimitLatch = 1;
+                      return POS_PROTECT_LIMIT;
+                  }
+              #endif
+ 349   1      
+ 350   1          return POS_PROTECT_NONE;
+ 351   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+C51 COMPILER V9.60.7.0   POSITIONCTRL                                                      10/20/2026 17:28:31 PAGE 7   
+
+   CODE SIZE        =   1788    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =     43      16
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

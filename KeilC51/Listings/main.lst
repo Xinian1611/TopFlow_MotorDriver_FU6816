@@ -1,0 +1,499 @@
+C51 COMPILER V9.60.7.0   MAIN                                                              10/20/2026 17:28:29 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\Output\main.obj
+COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\User\source\Application\main.c LARGE OMF2 OPTIMIZE(8,SPEED) BRO
+                    -WSE INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include;..\User\source\RingBuffer) DEBUG PRINT(.\Listings\main.lst)
+                    - TABS(2) OBJECT(.\Output\main.obj)
+
+line level    source
+
+   1          /**
+   2           * @copyright (C) COPYRIGHT 2022 Fortiortech Shenzhen
+   3           * @file      main.c
+   4           * @author    Fortiortech  Appliction Team
+   5           * @since     Create:2021-05-14
+   6           * @date      Last modify:2022-07-14
+   7           * @note      Last modify author is Kris.huang
+   8           * @brief     包含主函数，软硬件初始化函数，VRER配置函数,Debug小工具
+   9           */
+  10          
+  11          
+  12          /********************************************************************************
+  13              Header Definition
+  14          ********************************************************************************/
+  15          #include <MyProject.h>
+  16          #include <SanityCheck.h>
+  17          #include "MT6701.h"
+  18          
+  19          uint8 data g_1mTick = 0;  ///< 1ms滴答信号，每隔1ms在SYSTICK定时器被置1，需在大循环使�
+             -��处清零
+  20          static uint16 data g_ms      = 0;      /*  新增：1ms 计数 */
+  21          static uint16 data g_dbgLast = 0;      
+  22          static uint16 data g_ntcLast = 0;      /*  新增：NTC 温度换算节拍（20ms） */
+  23          
+  24          static uint16 xdata g_canDbgLast = 0;   /* 【调试】CAN 打印节拍（放 xdata，data 只剩 ~17 字�
+             -��）*/
+  25          static uint16 xdata g_mtLast     = 0;   /* MT6701 读取 + CAN 观测帧节拍 */
+  26          static uint16 xdata g_hbLast     = 0;   /* 【调试】串口心跳节拍（1s 一行）*/
+  27          static uint16 xdata g_posDbgLast = 0;   /* 位置环打印节拍：200ms 一行 */
+  28          
+  29          static uint16 xdata g_tglLast = 0;   /* 双线翻转节拍 */
+  30          static uint8  xdata g_tglLvl  = 0;   /* 当前电平 */
+  31          
+  32          
+  33          /**
+  34              @brief        Function Definition
+  35          */
+  36          void HardwareInit(void);
+  37          void SoftwareInit(void);
+  38          void VREFConfigInit(void);
+  39          static void DebugSet(void);
+  40          
+  41          
+  42          /**
+  43           * @brief        SPI Debug调试小工具
+  44           * @date         2022-07-14
+  45           */
+  46          static void DebugSet(void)
+  47          {
+  48   1          #if (DBG_MODE ==  DBG_SPI_HW)      // 硬件调试模式
+                  SPI_Init();
+                  Set_DBG_DMA(&HARD_SPIDATA);
+                  #elif (DBG_MODE ==  DBG_SPI_SW)   // 软件调试模式
+C51 COMPILER V9.60.7.0   MAIN                                                              10/20/2026 17:28:29 PAGE 2   
+
+                  SPI_Init();
+                  Set_DBG_DMA(spidebug);
+                  #elif (DBG_MODE ==  DBG_UART)
+  55   1          // UART2_Init();
+  56   1          // Conf_DMA(1, XDATA_UART1, (uint16)GetAddr_UARTDBG(), BUFFLEN);
+  57   1          UART1_Init();                       /*  改到 UART1：P0.5 = TXD / P0.6 = RXD。
+  58   1                                                 原 UART2 在 P3.6/P3.7，新板这两脚贴着外部晶振，�
+             -��能用 */
+  59   1          /*  Conf_DMA 在本工程里找不到实现（只有 FU68xx_6_DMA.h:44 的声明，DMA.c 里只有 Set
+             -_DBG_DMA），
+  60   1             一旦打开 DBG_UART 很可能直接链接失败；先注掉，将来要用 DMA 调试再自己补
+             -实现 */
+  61   1          // Conf_DMA(1, XDATA_UART1, (uint16)GetAddr_UARTDBG(), BUFFLEN);
+  62   1        #elif (DBG_MODE ==  DBG_UART)
+                  _nop_;
+                  #endif
+  65   1        
+  66   1            /*******************Observation signal Select*********************/
+  67   1          SetReg(CMP_CR3, DBGSEL0 | DBGSEL1, GP01_DBG_Conf);
+  68   1      }
+  69          
+  70          /**
+  71           * @brief     硬件初始化，初始化需要使用的硬件设备配置，FOC必须配置的是运放�
+             -�压、运放初始化、ADC初始化、Driver初始化
+  72           *            其他的可根据实际需求加。
+  73           * @date      2022-07-14
+  74           */
+  75          void HardwareInit(void)
+  76          {
+  77   1          // 为提高芯片的抗干扰能力，降低芯片功耗，请在具体项目时，将不需要用的
+             -GPIO默认都配置为输入上拉。
+  78   1          //具体配置可在GPIO_Default_Init设置。
+  79   1          //GPIO_Default_Init();
+  80   1          /************************硬件外设初始化**************************/
+  81   1          /* ADC参考电压电压配置 */
+  82   1          VREFConfigInit();
+  83   1          /*  硬件过流，比较器初始化，用于硬件过流比较保护  */
+  84   1          CMP3_Init();
+  85   1          /*  看门狗初始化 */
+  86   1          WatchDogConfig(500);  
+  87   1          /*  GPIO初始化 */    
+  88   1          GPIO_Init();
+  89   1          /* 先ADC初始化，后Driver初始化 */  
+  90   1          ADC_Init();
+  91   1          Driver_Init();
+  92   1          /* 运放AMP初始化 */  
+  93   1          AMP_Init();
+  94   1          /* TIM3初始化，用于信号PWM捕获 */ 
+  95   1          #if (SPEED_MODE == PWMMODE)
+                  Timer3_Init();
+                  #endif
+  98   1          /* TSD温度传感器初始化 */
+  99   1          TSD_Init();
+ 100   1          /* 抱闸初始化（P4.3 推挽输出 → 上电即合闸，断电抱闸是安全默认）*/
+ 101   1          Brake_Init();
+ 102   1          /* 比较器中断配置，与CMP3硬件配置间隔一段时间等待硬件稳定  */
+ 103   1          CMP3_Interrupt_Init();
+ 104   1          /* LIN初始化 */
+ 105   1          #if (SPEED_MODE == LINMODE)
+                  LIN_Init();
+                  #endif
+ 108   1      
+C51 COMPILER V9.60.7.0   MAIN                                                              10/20/2026 17:28:29 PAGE 3   
+
+ 109   1        
+ 110   1        /*----- Can初始化 -----*/
+ 111   1        CAN_Init();
+ 112   1          /*  SYSTICK定时器配置  */
+ 113   1          ClrBit(IP2, PSYSTICK1);    //1ms定时中断优先级别为1
+ 114   1          SetBit(IP2, PSYSTICK0);
+ 115   1          SetBit(DRV_SR, SYSTIE);
+ 116   1      
+ 117   1          EA = 1;
+ 118   1      }
+ 119          
+ 120          
+ 121          
+ 122          /**
+ 123           * @brief        部分变量初始化，上电运行一次
+ 124           * @date         2022-07-14
+ 125           */
+ 126          void SoftwareInit(void)
+ 127          {
+ 128   1          /* 新增：本机 CAN 从机地址（29位扩展ID里的 系统号/主类别/副类别/设备号）
+ 129   1           *   注意：头板实际设备类别待确认 —— 初版是“动力驱动引擎(11) / 拖钓电�
+             -��(15)”，
+ 130   1           *   头板若是“上下驱动板”，可能需要改成别的副类别，见 §4.2 待确认项。
+             -*/
+ 131   1          ExtSlaveConfig_t ext_cfg = {
+ 132   1              EXT_SYS_MAIN,              // 系统编号: 主系统
+ 133   1              EXT_CAT_POWER_ENGINE,      // 设备主类别: 动力驱动引擎(11)
+ 134   1              EXT_POWER_TROLL_MOTOR,     // 设备副类别: 无刷电机(15)
+ 135   1              MOTOR_DEV_NUM              // 设备编号: 1=转向 2=升降 3=折叠
+ 136   1          };
+ 137   1      
+ 138   1          /* MotorCtrl_Init() 必须在 ext_slave_init() 之前
+ 139   1           *   （前者初始化 g_run_state，后者不再管 g_run_state）*/
+ 140   1          MotorCtrl_Init();             // 内含 DevConfig_LoadParam() 读 EEPROM
+ 141   1      
+ 142   1          MotorcontrolInit();
+ 143   1        VariablesPreInit();                           // 电机相关变量初始化
+ 144   1          mcState         = mcReady;
+ 145   1          mcFaultSource   = FaultNoSource;
+ 146   1      
+ 147   1          /* CAN 协议层初始化 */
+ 148   1          ext_slave_init(&ext_cfg);
+ 149   1      
+ 150   1          /* 告警模块初始化（依赖 g_motor_cfg，所以放在 MotorCtrl_Init() 之后）*/
+ 151   1          AlarmMonitor_Init();
+ 152   1      }
+ 153          
+ 154          
+ 155          /**
+ 156           * @brief        参考电压，偏置电压配置
+ 157           * @date         2022-07-14
+ 158           */
+ 159          void VREFConfigInit(void)
+ 160          {
+ 161   1          /************************VREF&VHALF Config************************/
+ 162   1          #if (HW_ADC_VREF == VREF3_0)
+                  {
+                      SetBit(VREF_VHALF_CR, VRVSEL1);             //00-->4.5V   01-->VDD5
+                      ClrBit(VREF_VHALF_CR, VRVSEL0);             //10-->3.0V   11-->4.0V
+                  }
+                  #elif (HW_ADC_VREF == VREF4_0)
+                  {
+C51 COMPILER V9.60.7.0   MAIN                                                              10/20/2026 17:28:29 PAGE 4   
+
+                      SetBit(VREF_VHALF_CR, VRVSEL1);             //00-->4.5V   01-->VDD5
+                      SetBit(VREF_VHALF_CR, VRVSEL0);             //10-->3.0V   11-->4.0V
+                  }
+                  #elif (HW_ADC_VREF == VREF4_5)
+ 173   1          {
+ 174   2              ClrBit(VREF_VHALF_CR, VRVSEL1);             //00-->4.5V   01-->VDD5
+ 175   2              ClrBit(VREF_VHALF_CR, VRVSEL0);             //10-->3.0V   11-->4.0V
+ 176   2          }
+ 177   1          #elif (HW_ADC_VREF == VREF5_0)
+                  {
+                      ClrBit(VREF_VHALF_CR, VRVSEL1);             //00-->4.5V   01-->VDD5
+                      SetBit(VREF_VHALF_CR, VRVSEL0);             //10-->3.0V   11-->4.0V
+                  }
+                  #endif
+ 183   1          // VHALF电压配置 00:1/8VREF  01:1/4VREF 10:25/64VREF 11:1/2VREF(default)
+ 184   1          #if (HW_VHALF_SEL == VHALF1_8)
+                  ClrBit(VREF_VHALF_CR, VHALFSEL1);
+                  ClrBit(VREF_VHALF_CR, VHALFSEL0);
+                  #elif (HW_VHALF_SEL == VHALF1_4)
+                  ClrBit(VREF_VHALF_CR, VHALFSEL1);
+                  SetBit(VREF_VHALF_CR, VHALFSEL0);
+                  #elif (HW_VHALF_SEL == VHALF25_64)
+                  {
+                      SetBit(VREF_VHALF_CR, VHALFSEL1);
+                      ClrBit(VREF_VHALF_CR, VHALFSEL0);
+                  }
+                  #elif (HW_VHALF_SEL == VHALF1_2)
+ 196   1          {
+ 197   2              SetBit(VREF_VHALF_CR, VHALFSEL1);
+ 198   2              SetBit(VREF_VHALF_CR, VHALFSEL0);
+ 199   2          }
+ 200   1          #else
+                  {
+              #error " VHALF MODE Err "
+                  }
+                  #endif
+ 205   1          #if (VREF_OUT_EN)
+ 206   1          SetBit(P3_AN, P35);                         //VREF Voltage -->P35 Output 是否输出到P35引脚，�
+             -�同步配置输出
+ 207   1          SetBit(P3_OE, P35);                         //VREF Voltage -->P35 Output 是否输出到P35引脚
+ 208   1          #endif
+ 209   1          #if (VHALF_OUT_EN)
+ 210   1          SetBit(P3_AN, P32);
+ 211   1          #endif
+ 212   1          SetBit(VREF_VHALF_CR, VREFEN | VHALFEN);    //VREF_VHALF_CR = 0x11;
+ 213   1          /* ---------------------------------------------------------------------- */
+ 214   1      }
+ 215          
+ 216          /**
+ 217           * @brief        主函数，大循环运行偏置电流采集函数，电机状态机控制函数，以�
+             -�环路响应函数
+ 218           * @date         2022-07-14
+ 219           */
+ 220          void main(void)
+ 221          {
+ 222   1          uint16 PowerUpCnt = 0;
+ 223   1      
+ 224   1          /* ----- 上电空指令延时 等待系统稳定 ----- */
+ 225   1          for (PowerUpCnt = 0; PowerUpCnt < SystemPowerUpTime; PowerUpCnt++);
+ 226   1          
+ 227   1          /* ----- 部分变量初始化 ----- */
+ 228   1          SoftwareInit();
+C51 COMPILER V9.60.7.0   MAIN                                                              10/20/2026 17:28:29 PAGE 5   
+
+ 229   1        
+ 230   1          /* ----- 硬件初始化，配置MCU外设 ----- */
+ 231   1          HardwareInit();
+ 232   1          /* ----- debug配置(SPI调试)，量产程序可以删除 ----- */
+ 233   1          DebugSet();
+ 234   1      
+ 235   1          /* EEPROM（P0.4=SDA / P4.4=SCL / P0.7=WP）初始化 + 在位检查 */
+ 236   1          (void)EEPROM_Init();
+ 237   1      #if (DEBUG_UART_OR_CAN != 0)                 /* 调试关闭时这些 printf 整块不编译 */
+ 238   1          printf("EEPROM check=%u (0=OK)\r\n", (uint16)EEPROM_Check());
+ 239   1          printf("EEPROM selfcheck=%u (0=OK)\r\n", (uint16)EEPROM_SelfCheck());
+ 240   1      
+ 241   1          /* 上电打印：当前系统时钟到底是谁 */
+ 242   1          printf("OSC_CFG=%bx  sysclk=%s\r\n",
+ 243   1                          (uint8)OSC_CFG,
+ 244   1                          ReadBit(OSC_CFG, CK_FLAG) ? "EXTERNAL" : "INTERNAL");
+ 245   1      #endif
+ 246   1      
+ 247   1          /* MT6701：位置走 AD3 模拟量（P2.5），这条路不碰串口脚 */
+ 248   1          MT6701_AnaInit();            /* 断言 P2.5=AD3 通道（ADC.c 里也配了）*/
+ 249   1      
+ 250   1          /* ===== MT6701 的 I2C 与调试串口抢同一对脚（P0.5=TXD/SDA、P0.6=RXD/SCL）=====
+ 251   1           * MT6701_Init() 会 ClrBit(PH_SEL, UART1EN)——一调 I2C 串口就哑。
+ 252   1           *   MT6701_ZERO == 0：不校准，只走 AD3 模拟量位置；
+ 253   1           *   MT6701_ZERO == 1：上电把当前位置写为零点（标定用）；
+ 254   1           *                     标定完必须改回 0，否则每次上电都会写零点/烧 EEPROM。
+ 255   1           * 注意：MT6701_ZERO=1 时不能同时用 DEBUG_UART_OR_CAN=1。
+ 256   1           * （AD3 模拟量位置、CAN 观测帧不受影响）*/
+ 257   1      #if (MT6701_ZERO)
+              #if (DEBUG_UART_OR_CAN == 1)
+              #error "MT6701_ZERO=1 conflicts with DEBUG_UART_OR_CAN=1 (P0.5/P0.6 shared by UART1 and I2C)"
+              #endif
+              
+                  MT6701_Init();                 /* I2C 引脚/外设：P0.5=SDA P0.6=SCL，I2C_FS=1 */
+                  MT6701_Probe();                /* I2C 自检 -> g_mt6701_probe（0=从机应答）*/
+                  MT6701_InitSequence();         /* 当前位置写零点 + 烧 EEPROM（标定用）*/
+              
+              #if (DEBUG_UART_OR_CAN == 2)
+                  MT6701_BootDump();             /* 标定结果发 CAN：0x1F0/0x1F1/0x1F3 */
+              #endif
+              #endif
+ 270   1      
+ 271   1      
+ 272   1      #if 0
+                  /* ----- 【调试】CAN 上电自检（只跑一次：读 CAN 引脚电平 + 自发自收）----- */
+                  CAN_SelfTest();
+              
+                  /* ----- 【调试】CAN 引脚/收发器连通性探针（只跑一次）----- */
+                  CAN_PinProbe();
+              #endif
+ 279   1          
+ 280   1          while (1)
+ 281   1          {
+ 282   2              /* 【新增】CAN"写配置"报文请求的落盘动作，放主循环执行：
+ 283   2               *   写 96 字节 EEPROM 约 50ms，放在 1ms 任务里会把节拍卡停摆；
+ 284   2               *   主循环本来就是"空转等 1ms"，在这里阻塞不影响电机保护 */
+ 285   2              ext_slave_cfg_save_pending();
+ 286   2      
+ 287   2      #if (DEBUG_UART_OR_CAN != 0)
+ 288   2              /* 电压/温度报警事件：1ms任务只置位，这里打印，避免 printf 阻塞 1ms 节拍
+             - */
+ 289   2              if (g_alarm_evt != ALARM_EVT_NONE)
+C51 COMPILER V9.60.7.0   MAIN                                                              10/20/2026 17:28:29 PAGE 6   
+
+ 290   2              {
+ 291   3                  switch (g_alarm_evt)
+ 292   3                  {
+ 293   4                  case ALARM_EVT_VOLT_HIGH:
+ 294   4                      printf("ALARM: OVP HIGH %u.%u%uV (limit %u.%u%uV)\r\n",
+ 295   4                             (uint16_t)(g_alarm_evt_value / 100),
+ 296   4                             (uint16_t)((g_alarm_evt_value / 10) % 10),
+ 297   4                             (uint16_t)(g_alarm_evt_value % 10),
+ 298   4                             (uint16_t)(g_alarm_evt_limit / 100),
+ 299   4                             (uint16_t)((g_alarm_evt_limit / 10) % 10),
+ 300   4                             (uint16_t)(g_alarm_evt_limit % 10));
+ 301   4                      break;
+ 302   4      
+ 303   4                  case ALARM_EVT_VOLT_LOW:
+ 304   4                      printf("ALARM: OVP LOW %u.%u%uV (limit %u.%u%uV)\r\n",
+ 305   4                             (uint16_t)(g_alarm_evt_value / 100),
+ 306   4                             (uint16_t)((g_alarm_evt_value / 10) % 10),
+ 307   4                             (uint16_t)(g_alarm_evt_value % 10),
+ 308   4                             (uint16_t)(g_alarm_evt_limit / 100),
+ 309   4                             (uint16_t)((g_alarm_evt_limit / 10) % 10),
+ 310   4                             (uint16_t)(g_alarm_evt_limit % 10));
+ 311   4                      break;
+ 312   4      
+ 313   4                  case ALARM_EVT_TEMP_HIGH:
+ 314   4                      printf("ALARM: NTC HIGH %u.%uC (limit %u.%uC)\r\n",
+ 315   4                             (uint16_t)(g_alarm_evt_value / 10),
+ 316   4                             (uint16_t)(g_alarm_evt_value % 10),
+ 317   4                             (uint16_t)(g_alarm_evt_limit / 10),
+ 318   4                             (uint16_t)(g_alarm_evt_limit % 10));
+ 319   4                      break;
+ 320   4      
+ 321   4                  default:
+ 322   4                      break;
+ 323   4                  }
+ 324   3                  g_alarm_evt = ALARM_EVT_NONE;
+ 325   3              }
+ 326   2      #endif
+ 327   2      
+ 328   2      #if (DEBUG_UART_OR_CAN != 0)                 /* 原先是无条件 printf，模式0 下必须去掉 */
+ 329   2              /* 【调试】心跳：每秒一行。用来区分"板子在复位"（计数从头开始）和"�
+             -�循环卡死"（计数停住）*/
+ 330   2              if ((uint16)(g_ms - g_hbLast) >= 1000)
+ 331   2              {
+ 332   3                  g_hbLast = g_ms;
+ 333   3                  printf("alive ms=%u\r\n", (uint16)g_ms);
+ 334   3              }
+ 335   2      #endif
+ 336   2      
+ 337   2      #if (DEBUG_UART_OR_CAN != 0)
+ 338   2              // if ((uint16)(g_ms - g_dbgLast) >= 100)          /*  100ms 一行，别更密 */
+ 339   2              // {
+ 340   2              //     g_dbgLast = g_ms;
+ 341   2              //     printf("st=%d cm=%d th=%d eth=%d cnt=%d spd=%d ref=%d iqref=%d iq=%d id=%d IA=%d IB=%d IC=%
+             -d MOE=%d h=%d CR1=%x\r\n",
+ 342   2              //     (uint16)mcState,               /* st    : 电机状态机 */
+ 343   2              //     (uint16)mcFocCtrl.CtrlMode,    /* cm    : 0=开环电流环 1=速度环 */
+ 344   2              //     (int16)FOC__THETA,             /* th    : 当前角度 Q15 */
+ 345   2              //     (int16)FOC__ETHETA,            /* eth   : 估算角度 Q15 */
+ 346   2              //     (uint16)g_ms,                  /* cnt   : 1ms 计数（运行节拍，见下方说明） */
+ 347   2              //     (int16)mcFocCtrl.SpeedFlt,     /* spd   : 滤波后转速 Q15 */
+ 348   2              //     (int16)mcFocCtrl.Ref,          /* ref   : 速度给定 Q15 */
+ 349   2              //     (int16)mcFocCtrl.IqRef,             /* iqref : 电流环 Iq 给定 */
+C51 COMPILER V9.60.7.0   MAIN                                                              10/20/2026 17:28:29 PAGE 7   
+
+ 350   2              //     (int16)FOC__IQ,                /* iq    : 反馈 Iq */
+ 351   2              //     (int16)FOC__ID,                /* id    : 反馈 Id */
+ 352   2              //     (int16)FOC__IA,                /* IA    : A 相电流 */
+ 353   2              //     (int16)FOC__IB,                /* IB    : B 相电流 */
+ 354   2              //     (int16)FOC__IC,                /* IC    : C 相电流 */
+ 355   2              //     (uint16)MOE,                   /* MOE   : 主输出使能 */
+ 356   2              //     (uint16)g_runBlocked,          /* h     : 1=启动闸门还关着 */
+ 357   2              //     (uint16)FOC_CR1);              /* CR1   : FOC 控制寄存器1（bit6=EFAE 强制角度） 
+             -*/
+ 358   2              // }
+ 359   2      #endif
+ 360   2      #if (DEBUG_UART_OR_CAN != 0)
+ 361   2              // /* 位置环调试：200ms 一行；printf 阻塞，只能放主循环 */
+ 362   2              // if ((uint16)(g_ms - g_posDbgLast) >= 200)
+ 363   2              // {
+ 364   2              //     int16 spdCmd;
+ 365   2              //     int16 spdAct;
+ 366   2      
+ 367   2              //     g_posDbgLast = g_ms;
+ 368   2      
+ 369   2              //     /* 位置环输出：g_run_state.ref 是幅值，方向在 direction 里 */
+ 370   2              //     spdCmd = (int16)((g_run_state.direction == CCW) ? -g_run_state.ref : g_run_state.ref);
+ 371   2      
+ 372   2              //     /* SpeedFlt 是 Q15，换回 rpm */
+ 373   2              //     spdAct = (int16)((float)mcFocCtrl.SpeedFlt / 32767.0f * MOTOR_SPEED_BASE);
+ 374   2      
+ 375   2              //     printf("POS tgt=%u fb=%u ang10=%u spd=%d refq=%d act=%d st=%u run=%u wm=%u ctrl=%u es=%u\r\
+             -n",
+ 376   2              //             (uint16)g_pos_cmd_raw,
+ 377   2              //             (uint16)g_pos_fb_raw,
+ 378   2              //             (uint16)MT6701_GetAngle10(),
+ 379   2              //             spdCmd,
+ 380   2              //             (int16)mcFocCtrl.Ref,
+ 381   2              //             spdAct,
+ 382   2              //             (uint16)g_pos_state,
+ 383   2              //             (uint16)g_pos_cmd_start,
+ 384   2              //             (uint16)g_run_state.work_mode,     /* 3=POSITION，其它值就不会调 Update */
+ 385   2              //             (uint16)g_dbg_lastCtrl,            /* 最近一次真正进入解析的 ctrl 字节
+             - */
+ 386   2              //             (uint16)g_run_state.is_estop);
+ 387   2              // }
+ 388   2      #endif
+ 389   2              /* ----- 【调试】CAN 状态，每 500ms 一组（受 DEBUG_UART_OR_CAN 控制：
+ 390   2               *        串口调试期间关掉，否则刷屏把别的输出冲掉）----- */
+ 391   2      #if (DEBUG_UART_OR_CAN != 0)
+ 392   2              if ((uint16)(g_ms - g_canDbgLast) >= 500)
+ 393   2              {
+ 394   3                  g_canDbgLast = g_ms;
+ 395   3                  // CAN_DebugPrint();           /* CAN.c：寄存器/TEC/REC + 收发计数 + 最近一帧 */
+ 396   3                  // ext_slave_debug_print();    /* CanSlave.c：协议层计数 + 发送队列 */
+ 397   3              }
+ 398   2      #endif
+ 399   2              /* -----获取电流采样偏置电压----- */
+ 400   2              if (!mcCurOffset.OffsetFlag)
+ 401   2              {
+ 402   3                  GetCurrentOffset();
+ 403   3              }
+ 404   2              else
+ 405   2              {
+ 406   3                  /* -----电机控制状态机----- */
+ 407   3                  MC_Control();
+ 408   3              }
+C51 COMPILER V9.60.7.0   MAIN                                                              10/20/2026 17:28:29 PAGE 8   
+
+ 409   2              
+ 410   2              /* -----1ms处理函数----- */
+ 411   2              if (g_1mTick)
+ 412   2              {
+ 413   3                  GP12 = ~GP12;       //FICD,下载口复用为GPIO测试引脚 
+ 414   3                  WatchDogRefresh();  //喂狗,若不喂狗则MCU复位
+ 415   3                  TickCycle_1ms();
+ 416   3                  Brake_Update();     //  新增：抱闸检测/状态机（内部按 10ms 分频）
+ 417   3      
+ 418   3                  /* MT6701 位置：每 1ms 采一点，攒够 MT6701_ANA_POINTS 点出一批并上报 */
+ 419   3                  if (MT6701_AnaPush((uint16)(ADC3_DR & 0x7FFF)))
+ 420   3                  {
+ 421   4      #if (DEBUG_UART_OR_CAN == 2)
+                              MT6701_SendObs();   /* 0x1F2 观测帧：只有 CAN 调试模式才发 */
+              #endif
+ 424   4                  }
+ 425   3      
+ 426   3                  /* 新增：NTC 温度换算，20ms 一次*/
+ 427   3                  if ((uint16)(g_ms - g_ntcLast) >= 20)
+ 428   3                  {
+ 429   4                      g_ntcLast = g_ms;
+ 430   4                      Motor_MD_Sample();
+ 431   4                  }
+ 432   3      
+ 433   3                  g_1mTick = 0;
+ 434   3                  g_ms++;             //  新增：1ms 计数（没有它 g_ms 永远是 0，打印就不会触�
+             -��）
+ 435   3                  // GP00 = ~GP00;               /* 或者放到 1ms 里翻转 */
+ 436   3              }
+ 437   2          }
+ 438   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    897    ----
+   CONSTANT SIZE    =    242    ----
+   XDATA SIZE       =     11       4
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      7    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

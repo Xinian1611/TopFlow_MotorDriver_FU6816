@@ -1,0 +1,347 @@
+C51 COMPILER V9.60.7.0   EEPROM                                                            10/20/2026 16:09:21 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE EEPROM
+OBJECT MODULE PLACED IN .\Output\EEPROM.obj
+COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\User\source\Hardware\EEPROM.c LARGE OMF2 OPTIMIZE(8,SPEED) BROW
+                    -SE INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include;..\User\source\RingBuffer) DEBUG PRINT(.\Listings\EEPROM.lst
+                    -) TABS(2) OBJECT(.\Output\EEPROM.obj)
+
+line level    source
+
+   1          /**
+   2           * @file    eeprom.c
+   3           * @brief   EEPROM 驱动层（BL24C256A，24AA256 兼容，软件 I2C）
+   4           * @note    实现要点：
+   5           *          - 16 位地址，先高字节后低字节；
+   6           *          - 页大小 64 字节，页写不得跨页（跨页地址自动回卷覆盖页首）；
+   7           *          - 每次写操作 STOP 后 ACK 轮询器件地址，等待内部写周期完成（最大 5ms�
+             -�；
+   8           *          - WP（PB12）写操作前自动拉低解除写保护，结束后恢复写保护。
+   9           *          移植参考：GearBox EEPROM_24AA256.c、GD32F30x 例程 at24cxx.c。
+  10           */
+  11          #include "EEPROM.h"
+  12          #include "I2C.H"
+  13          
+  14          /* ACK 轮询超时次数（每次轮询约 250us，足够覆盖 5ms 写周期） */
+  15          #define EEPROM_WRITE_POLL_TIMEOUT   1000
+  16          
+  17          static int16_t EEPROM_HwWaitStandby(void);
+  18          static int16_t EEPROM_HwWritePage(uint16_t addr, uint16_t len, const uint8_t *buf);
+  19          static int16_t EEPROM_HwReadCore(uint16_t addr, uint16_t len, uint8_t *buf);
+  20          
+  21          /**
+  22           * @brief  初始化 EEPROM 引脚与 I2C 总线
+  23           * @return EEPROM_OK
+  24           */
+  25          int16_t EEPROM_Init(void)
+  26          {
+  27   1          /* WP = P0.7：推挽输出，默认拉低解除写保护
+  28   1           * （板上 R47 10k 把 WP 上拉到 VCC5V，上电默认是"写保护"，所以这里要主动拉低
+             -）*/
+  29   1          SetBit(P0_OE, P07);
+  30   1          GP07 = 0;
+  31   1      
+  32   1          /* 软件 I2C：P4.4-SCL / P0.4-SDA*/
+  33   1          SoftI2C_Init();
+  34   1      
+  35   1          return EEPROM_OK;
+  36   1      }
+  37          
+  38          /**
+  39           * @brief  写保护控制
+  40           * @param  enable 1=置写保护（WP 高，只读）；0=解除（WP 低，可写）
+  41           */
+  42          int16_t EEPROM_WriteProtect(uint8_t enable)
+  43          {
+  44   1          if (enable) 
+  45   1          { 
+  46   2              GP07 = 1; /* 写保护（只读）*/
+  47   2          }
+  48   1          else
+  49   1          { 
+  50   2              GP07 = 0; /* 解除写保护（可写）*/
+  51   2          }
+C51 COMPILER V9.60.7.0   EEPROM                                                            10/20/2026 16:09:21 PAGE 2   
+
+  52   1          return EEPROM_OK;
+  53   1      }
+  54          
+  55          /**
+  56           * @brief  器件在位检查：发送起始 + 写器件地址，收到 ACK 即就绪
+  57           * @return EEPROM_OK 在位；EEPROM_ERR_DEV_ACK 无应答
+  58           */
+  59          int16_t EEPROM_Check(void)
+  60          {
+  61   1          uint8_t ret;
+  62   1      
+  63   1          SoftI2C_Start();
+  64   1          SoftI2C_SendByte(EEPROM_DEV_ADDR_W);
+  65   1          ret = SoftI2C_ReceiveACK();    /* 0=收到 ACK，1=NACK */
+  66   1          SoftI2C_Stop();
+  67   1      
+  68   1          return ret ? EEPROM_ERR_DEV_ACK : EEPROM_OK;
+  69   1      }
+  70          
+  71          /**
+  72           * @brief  ACK 轮询等待内部写周期结束（每次写操作后必须调用）
+  73           * @return EEPROM_OK 芯片就绪；DIR_EEPROM_ERR_TIMEOUT 超时
+  74           */
+  75          static int16_t  EEPROM_HwWaitStandby(void)
+  76          {
+  77   1          uint32_t timeout = 0;
+  78   1      
+  79   1          do {
+  80   2              SoftI2C_Start();
+  81   2              SoftI2C_SendByte(EEPROM_DEV_ADDR_W);
+  82   2              if (0 == SoftI2C_ReceiveACK()) {
+  83   3                  SoftI2C_Stop();
+  84   3                  return EEPROM_OK;
+  85   3              }
+  86   2              SoftI2C_Stop();
+  87   2              timeout++;
+  88   2          } while (timeout < EEPROM_WRITE_POLL_TIMEOUT);
+  89   1      
+  90   1          return EEPROM_ERR_TIMEOUT;
+  91   1      }
+  92          
+  93          /**
+  94           * @brief  页写（≤64 字节且不跨页）
+  95           * @param  addr 目标地址（0x0000~0x7FFF；0x7000 以上为芯片只读区，写入无效）
+  96           * @param  len  数据长度（1~64）
+  97           * @param  buf  数据指针
+  98           * @return 驱动层返回码
+  99           */
+ 100          static int16_t  EEPROM_HwWritePage(uint16_t addr, uint16_t len, const uint8_t *buf)
+ 101          {
+ 102   1          int16_t  ret;
+ 103   1          uint16_t i;
+ 104   1      
+ 105   1          /* 参数校验：地址越界、长度非法、跨页（BL24C256A 页写跨页会回卷覆盖页首�
+             -� */
+ 106   1          if ((addr > (EEPROM_TOTAL_SIZE - 1)) || (0 == len) || (len > EEPROM_PAGE_SIZE) ||
+ 107   1              ((addr & (EEPROM_PAGE_SIZE - 1)) + len > EEPROM_PAGE_SIZE) || (NULL == buf)) {
+ 108   2              return EEPROM_ERR_PARAM;
+ 109   2          }
+ 110   1      
+ 111   1          EEPROM_WriteProtect(0);               /* 写前自动解除写保护 */
+ 112   1      
+C51 COMPILER V9.60.7.0   EEPROM                                                            10/20/2026 16:09:21 PAGE 3   
+
+ 113   1          SoftI2C_Start();
+ 114   1          SoftI2C_SendByte(EEPROM_DEV_ADDR_W);
+ 115   1          if (SoftI2C_ReceiveACK()) { ret = EEPROM_ERR_DEV_ACK; goto out; }
+ 116   1          SoftI2C_SendByte((uint8_t)(addr >> 8));
+ 117   1          if (SoftI2C_ReceiveACK()) { ret = EEPROM_ERR_ADDRH; goto out; }
+ 118   1          SoftI2C_SendByte((uint8_t)(addr & 0xFF));
+ 119   1          if (SoftI2C_ReceiveACK()) { ret = EEPROM_ERR_ADDRL; goto out; }
+ 120   1          for (i = 0; i < len; i++) {
+ 121   2              SoftI2C_SendByte(buf[i]);
+ 122   2              if (SoftI2C_ReceiveACK()) { ret = EEPROM_ERR_DATA; goto out; }
+ 123   2          }
+ 124   1          SoftI2C_Stop();
+ 125   1      
+ 126   1          ret = EEPROM_HwWaitStandby();             /* 等待写周期完成 */
+ 127   1      
+ 128   1          /* 写周期尾保护：BL24C256A 实测 ACK 响应后数据输出仍需约 5ms 才完全就绪
+ 129   1           * （写后 1ms 内读回 0xFF，5ms 后正常），统一延时保证上层“写后立即读”可�
+             -�� */
+ 130   1          if (EEPROM_OK == ret) {
+ 131   2              delay_us(5000);
+ 132   2          }
+ 133   1      
+ 134   1      out:
+ 135   1          if (EEPROM_OK != ret) {
+ 136   2              SoftI2C_Stop();             /* 失败路径确保总线释放 */
+ 137   2          }
+ 138   1          EEPROM_WriteProtect(1);               /* 恢复写保护 */
+ 139   1          return ret;
+ 140   1      }
+ 141          
+ 142          /**
+ 143           * @brief  连续读公共实现（伪写寻址 + STOP 后重新起始读）
+ 144           * @note   不用重复 START：BL24C256A 对“写事务后紧跟的重复 START”响应异常
+ 145           *         （实测写后立即读回 0xFF，延时 50ms 后正常）；改为伪写寻址以 STOP
+ 146           *         完整结束事务（从机回 standby）后重新 START 发起“当前地址读”，
+ 147           *         协议兼容性更好。
+ 148           */
+ 149          static int16_t  EEPROM_HwReadCore(uint16_t addr, uint16_t len, uint8_t *buf)
+ 150          {
+ 151   1          int16_t  ret;
+ 152   1          uint16_t i;
+ 153   1      
+ 154   1          SoftI2C_Start();
+ 155   1          SoftI2C_SendByte(EEPROM_DEV_ADDR_W);
+ 156   1          if (SoftI2C_ReceiveACK()) { ret = EEPROM_ERR_DEV_ACK; goto out; }
+ 157   1          SoftI2C_SendByte((uint8_t)(addr >> 8));
+ 158   1          if (SoftI2C_ReceiveACK()) { ret = EEPROM_ERR_ADDRH; goto out; }
+ 159   1          SoftI2C_SendByte((uint8_t)(addr & 0xFF));
+ 160   1          if (SoftI2C_ReceiveACK()) { ret = EEPROM_ERR_ADDRL; goto out; }
+ 161   1      
+ 162   1          /* 伪写寻址 STOP 结束（从机回 standby），延时后重新 START + 读器件地址 */
+ 163   1          SoftI2C_Stop();
+ 164   1          delay_us(500);
+ 165   1      
+ 166   1          SoftI2C_Start();
+ 167   1          SoftI2C_SendByte(EEPROM_DEV_ADDR_R);
+ 168   1          if (SoftI2C_ReceiveACK()) { ret = EEPROM_ERR_DEV_ACK; goto out; }
+ 169   1      
+ 170   1          /* 前 len-1 字节收 ACK，最后一字节收 NACK 后停止 */
+ 171   1          for (i = 0; i < len - 1; i++) {
+ 172   2              buf[i] = SoftI2C_ReceiveByte();
+ 173   2              SoftI2C_SendACK();
+C51 COMPILER V9.60.7.0   EEPROM                                                            10/20/2026 16:09:21 PAGE 4   
+
+ 174   2          }
+ 175   1          buf[len - 1] = SoftI2C_ReceiveByte();
+ 176   1          SoftI2C_SendNoACK();
+ 177   1          SoftI2C_Stop();
+ 178   1          return EEPROM_OK;
+ 179   1      
+ 180   1      out:
+ 181   1          SoftI2C_Stop();
+ 182   1          return ret;
+ 183   1      }
+ 184          
+ 185          /* ---------------------------------------------------------------------
+ 186           * 任意长度连续写：按 64 字节页边界自动拆分为多次页写
+ 187           *   输入：addr 起始地址(0x0000~0x7FFF)，len 长度(1~32KB)，buf 数据指针
+ 188           *   返回：EEPROM_OK 成功；EEPROM_ERR_PARAM 参数错误；其余=驱动层硬件错误码
+ 189           * 说明：驱动层 EEPROM_HwWritePage 每次写事务后已含写周期 ACK 轮询与
+ 190           *       5ms 写周期尾延时，逐页写互不影响，写后立即读可靠。
+ 191           * ------------------------------------------------------------------- */
+ 192          int16_t EEPROM_WriteBuffer(uint16_t addr, uint16_t len, const uint8_t *buf)
+ 193          {
+ 194   1          uint16_t chunk;
+ 195   1          int16_t ret;
+ 196   1      
+ 197   1          if ((len == 0) || (buf == 0) || ((uint32_t)addr + len > EEPROM_TOTAL_SIZE)) {
+ 198   2              return EEPROM_ERR_PARAM;
+ 199   2          }
+ 200   1      
+ 201   1          while (len > 0) {
+ 202   2              /* 本页剩余容量 = 页大小 - 页内偏移，取与剩余长度的较小值 */
+ 203   2              chunk = EEPROM_PAGE_SIZE - (addr % EEPROM_PAGE_SIZE);
+ 204   2              if (chunk > len) {
+ 205   3                  chunk = len;
+ 206   3              }
+ 207   2              ret = (int16_t)EEPROM_HwWritePage(addr, chunk, buf);
+ 208   2              if (EEPROM_OK != ret) {
+ 209   3                  return ret;   /* 原样返回驱动层错误码（1~6，区分失败阶段） */
+ 210   3              }
+ 211   2              addr += chunk;
+ 212   2              buf  += chunk;
+ 213   2              len  -= chunk;
+ 214   2          }
+ 215   1          return EEPROM_OK;
+ 216   1      }
+ 217          
+ 218          /* ---------------------------------------------------------------------
+ 219           * 任意长度连续读（可跨页）
+ 220           * ------------------------------------------------------------------- */
+ 221          int16_t EEPROM_ReadBuffer(uint16_t addr, uint16_t len, uint8_t *buf)
+ 222          {
+ 223   1          if ((len == 0) || (buf == 0) || ((uint32_t)addr + len > EEPROM_TOTAL_SIZE)) {
+ 224   2              return EEPROM_ERR_PARAM;
+ 225   2          }
+ 226   1          return (int16_t)EEPROM_HwReadCore(addr, len, buf);
+ 227   1      }
+ 228          
+ 229          /* ---------------------------------------------------------------------
+ 230           * 单字节写 / 单字节读（便捷封装，带参数校验）
+ 231           * ------------------------------------------------------------------- */
+ 232          int16_t EEPROM_WriteByte(uint16_t addr, uint8_t dat)
+ 233          {
+ 234   1          if (addr >= EEPROM_TOTAL_SIZE) {
+ 235   2              return EEPROM_ERR_PARAM;
+C51 COMPILER V9.60.7.0   EEPROM                                                            10/20/2026 16:09:21 PAGE 5   
+
+ 236   2          }
+ 237   1          return EEPROM_HwWritePage(addr, 1, &dat);
+ 238   1      }
+ 239          
+ 240          int16_t EEPROM_ReadByte(uint16_t addr, uint8_t *pdat)
+ 241          {
+ 242   1          if ((pdat == 0) || (addr >= EEPROM_TOTAL_SIZE)) {
+ 243   2              return EEPROM_ERR_PARAM;
+ 244   2          }
+ 245   1          return EEPROM_HwReadCore(addr, 1, pdat);
+ 246   1      }
+ 247          
+ 248          /* ---------------------------------------------------------------------
+ 249           * 自检：器件在位 + 读写回环
+ 250           *   1. 器件在位检查（发写器件地址等 ACK）
+ 251           *   2. 对自检测试地址（0x6FF8，避开 0x0000 一键部署区与 0x6E00 测试区）：
+ 252           *      读原值 -> 写约定字节 -> 读回比对 -> 恢复原值 -> 读回确认恢复
+ 253           *   返回：EEPROM_OK 通过；其余为失败阶段码（1~6 硬件、7 回环不一致、8 恢复失�
+             -�）
+ 254           * 说明：BL24C256A 无 0x7FFA 出厂 ID 区，不能沿用 GearBox 的
+ 255           *       “读 0x7FFA 比对 0x29/0x48”自检，回环验证同样可覆盖总线故障。
+ 256           * ------------------------------------------------------------------- */
+ 257          int16_t EEPROM_SelfCheck(void)
+ 258          {
+ 259   1          uint8_t old;
+ 260   1          uint8_t rd;
+ 261   1          int16_t ret;
+ 262   1      
+ 263   1          /* 1. 器件在位 */
+ 264   1          if (EEPROM_OK != EEPROM_Check()) {
+ 265   2              return EEPROM_ERR_DEV_ACK;
+ 266   2          }
+ 267   1      
+ 268   1          /* 2. 回环：读原值 */
+ 269   1          ret = EEPROM_ReadByte(EEPROM_SELFCHECK_ADDR, &old);
+ 270   1          if (EEPROM_OK != ret) {
+ 271   2              return ret;
+ 272   2          }
+ 273   1      
+ 274   1          /* 3. 写入约定字节 */
+ 275   1          ret = EEPROM_WriteByte(EEPROM_SELFCHECK_ADDR, EEPROM_SELFCHECK_MAGIC);
+ 276   1          if (EEPROM_OK != ret) {
+ 277   2              return ret;
+ 278   2          }
+ 279   1      
+ 280   1          /* 4. 读回比对 */
+ 281   1          ret = EEPROM_ReadByte(EEPROM_SELFCHECK_ADDR, &rd);
+ 282   1          if (EEPROM_OK != ret) {
+ 283   2              return ret;
+ 284   2          }
+ 285   1          if (EEPROM_SELFCHECK_MAGIC != rd) {
+ 286   2              return EEPROM_ERR_LOOPBACK;
+ 287   2          }
+ 288   1      
+ 289   1          /* 5. 恢复原值并确认 */
+ 290   1          ret = EEPROM_WriteByte(EEPROM_SELFCHECK_ADDR, old);
+ 291   1          if (EEPROM_OK != ret) {
+ 292   2              return EEPROM_ERR_RESTORE;
+ 293   2          }
+ 294   1          ret = EEPROM_ReadByte(EEPROM_SELFCHECK_ADDR, &rd);
+ 295   1          if (EEPROM_OK != ret) {
+ 296   2              return EEPROM_ERR_RESTORE;
+C51 COMPILER V9.60.7.0   EEPROM                                                            10/20/2026 16:09:21 PAGE 6   
+
+ 297   2          }
+ 298   1          if (old != rd) {
+ 299   2              return EEPROM_ERR_RESTORE;
+ 300   2          }
+ 301   1      
+ 302   1          return EEPROM_OK;
+ 303   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1255    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----      46
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

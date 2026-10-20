@@ -1,0 +1,83 @@
+C51 COMPILER V9.60.7.0   RINGBUFFER                                                        10/20/2026 16:09:21 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE RINGBUFFER
+OBJECT MODULE PLACED IN .\Output\RingBuffer.obj
+COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\User\source\RingBuffer\RingBuffer.c LARGE OMF2 OPTIMIZE(8,SPEED
+                    -) BROWSE INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include;..\User\source\RingBuffer) DEBUG PRINT(.\Listings\Ring
+                    -Buffer.lst) TABS(2) OBJECT(.\Output\RingBuffer.obj)
+
+line level    source
+
+   1          #include "RingBuffer.h"
+   2          
+   3          void rb_init(RingBuffer_t *rb, uint8_t xdata *buf, uint8_t size)
+   4          {
+   5   1          rb->read  = 0;
+   6   1          rb->write = 0;
+   7   1          rb->mask  = size - 1;
+   8   1          rb->buf   = buf;
+   9   1      }
+  10          
+  11          uint8_t rb_write(RingBuffer_t *rb, uint8_t dat)
+  12          {
+  13   1          if (rb_is_full(rb)) {
+  14   2              return 0;
+  15   2          }
+  16   1          
+  17   1          RB_ENTER_CRITICAL();
+  18   2          rb->buf[rb->write] = dat;
+  19   2          rb->write = (rb->write + 1) & rb->mask;
+  20   2          RB_EXIT_CRITICAL();
+  21   1          
+  22   1          return 1;
+  23   1      }
+  24          
+  25          uint8_t rb_read(RingBuffer_t *rb, uint8_t *dat)
+  26          {
+  27   1          if (rb_is_empty(rb)) {
+  28   2              return 0;
+  29   2          }
+  30   1          
+  31   1          RB_ENTER_CRITICAL();
+  32   2          *dat = rb->buf[rb->read];
+  33   2          rb->read = (rb->read + 1) & rb->mask;
+  34   2          RB_EXIT_CRITICAL();
+  35   1          
+  36   1          return 1;
+  37   1      }
+  38          
+  39          uint8_t rb_count(RingBuffer_t *rb)
+  40          {
+  41   1          return (rb->write - rb->read) & rb->mask;
+  42   1      }
+  43          
+  44          uint8_t rb_is_empty(RingBuffer_t *rb)
+  45          {
+  46   1          return (rb->read == rb->write);
+  47   1      }
+  48          
+  49          uint8_t rb_is_full(RingBuffer_t *rb)
+  50          {
+  51   1          return (((rb->write + 1) & rb->mask) == rb->read);
+  52   1      }
+
+C51 COMPILER V9.60.7.0   RINGBUFFER                                                        10/20/2026 16:09:21 PAGE 2   
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    330    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----      16
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----       2
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

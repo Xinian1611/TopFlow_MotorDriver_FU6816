@@ -1,0 +1,392 @@
+C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      10/20/2026 17:28:31 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE MOTORCONTROL
+OBJECT MODULE PLACED IN .\Output\MotorControl.obj
+COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\User\source\Function\MotorControl.c LARGE OMF2 OPTIMIZE(8,SPEED
+                    -) BROWSE INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include;..\User\source\RingBuffer) DEBUG PRINT(.\Listings\Moto
+                    -rControl.lst) TABS(2) OBJECT(.\Output\MotorControl.obj)
+
+line level    source
+
+   1          /**
+   2           * @copyright (C) COPYRIGHT 2022 Fortiortech Shenzhen
+   3           * @file      MotorControl.c
+   4           * @author    Fortiortech  Appliction Team
+   5           * @since     Create:2021-04-10
+   6           * @date      Last modify:2022-07-14
+   7           * @note      Last modify author is Kris.huang
+   8           * @brief
+   9           */
+  10          
+  11          
+  12          #include <MyProject.h>
+  13          /* Private variables ----------------------------------------------------------------------------*/
+  14          
+  15          MotStateType  data mcState;
+  16          MotStaM     McStaSet;
+  17          
+  18          
+  19          /**
+  20           * @brief     电机控制状态机
+  21           * @warning   电机的状态只能在电机状态控制中切换，禁止在其他地方切换电机状�
+             -�
+  22           * @date      2022-07-14
+  23           */
+  24          void MC_Control(void)
+  25          {
+  26   1          if (mcFaultSource != FaultNoSource) // 优先检查是否有错误，若有错误则跳转至错误状
+             -态
+  27   1        {
+  28   2          mcState = mcFault;
+  29   2        }
+  30   1          switch (mcState)
+  31   1          {
+  32   2              case mcReady:
+  33   2                  Motor_Ready();
+  34   2                  /*  新增：启动闸门。故障恢复后 isCtrlPowOn 在 NONEMODE 下恒为 true，
+  35   2                   *   不加这一句，mcFaultSource 一清就会立刻自启（见 Fault_Recovery_ManualTarge
+             -t 注释）*/
+  36   2                  if (g_runBlocked)
+  37   2                  {
+  38   3                      break;                               /* 未过闸门：留在 mcReady 等 */
+  39   3                  }
+  40   2                  if ((mcCurOffset.OffsetFlag == 1) && (isCtrlPowOn == true))
+  41   2                  {
+  42   3                      /*  新增：先请求开闸，确认开闸后才允许进入启动流程（电机驱动�
+             -�锁）*/
+  43   3                      Brake_RequestRelease();
+  44   3                      if (Brake_IsReleased() == 0)
+  45   3                      {
+  46   4                          if (Brake_GetState() == BRAKE_STATE_FAULT)
+  47   4                          {
+  48   5                              mcFaultSource = FaultBrake;      /* 抱闸确认超时 → 报故障 */
+  49   5                          }
+C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      10/20/2026 17:28:31 PAGE 2   
+
+  50   4                          break;                               /* 未确认开闸：留在 mcReady 等 */
+  51   4                      }
+  52   3      
+  53   3                      mcState = mcInit;
+  54   3                      mcCurOffset.OffsetFlag  = 0;//每次启动时重新采集一次偏置电压，受温度的
+             -影响，高低温硬件偏置会有所变化
+  55   3                      mcCurOffset.OffsetCount = 0;
+  56   3                  }
+  57   2                  else
+  58   2                  {
+  59   3                  }
+  60   2                  
+  61   2                  break;
+  62   2                  
+  63   2              case mcInit:
+  64   2                  if (isCtrlPowOn == false)
+  65   2                  {
+  66   3                      mcState = mcStop;
+  67   3                  }
+  68   2                  else if (mcCurOffset.OffsetFlag == 1)
+  69   2                  {
+  70   3                      Motor_Init();
+  71   3                      #if (CHARGE_EN == Enable)
+  72   3                      mcFocCtrl.State_Count   = CHARGE_TIME;
+  73   3                      mcState                 = mcCharge;             // 跳入mcCharge状态
+  74   3                      #else
+                              {
+                                  #if (TAILWIND_MODE == NoTailWind)
+                                  {
+                                      #if (PosCheckEnable == Enable)
+                                      mcState                             = mcPosiCheck;
+                                      McStaSet.SetFlag.PosiCheckSetFlag   = 0;
+                                      mcFocCtrl.mcPosCheckAngle           = 0xffff;                     // 角度赋初�
+             -��
+                                      #elif (ALIGN_MOME != ALIGN_DSIABLE)
+                              
+                                      if (mcFocCtrl.FR == CW)
+                                      {
+                                          mcFocCtrl.mcPosCheckAngle           = Align_Angle_CW;
+                                      }
+                                      else
+                                      {
+                                          mcFocCtrl.mcPosCheckAngle           = Align_Angle_CCW;
+                                      }
+                              
+                                      mcState                             = mcAlign;
+                                      mcFocCtrl.State_Count               = Align_Time;
+                                      #else
+                                      mcState = mcStart;
+                                      #endif
+                                  }
+                                  #else
+                                  mcFocCtrl.State_Count   = TAILWIND_TIME;                                     //顺逆�
+             -��判断时间
+                                  mcState                 = mcTailWind;
+                                  #endif
+                              }
+                              #endif
+ 105   3                  }
+ 106   2                  
+ 107   2                  break;
+ 108   2      #if (CHARGE_EN == Enable)           
+C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      10/20/2026 17:28:31 PAGE 3   
+
+ 109   2              case mcCharge:
+ 110   2                  if (isCtrlPowOn == false)
+ 111   2                  {
+ 112   3                      mcState = mcStop;
+ 113   3                  }
+ 114   2                  else
+ 115   2                  {
+ 116   3                      Motor_Charge();
+ 117   3                      #if (IPMTEST ==Enable)
+                              {;}
+                              #else
+ 120   3                      
+ 121   3                      if (mcFocCtrl.State_Count == 0)
+ 122   3                      {
+ 123   4                          MOE = 0;                              // 关闭输出
+ 124   4                          #if (TAILWIND_MODE == NoTailWind)
+ 125   4                          #if (PosCheckEnable == Enable)
+                                  mcState                             = mcPosiCheck;
+                                  McStaSet.SetFlag.PosiCheckSetFlag   = 0;
+                                  mcFocCtrl.mcPosCheckAngle           = 0xffff;                     // 角度赋初值
+                                  #elif (ALIGN_MOME != ALIGN_DSIABLE)
+ 130   4                      
+ 131   4                          if (mcFocCtrl.FR == CW)
+ 132   4                          {
+ 133   5                              mcFocCtrl.mcPosCheckAngle           = Align_Angle_CW;
+ 134   5                          }
+ 135   4                          else
+ 136   4                          {
+ 137   5                              mcFocCtrl.mcPosCheckAngle           = Align_Angle_CCW;
+ 138   5                          }
+ 139   4                      
+ 140   4                          mcState                             = mcAlign;
+ 141   4                          mcFocCtrl.State_Count               = Align_Time;
+ 142   4                          #else
+                                  mcState = mcStart;
+                                  #endif
+ 145   4                          #else
+                                  mcFocCtrl.State_Count   = TAILWIND_TIME;                                     //顺逆�
+             -��判断时间
+                                  mcState                 = mcTailWind;
+                                  #endif
+ 149   4                      }
+ 150   3                      
+ 151   3                      #endif
+ 152   3                  }
+ 153   2                  
+ 154   2                  break;
+ 155   2      #endif
+ 156   2      #if (TAILWIND_MODE != NoTailWind)
+                          
+                      case mcTailWind:
+                          if (isCtrlPowOn == false)
+                          {
+                              mcState = mcStop;
+                          }
+                          else
+                          {
+                              Motor_TailWind();
+                          }
+                          
+                          break;
+              #endif
+C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      10/20/2026 17:28:31 PAGE 4   
+
+ 170   2      #if (PosCheckEnable == Enable)          
+                      case mcPosiCheck:
+                          if (isCtrlPowOn == false)
+                          {
+                              mcState = mcStop;
+                          }
+                          else
+                          {
+                              if (mcFocCtrl.State_Count == 0)
+                              {
+                                  mcFocCtrl.mcPosCheckAngle   = 0;
+                                  mcState                     = mcAlign;
+                                  mcFocCtrl.State_Count       = Align_Time;
+                              }
+                          }
+                          
+                          break;
+              #endif
+ 188   2      #if (ALIGN_MOME != ALIGN_DSIABLE)           
+ 189   2              case mcAlign:
+ 190   2                  if (isCtrlPowOn == false)
+ 191   2                  {
+ 192   3                      mcState = mcStop;
+ 193   3                  }
+ 194   2                  else
+ 195   2                  {
+ 196   3                      Motor_Align();
+ 197   3                      #if (ALIGN_MOME == ALIGN_TEST)
+                              FOC__UD      = mcFocCtrl.ud_align;
+                              #else
+ 200   3                      
+ 201   3                      if (mcFocCtrl.State_Count == 0)// && (mcFocCtrl.UqFlt >= 40))
+ 202   3                      {
+ 203   4                          mcState = mcStart;
+ 204   4                      }
+ 205   3                      else
+ 206   3                      {
+ 207   4                          FOC__UD = mcFocCtrl.ud_align;
+ 208   4                      }
+ 209   3                      
+ 210   3                      #endif
+ 211   3                  }
+ 212   2                  
+ 213   2                  break;
+ 214   2      #endif
+ 215   2                  
+ 216   2              case mcStart:
+ 217   2                  
+ 218   2                  if (mcFocCtrl.Start_Mode ==  TAILWIND_START)     // 顺风启动
+ 219   2                  {
+ 220   3                      #if (TAILWIND_MODE == BEMFMethod)
+                              mcState                     = mcRun;
+                              #elif (TAILWIND_MODE == RSDMethod) 
+                              mcState                     = mcRun;
+                      #endif
+ 225   3                      mcFocCtrl.State_Count   = 0;
+ 226   3                     
+ 227   3      
+ 228   3                  }
+ 229   2                  else if (mcFocCtrl.Start_Mode == HEADWIND_START) // 逆风启动
+ 230   2                  {
+ 231   3                      if (mcFocCtrl.State_Count > 0) // 逆风启动刹车过程
+C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      10/20/2026 17:28:31 PAGE 5   
+
+ 232   3                      {
+ 233   4                          // 配置刹车代码
+ 234   4                          MC_Break();
+ 235   4                      }
+ 236   3                      else
+ 237   3                      {
+ 238   4                          mcFocCtrl.State_Count   = 50;            // 顺逆风判断时间
+ 239   4                          mcState                 = mcInit;        // 刹车结束 切回初始化状态
+ 240   4                          mcFocCtrl.Start_Mode = STATIC_START;
+ 241   4                      }
+ 242   3                  }
+ 243   2                  else if (mcFocCtrl.Start_Mode == STATIC_START)// 静止启动
+ 244   2                  {
+ 245   3                      #if (Open_Start_Mode == Squ_Start)
+                              {
+                                  mcState                     = mcSquStart;
+                                  SquStart.StartState         = 1;
+                              }
+                              #else
+ 251   3                      {
+ 252   4                          Motor_Static_Open();
+ 253   4                          mcState                     = mcRun;
+ 254   4                      }
+ 255   3                      #endif
+ 256   3                  }
+ 257   2                  
+ 258   2                  break;
+ 259   2                  
+ 260   2                #if (Open_Start_Mode == Squ_Start)
+                        {
+                        case mcSquStart:
+                          if (mcFaultSource != FaultNoSource)
+                          {
+                              mcState                 = mcFault;
+                          }
+                          else if (isCtrlPowOn == false)
+                          {
+                              mcState                 = mcStop;
+                          }
+                          else
+                          {
+                            SquStartInit();
+                          }
+                          break;
+                       }
+                      #endif
+ 278   2                  
+ 279   2              case mcRun:
+ 280   2                  if (isCtrlPowOn == false)
+ 281   2                  {
+ 282   3                      mcState                 = mcStop;
+ 283   3                  }
+ 284   2                  else
+ 285   2                  {
+ 286   3                  }
+ 287   2                  
+ 288   2                  break;
+ 289   2                  
+ 290   2              case mcStop:
+ 291   2                    MC_Stop();
+ 292   2              
+ 293   2                  break;
+C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      10/20/2026 17:28:31 PAGE 6   
+
+ 294   2                  
+ 295   2              case mcBrake:
+ 296   2                  // if (mcFocCtrl.State_Count == 0)//等待mcStop刹车结束
+ 297   2                  // {
+ 298   2                  //     MOE = 0;
+ 299   2                  //     ClrBit(DRV_CR, FOCEN);
+ 300   2                  //     mcState         = mcReady;
+ 301   2                  // }
+ 302   2                  /* ★ 停机最后一段：等抱闸【确认合闸】后才关输出。
+ 303   2                   *   顺序必须是"先合闸吃住负载 → 再断输出"，否则升降机构会掉一下�
+             -�� */
+ 304   2                  if (Brake_GetState() == BRAKE_STATE_LOCKED)
+ 305   2                  {
+ 306   3                      MOE = 0;
+ 307   3                      ClrBit(DRV_CR, FOCEN);
+ 308   3                      mcState = mcReady;
+ 309   3                  }
+ 310   2                  else if (Brake_GetState() == BRAKE_STATE_FAULT)
+ 311   2                  {
+ 312   3                      /* 合闸确认超时：机构可能已自由下落，只能立即断电（抱闸失电即
+             -合闸）*/
+ 313   3                      MOE = 0;
+ 314   3                      ClrBit(DRV_CR, FOCEN);
+ 315   3                      mcFaultSource = FaultBrake;
+ 316   3                  }
+ 317   2                  /* 未确认合闸：保持 MOE=1，让电机继续托住负载 */
+ 318   2                  break;
+ 319   2                  
+ 320   2              case mcFault:
+ 321   2                  if (mcFaultSource == FaultNoSource)   //发生故障时进行保护关闭输出电机停机，
+             -直到故障码清除后，软件重新运行
+ 322   2                  {
+ 323   3                      mcState   = mcReady;
+ 324   3                  }
+ 325   2                  else
+ 326   2                  {
+ 327   3                      ClrBit(DRV_CR, FOCEN);  //FOC 关闭
+ 328   3                      MOE     = 0;            // 六路桥臂主输出，关闭
+ 329   3                      Brake_RequestLock();    // ★ 新增：故障时立即断电合闸（失电抱闸动作�
+             -�快；无参数无局部变量，中断也可调）
+ 330   3                  }
+ 331   2                  
+ 332   2                  break;
+ 333   2                  
+ 334   2              default:
+ 335   2                  mcState   = mcReady;
+ 336   2                  break;
+ 337   2          }
+ 338   1      }
+ 339          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    401    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =      1    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      1    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      10/20/2026 17:28:31 PAGE 7   
+
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

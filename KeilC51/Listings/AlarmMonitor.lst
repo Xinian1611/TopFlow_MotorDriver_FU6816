@@ -1,0 +1,614 @@
+C51 COMPILER V9.60.7.0   ALARMMONITOR                                                      10/20/2026 17:28:30 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE ALARMMONITOR
+OBJECT MODULE PLACED IN .\Output\AlarmMonitor.obj
+COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\User\source\Application\AlarmMonitor.c LARGE OMF2 OPTIMIZE(8,SP
+                    -EED) BROWSE INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include;..\User\source\RingBuffer) DEBUG PRINT(.\Listings\A
+                    -larmMonitor.lst) TABS(2) OBJECT(.\Output\AlarmMonitor.obj)
+
+line level    source
+
+   1          /************************************************************************************
+   2           * @Author       : FengYu
+   3           * @Date         : 2026-07-09
+   4           * @Description  : 基于MotorDrvCfg_t的可配置告警监控模块实现
+   5           * @Copyright (c) 2026 by FengYu, All Rights Reserved.
+   6          *************************************************************************************/
+   7          
+   8          #include "AlarmMonitor.h"
+   9          #include "CanSlave.h"
+  10          #include <MyProject.h>
+  11          
+  12          /************************ 模块变量 ************************/
+  13          AlarmMonitor_t xdata g_alarm_monitor;
+  14          
+  15          volatile uint8_t  xdata g_alarm_evt       = ALARM_EVT_NONE;
+  16          volatile uint16_t xdata g_alarm_evt_value = 0;
+  17          volatile uint16_t xdata g_alarm_evt_limit = 0;
+  18          
+  19          /************************ OVP/NTC 保护状态 ************************/
+  20          static int16_t xdata s_ovp_filtered = 0;   /* OVP ADC 滤波值(0~32767) */
+  21          static uint16_t xdata s_ovp_volt_cv  = 0;   /* OVP 换算后的输入电压(0.01V) */
+  22          static uint8_t xdata s_ovp_inited   = 0;   /* 首次采样直接装载，避免上电从0爬升 */
+  23          
+  24          /************************ 内部辅助函数 ************************/
+  25          
+  26          /// @brief 判断WorningInfo_t是否使能
+  27          /// @param info 报警信息
+  28          /// @retval 1=使能 0=未使能
+  29          static uint8_t alarm_is_enabled(WorningInfo_t info)
+  30          {
+  31   1          return (info.reg.enable != 0) ? 1 : 0;
+  32   1      }
+  33          
+  34          /// @brief 获取WorningInfo_t超时时间(ms)
+  35          /// @param info 报警信息
+  36          /// @retval 超时时间(ms), 最小1000ms
+  37          static uint16_t alarm_get_timeout_ms(WorningInfo_t info)
+  38          {
+  39   1          uint16_t t = info.reg.time;
+  40   1          return (t > 0) ? (t * 1000u) : 1000u;
+  41   1      }
+  42          
+  43          /// @brief 更新单项告警计时器并判断是否触发
+  44          /// @param cnt 计时器指针(ms)
+  45          /// @param active 激活标志指针
+  46          /// @param condition 1=条件满足 0=条件不满足
+  47          /// @param timeout_ms 超时时间(ms)
+  48          /// @retval 1=刚触发或已激活 0=未激活
+  49          static uint8_t alarm_update_timer(uint16_t *cnt, uint8_t *active, uint8_t condition, uint16_t timeout_ms)
+  50          {
+  51   1          if (condition)
+  52   1          {
+  53   2              if (*active)
+C51 COMPILER V9.60.7.0   ALARMMONITOR                                                      10/20/2026 17:28:30 PAGE 2   
+
+  54   2              {
+  55   3                  return 1;
+  56   3              }
+  57   2              if (*cnt < timeout_ms)
+  58   2              {
+  59   3                  (*cnt)++;
+  60   3              }
+  61   2              if (*cnt >= timeout_ms)
+  62   2              {
+  63   3                  *active = 1;
+  64   3                  return 1;
+  65   3              }
+  66   2          }
+  67   1          else
+  68   1          {
+  69   2              *cnt = 0;
+  70   2              *active = 0;
+  71   2          }
+  72   1          return 0;
+  73   1      }
+  74          
+  75          /************************ 各类别告警检测 ************************/
+  76          
+  77          /// @brief 当前配置的电池类型(非法值按铅酸处理)
+  78          static uint8_t alarm_get_battery_type(void)
+  79          {
+  80   1          /*   电池类型：0 = 铅酸，1 = 磷酸铁锂 */
+  81   1          if (g_motor_cfg->reserved3 == BATTERY_TYPE_LIFEPO4)
+  82   1          {
+  83   2              return BATTERY_TYPE_LIFEPO4;
+  84   2          }
+  85   1          return BATTERY_TYPE_LEAD_ACID;
+  86   1      }
+  87          
+  88          /// @brief 按电池类型取电压阈值(0.01V)
+  89          static void alarm_get_voltage_limits(uint16_t *low_alarm,
+  90                                               uint16_t *high_alarm,
+  91                                               uint16_t *high_stop)
+  92          {
+  93   1          if (alarm_get_battery_type() == BATTERY_TYPE_LIFEPO4)
+  94   1          {
+  95   2              *low_alarm  = BAT_LIFEPO4_LOW_ALARM_CV;
+  96   2              *high_alarm = BAT_LIFEPO4_HIGH_ALARM_CV;
+  97   2              *high_stop  = BAT_LIFEPO4_HIGH_STOP_CV;
+  98   2          }
+  99   1          else
+ 100   1          {
+ 101   2              *low_alarm  = BAT_LEAD_ACID_LOW_ALARM_CV;
+ 102   2              *high_alarm = BAT_LEAD_ACID_HIGH_ALARM_CV;
+ 103   2              *high_stop  = BAT_LEAD_ACID_HIGH_STOP_CV;
+ 104   2          }
+ 105   1      }
+ 106          
+ 107          /// @brief 读取 OVP 输入电源电压
+ 108          /// @retval 0.01V；换算：Vraw = raw × VREF × 1150/150 / 32768
+ 109          static uint16_t alarm_read_ovp_cv(void)
+ 110          {
+ 111   1          int16_t raw;
+ 112   1      
+ 113   1          raw = (int16_t)(OVP_ADC_DR & 0x7FFF);
+ 114   1      
+ 115   1          if (s_ovp_inited == 0)
+C51 COMPILER V9.60.7.0   ALARMMONITOR                                                      10/20/2026 17:28:30 PAGE 3   
+
+ 116   1          {
+ 117   2              s_ovp_filtered = raw;          /* 首次直接装载，防止上电从0爬升误报低压 */
+ 118   2              s_ovp_inited   = 1;
+ 119   2          }
+ 120   1          else
+ 121   1          {
+ 122   2              s_ovp_filtered = MDU_LPF0(raw, s_ovp_filtered, OVP_LPF_K);
+ 123   2          }
+ 124   1      
+ 125   1          /* raw(0~32767) × 满量程(0.01V) / 32768
+ 126   1           * 1150/150、VREF=4.5V 时满量程 = 3450（34.50V） */
+ 127   1          s_ovp_volt_cv = (uint16_t)(((uint32_t)(uint16_t)s_ovp_filtered
+ 128   1                                      * (uint32_t)OVP_FULL_SCALE_CV) >> 15);
+ 129   1          return s_ovp_volt_cv;
+ 130   1      }
+ 131          
+ 132          /// @brief 电压告警检测(输入电源 PWR+，来源 P3.3/AD6 OVP)
+ 133          static void alarm_check_voltage(void)
+ 134          {
+ 135   1      #if (BAT_ALARM_EN)
+ 136   1          uint16_t volt_cv;
+ 137   1          uint16_t low_alarm, high_alarm, high_stop;
+ 138   1          uint8_t  was_active;
+ 139   1      
+ 140   1          volt_cv = alarm_read_ovp_cv();
+ 141   1          alarm_get_voltage_limits(&low_alarm, &high_alarm, &high_stop);
+ 142   1      
+ 143   1          /* 电压高报警 */
+ 144   1          was_active = g_alarm_monitor.items[ALARM_VOLT_HIGH].alarm_active;
+ 145   1          alarm_update_timer(&g_alarm_monitor.items[ALARM_VOLT_HIGH].alarm_cnt,
+ 146   1                             &g_alarm_monitor.items[ALARM_VOLT_HIGH].alarm_active,
+ 147   1                             (volt_cv >= high_alarm) ? 1 : 0,
+ 148   1                             BAT_ALARM_DELAY_MS);
+ 149   1          if ((was_active == 0) && (g_alarm_monitor.items[ALARM_VOLT_HIGH].alarm_active != 0))
+ 150   1          {
+ 151   2              g_alarm_evt_value = volt_cv;
+ 152   2              g_alarm_evt_limit = high_alarm;
+ 153   2              g_alarm_evt       = ALARM_EVT_VOLT_HIGH;
+ 154   2          }
+ 155   1      
+ 156   1          /* 电压高停机(由配置 volt_stop 的使能位决定是否启用) */
+ 157   1          if (alarm_is_enabled(g_motor_cfg->volt_stop))
+ 158   1          {
+ 159   2              alarm_update_timer(&g_alarm_monitor.items[ALARM_VOLT_HIGH].stop_cnt,
+ 160   2                                 &g_alarm_monitor.items[ALARM_VOLT_HIGH].stop_active,
+ 161   2                                 (volt_cv >= high_stop) ? 1 : 0,
+ 162   2                                 BAT_STOP_DELAY_MS);
+ 163   2          }
+ 164   1      
+ 165   1          /* 电压低报警(只报警，不停机) */
+ 166   1          was_active = g_alarm_monitor.items[ALARM_VOLT_LOW].alarm_active;
+ 167   1          alarm_update_timer(&g_alarm_monitor.items[ALARM_VOLT_LOW].alarm_cnt,
+ 168   1                             &g_alarm_monitor.items[ALARM_VOLT_LOW].alarm_active,
+ 169   1                             (volt_cv <= low_alarm) ? 1 : 0,
+ 170   1                             BAT_ALARM_DELAY_MS);
+ 171   1          if ((was_active == 0) && (g_alarm_monitor.items[ALARM_VOLT_LOW].alarm_active != 0))
+ 172   1          {
+ 173   2              g_alarm_evt_value = volt_cv;
+ 174   2              g_alarm_evt_limit = low_alarm;
+ 175   2              g_alarm_evt       = ALARM_EVT_VOLT_LOW;
+ 176   2          }
+ 177   1      #endif
+C51 COMPILER V9.60.7.0   ALARMMONITOR                                                      10/20/2026 17:28:30 PAGE 4   
+
+ 178   1      }
+ 179          
+ 180          /// @brief 电流告警检测
+ 181          static void alarm_check_current(void)
+ 182          {
+ 183   1          int16_t curr_001A;
+ 184   1          uint8_t over_cond, under_cond;
+ 185   1      
+ 186   1          curr_001A = (int16_t)(mcFocCtrl.mcADCCurrentbus / I_Value(0.1));
+ 187   1      
+ 188   1          // 电流高报警/停机
+ 189   1          over_cond = (curr_001A > g_motor_cfg->curr_high_alarm) ? 1 : 0;
+ 190   1          if (alarm_is_enabled(g_motor_cfg->curr_alarm))
+ 191   1          {
+ 192   2              alarm_update_timer(&g_alarm_monitor.items[ALARM_CURR_HIGH].alarm_cnt,
+ 193   2                                 &g_alarm_monitor.items[ALARM_CURR_HIGH].alarm_active,
+ 194   2                                 over_cond,
+ 195   2                                 alarm_get_timeout_ms(g_motor_cfg->curr_alarm));
+ 196   2          }
+ 197   1      
+ 198   1          if (alarm_is_enabled(g_motor_cfg->curr_stop))
+ 199   1          {
+ 200   2              over_cond = (curr_001A > g_motor_cfg->curr_high_stop) ? 1 : 0;
+ 201   2              alarm_update_timer(&g_alarm_monitor.items[ALARM_CURR_HIGH].stop_cnt,
+ 202   2                                 &g_alarm_monitor.items[ALARM_CURR_HIGH].stop_active,
+ 203   2                                 over_cond,
+ 204   2                                 alarm_get_timeout_ms(g_motor_cfg->curr_stop));
+ 205   2          }
+ 206   1      
+ 207   1          // 电流低报警(仅报警)
+ 208   1          under_cond = (curr_001A < g_motor_cfg->curr_low_alarm) ? 1 : 0;
+ 209   1          if (alarm_is_enabled(g_motor_cfg->curr_alarm))
+ 210   1          {
+ 211   2              alarm_update_timer(&g_alarm_monitor.items[ALARM_CURR_LOW].alarm_cnt,
+ 212   2                                 &g_alarm_monitor.items[ALARM_CURR_LOW].alarm_active,
+ 213   2                                 under_cond,
+ 214   2                                 alarm_get_timeout_ms(g_motor_cfg->curr_alarm));
+ 215   2          }
+ 216   1      }
+ 217          
+ 218          /// @brief 驱动模块温度告警检测(NTC，来源 P2.4/AD2)
+ 219          static void alarm_check_drv_temp(void)
+ 220          {
+ 221   1      #if (BAT_ALARM_EN)
+ 222   1          int16_t temp_01C;
+ 223   1          uint8_t was_active;
+ 224   1      
+ 225   1          temp_01C = mcFocCtrl.NTCTempNum;
+ 226   1      
+ 227   1          if ((temp_01C == NTC_TEMP_ERR) ||
+ 228   1              (temp_01C < -400) ||
+ 229   1              (temp_01C > 1500))
+ 230   1          {
+ 231   2              return;
+ 232   2          }
+ 233   1      
+ 234   1          /* 驱动温度高报警(80.0℃) */
+ 235   1          was_active = g_alarm_monitor.items[ALARM_DRV_TEMP_HIGH].alarm_active;
+ 236   1          alarm_update_timer(&g_alarm_monitor.items[ALARM_DRV_TEMP_HIGH].alarm_cnt,
+ 237   1                             &g_alarm_monitor.items[ALARM_DRV_TEMP_HIGH].alarm_active,
+ 238   1                             (temp_01C >= BAT_NTC_HIGH_ALARM_01C) ? 1 : 0,
+ 239   1                             BAT_ALARM_DELAY_MS);
+C51 COMPILER V9.60.7.0   ALARMMONITOR                                                      10/20/2026 17:28:30 PAGE 5   
+
+ 240   1          if ((was_active == 0) && (g_alarm_monitor.items[ALARM_DRV_TEMP_HIGH].alarm_active != 0))
+ 241   1          {
+ 242   2              g_alarm_evt_value = (uint16_t)temp_01C;
+ 243   2              g_alarm_evt_limit = BAT_NTC_HIGH_ALARM_01C;
+ 244   2              g_alarm_evt       = ALARM_EVT_TEMP_HIGH;
+ 245   2          }
+ 246   1      
+ 247   1          /* 驱动温度高停机(默认不使能，由配置 drv_temp_stop 的使能位决定) */
+ 248   1          if (alarm_is_enabled(g_motor_cfg->drv_temp_stop))
+ 249   1          {
+ 250   2              alarm_update_timer(&g_alarm_monitor.items[ALARM_DRV_TEMP_HIGH].stop_cnt,
+ 251   2                                 &g_alarm_monitor.items[ALARM_DRV_TEMP_HIGH].stop_active,
+ 252   2                                 (temp_01C >= BAT_NTC_HIGH_STOP_01C) ? 1 : 0,
+ 253   2                                 BAT_STOP_DELAY_MS);
+ 254   2          }
+ 255   1      #endif
+ 256   1      }
+ 257          
+ 258          /// @brief 转速告警检测
+ 259          static void alarm_check_speed(void)
+ 260          {
+ 261   1          int16_t speed_rpm;
+ 262   1          uint8_t over_cond, stall_cond;
+ 263   1      
+ 264   1          speed_rpm = (int16_t)(mcFocCtrl.SpeedFlt / S_Value(1));
+ 265   1      
+ 266   1          // 超速报警/停机
+ 267   1          over_cond = (speed_rpm > (int16_t)g_motor_cfg->overspeed_alarm) ? 1 : 0;
+ 268   1          if (alarm_is_enabled(g_motor_cfg->speed_alarm))
+ 269   1          {
+ 270   2              alarm_update_timer(&g_alarm_monitor.items[ALARM_OVERSPEED].alarm_cnt,
+ 271   2                                 &g_alarm_monitor.items[ALARM_OVERSPEED].alarm_active,
+ 272   2                                 over_cond,
+ 273   2                                 alarm_get_timeout_ms(g_motor_cfg->speed_alarm));
+ 274   2          }
+ 275   1      
+ 276   1          if (alarm_is_enabled(g_motor_cfg->speed_stop))
+ 277   1          {
+ 278   2              over_cond = (speed_rpm > (int16_t)g_motor_cfg->overspeed_stop) ? 1 : 0;
+ 279   2              alarm_update_timer(&g_alarm_monitor.items[ALARM_OVERSPEED].stop_cnt,
+ 280   2                                 &g_alarm_monitor.items[ALARM_OVERSPEED].stop_active,
+ 281   2                                 over_cond,
+ 282   2                                 alarm_get_timeout_ms(g_motor_cfg->speed_stop));
+ 283   2          }
+ 284   1      
+ 285   1          // 失速报警(仅报警)
+ 286   1          stall_cond = (speed_rpm < (int16_t)g_motor_cfg->stall_alarm) ? 1 : 0;
+ 287   1          if (alarm_is_enabled(g_motor_cfg->speed_alarm))
+ 288   1          {
+ 289   2              alarm_update_timer(&g_alarm_monitor.items[ALARM_STALL].alarm_cnt,
+ 290   2                                 &g_alarm_monitor.items[ALARM_STALL].alarm_active,
+ 291   2                                 stall_cond,
+ 292   2                                 alarm_get_timeout_ms(g_motor_cfg->speed_alarm));
+ 293   2          }
+ 294   1      }
+ 295          
+ 296          /// @brief 浸水告警检测
+ 297          static void alarm_check_water(void)
+ 298          {
+ 299   1          // 驱动浸水报警/停机
+ 300   1          if (alarm_is_enabled(g_motor_cfg->drv_water_alarm))
+ 301   1          {
+C51 COMPILER V9.60.7.0   ALARMMONITOR                                                      10/20/2026 17:28:30 PAGE 6   
+
+ 302   2              alarm_update_timer(&g_alarm_monitor.items[ALARM_DRV_WATER].alarm_cnt,
+ 303   2                                 &g_alarm_monitor.items[ALARM_DRV_WATER].alarm_active,
+ 304   2                                 g_alarm_monitor.water_drv_state,
+ 305   2                                 alarm_get_timeout_ms(g_motor_cfg->drv_water_alarm));
+ 306   2          }
+ 307   1      
+ 308   1          if (alarm_is_enabled(g_motor_cfg->drv_water_stop))
+ 309   1          {
+ 310   2              alarm_update_timer(&g_alarm_monitor.items[ALARM_DRV_WATER].stop_cnt,
+ 311   2                                 &g_alarm_monitor.items[ALARM_DRV_WATER].stop_active,
+ 312   2                                 g_alarm_monitor.water_drv_state,
+ 313   2                                 alarm_get_timeout_ms(g_motor_cfg->drv_water_stop));
+ 314   2          }
+ 315   1      
+ 316   1          // 电机浸水报警/停机
+ 317   1          if (alarm_is_enabled(g_motor_cfg->mot_water_alarm))
+ 318   1          {
+ 319   2              alarm_update_timer(&g_alarm_monitor.items[ALARM_MOT_WATER].alarm_cnt,
+ 320   2                                 &g_alarm_monitor.items[ALARM_MOT_WATER].alarm_active,
+ 321   2                                 g_alarm_monitor.water_mot_state,
+ 322   2                                 alarm_get_timeout_ms(g_motor_cfg->mot_water_alarm));
+ 323   2          }
+ 324   1      
+ 325   1          if (alarm_is_enabled(g_motor_cfg->mot_water_stop))
+ 326   1          {
+ 327   2              alarm_update_timer(&g_alarm_monitor.items[ALARM_MOT_WATER].stop_cnt,
+ 328   2                                 &g_alarm_monitor.items[ALARM_MOT_WATER].stop_active,
+ 329   2                                 g_alarm_monitor.water_mot_state,
+ 330   2                                 alarm_get_timeout_ms(g_motor_cfg->mot_water_stop));
+ 331   2          }
+ 332   1      }
+ 333          
+ 334          /************************ 故障码映射与更新 ************************/
+ 335          
+ 336          /// @brief 停机故障码映射
+ 337          /// @param id 告警项ID
+ 338          /// @retval 故障码, 无映射返回FAULT_NONE
+ 339          static uint8_t alarm_map_stop_fault(AlarmId_e id)
+ 340          {
+ 341   1          switch (id)
+ 342   1          {
+ 343   2          case ALARM_DRV_WATER:
+ 344   2          case ALARM_MOT_WATER:
+ 345   2              return FAULT_BUILD(FAULT_LEVEL_3, FAULT3_WATER_STOP);
+ 346   2          case ALARM_VOLT_HIGH:
+ 347   2              return FAULT_BUILD(FAULT_LEVEL_3, FAULT3_OVERVOLT_STOP);
+ 348   2          case ALARM_CURR_HIGH:
+ 349   2              return FAULT_BUILD(FAULT_LEVEL_3, FAULT3_OVERCURR_STOP);
+ 350   2          case ALARM_DRV_TEMP_HIGH:
+ 351   2              return FAULT_BUILD(FAULT_LEVEL_3, FAULT3_DRVTEMP_STOP);
+ 352   2          case ALARM_MOT_TEMP_HIGH:
+ 353   2              return FAULT_BUILD(FAULT_LEVEL_3, FAULT3_MOTTEMP_STOP);
+ 354   2          case ALARM_OVERSPEED:
+ 355   2              return FAULT_BUILD(FAULT_LEVEL_3, FAULT3_OVERSPEED_STOP);
+ 356   2          default:
+ 357   2              return FAULT_NONE;
+ 358   2          }
+ 359   1      }
+ 360          
+ 361          /// @brief 报警故障码映射
+ 362          /// @param id 告警项ID
+ 363          /// @retval 故障码, 无映射返回FAULT_NONE
+C51 COMPILER V9.60.7.0   ALARMMONITOR                                                      10/20/2026 17:28:30 PAGE 7   
+
+ 364          static uint8_t alarm_map_alarm_fault(AlarmId_e id)
+ 365          {
+ 366   1          switch (id)
+ 367   1          {
+ 368   2          case ALARM_DRV_WATER:
+ 369   2          case ALARM_MOT_WATER:
+ 370   2              return FAULT_BUILD(FAULT_LEVEL_2, FAULT2_WATER_ALARM);
+ 371   2          case ALARM_VOLT_HIGH:
+ 372   2              return FAULT_BUILD(FAULT_LEVEL_2, FAULT2_OVERVOLT_ALARM);
+ 373   2          case ALARM_VOLT_LOW:
+ 374   2              return FAULT_BUILD(FAULT_LEVEL_1, FAULT1_UNDERVOLT_ALARM);
+ 375   2          case ALARM_CURR_HIGH:
+ 376   2              return FAULT_BUILD(FAULT_LEVEL_2, FAULT2_OVERCURR_ALARM);
+ 377   2          case ALARM_DRV_TEMP_HIGH:
+ 378   2              return FAULT_BUILD(FAULT_LEVEL_2, FAULT2_DRVTEMP_ALARM);
+ 379   2          case ALARM_MOT_TEMP_HIGH:
+ 380   2              return FAULT_BUILD(FAULT_LEVEL_2, FAULT2_MOTTEMP_ALARM);
+ 381   2          case ALARM_OVERSPEED:
+ 382   2              return FAULT_BUILD(FAULT_LEVEL_2, FAULT2_OVERSPEED_ALARM);
+ 383   2          case ALARM_STALL:
+ 384   2              return FAULT_BUILD(FAULT_LEVEL_1, FAULT1_STALL_ALARM);
+ 385   2          default:
+ 386   2              return FAULT_NONE;
+ 387   2          }
+ 388   1      }
+ 389          
+ 390          /// @brief 构建活跃故障码队列(停机在前, 报警在后)
+ 391          static void alarm_build_queue(void)
+ 392          {
+ 393   1          uint8_t i, fault;
+ 394   1          g_alarm_monitor.fault_count = 0;
+ 395   1      
+ 396   1          // 先收集停机故障(高优先级)
+ 397   1          for (i = 0; i < ALARM_COUNT; i++)
+ 398   1          {
+ 399   2              if (g_alarm_monitor.items[i].stop_active)
+ 400   2              {
+ 401   3                  fault = alarm_map_stop_fault((AlarmId_e)i);
+ 402   3                  if (fault != FAULT_NONE && g_alarm_monitor.fault_count < ALARM_QUEUE_SIZE)
+ 403   3                  {
+ 404   4                      g_alarm_monitor.fault_queue[g_alarm_monitor.fault_count++] = fault;
+ 405   4                  }
+ 406   3              }
+ 407   2          }
+ 408   1      
+ 409   1          // 再收集报警故障
+ 410   1          for (i = 0; i < ALARM_COUNT; i++)
+ 411   1          {
+ 412   2              if (g_alarm_monitor.items[i].alarm_active)
+ 413   2              {
+ 414   3                  fault = alarm_map_alarm_fault((AlarmId_e)i);
+ 415   3                  if (fault != FAULT_NONE && g_alarm_monitor.fault_count < ALARM_QUEUE_SIZE)
+ 416   3                  {
+ 417   4                      g_alarm_monitor.fault_queue[g_alarm_monitor.fault_count++] = fault;
+ 418   4                  }
+ 419   3              }
+ 420   2          }
+ 421   1      }
+ 422          
+ 423          /// @brief 根据告警队列更新故障码
+ 424          static void alarm_update_fault(void)
+ 425          {
+C51 COMPILER V9.60.7.0   ALARMMONITOR                                                      10/20/2026 17:28:30 PAGE 8   
+
+ 426   1          // 构建活跃故障码队列
+ 427   1          alarm_build_queue();
+ 428   1      
+ 429   1          // 无活跃故障
+ 430   1          if (g_alarm_monitor.fault_count == 0)
+ 431   1          {
+ 432   2              // 清除故障码(通信超时故障不由告警模块管理, 不清除)
+ 433   2              if (g_run_state.fault_code != FAULT_NONE &&
+ 434   2                  !(FAULT_GET_LEVEL(g_run_state.fault_code) == FAULT_LEVEL_3 &&
+ 435   2                    FAULT_GET_CODE(g_run_state.fault_code) == FAULT3_COMM_STOP))
+ 436   2              {
+ 437   3                  ext_clear_fault();
+ 438   3              }
+ 439   2              g_alarm_monitor.rotate_index = 0;
+ 440   2              return;
+ 441   2          }
+ 442   1      
+ 443   1          // 修正轮转索引越界
+ 444   1          if (g_alarm_monitor.rotate_index >= g_alarm_monitor.fault_count)
+ 445   1          {
+ 446   2              g_alarm_monitor.rotate_index = 0;
+ 447   2          }
+ 448   1      
+ 449   1          // 设置当前轮转位置的故障码到运行状态
+ 450   1          g_run_state.fault_code = g_alarm_monitor.fault_queue[g_alarm_monitor.rotate_index];
+ 451   1      }
+ 452          
+ 453          /************************ 公开接口 ************************/
+ 454          
+ 455          /// @brief 初始化告警模块
+ 456          void AlarmMonitor_Init(void)
+ 457          {
+ 458   1          memset(&g_alarm_monitor, 0, sizeof(AlarmMonitor_t));
+ 459   1      
+ 460   1          s_ovp_filtered = 0;
+ 461   1          s_ovp_volt_cv  = 0;
+ 462   1          s_ovp_inited   = 0;
+ 463   1      
+ 464   1          g_alarm_evt       = ALARM_EVT_NONE;
+ 465   1          g_alarm_evt_value = 0;
+ 466   1          g_alarm_evt_limit = 0;
+ 467   1      }
+ 468          
+ 469          /// @brief 告警检测处理(1ms周期调用)
+ 470          void AlarmMonitor_Process(void)
+ 471          {
+ 472   1          if (g_motor_cfg == NULL)
+ 473   1          {
+ 474   2              return;
+ 475   2          }
+ 476   1      
+ 477   1          alarm_check_voltage();
+ 478   1          alarm_check_current();
+ 479   1          alarm_check_drv_temp();
+ 480   1          alarm_check_speed();
+ 481   1          alarm_check_water();
+ 482   1      
+ 483   1          alarm_update_fault();
+ 484   1      }
+ 485          
+ 486          /// @brief 设置浸水检测状态
+ 487          void AlarmMonitor_SetWaterState(uint8_t drv_water, uint8_t mot_water)
+C51 COMPILER V9.60.7.0   ALARMMONITOR                                                      10/20/2026 17:28:30 PAGE 9   
+
+ 488          {
+ 489   1          g_alarm_monitor.water_drv_state = drv_water ? 1 : 0;
+ 490   1          g_alarm_monitor.water_mot_state = mot_water ? 1 : 0;
+ 491   1      }
+ 492          
+ 493          /// @brief 读取当前故障码并切换到下一个(轮流上报)
+ 494          uint8_t AlarmMonitor_GetActiveFault(void)
+ 495          {
+ 496   1          uint8_t fault = g_run_state.fault_code;
+ 497   1          AlarmMonitor_RotateNext();
+ 498   1          return fault;
+ 499   1      }
+ 500          
+ 501          /// @brief 获取告警队列中活跃故障码数量
+ 502          uint8_t AlarmMonitor_GetFaultCount(void)
+ 503          {
+ 504   1          return g_alarm_monitor.fault_count;
+ 505   1      }
+ 506          
+ 507          /// @brief 获取告警队列中指定索引的故障码
+ 508          uint8_t AlarmMonitor_GetFaultAt(uint8_t index)
+ 509          {
+ 510   1          if (index < g_alarm_monitor.fault_count)
+ 511   1          {
+ 512   2              return g_alarm_monitor.fault_queue[index];
+ 513   2          }
+ 514   1          return FAULT_NONE;
+ 515   1      }
+ 516          
+ 517          /// @brief 切换到下一个故障码(每次读取时调用)
+ 518          void AlarmMonitor_RotateNext(void)
+ 519          {
+ 520   1          if (g_alarm_monitor.fault_count == 0)
+ 521   1          {
+ 522   2              return;
+ 523   2          }
+ 524   1          g_alarm_monitor.rotate_index++;
+ 525   1          if (g_alarm_monitor.rotate_index >= g_alarm_monitor.fault_count)
+ 526   1          {
+ 527   2              g_alarm_monitor.rotate_index = 0;
+ 528   2          }
+ 529   1          g_run_state.fault_code = g_alarm_monitor.fault_queue[g_alarm_monitor.rotate_index];
+ 530   1      }
+ 531          
+ 532          /// @brief 清除指定告警项
+ 533          void AlarmMonitor_ClearAlarm(AlarmId_e id)
+ 534          {
+ 535   1          if (id < ALARM_COUNT)
+ 536   1          {
+ 537   2              g_alarm_monitor.items[id].alarm_cnt = 0;
+ 538   2              g_alarm_monitor.items[id].stop_cnt = 0;
+ 539   2              g_alarm_monitor.items[id].alarm_active = 0;
+ 540   2              g_alarm_monitor.items[id].stop_active = 0;
+ 541   2          }
+ 542   1      }
+ 543          
+ 544          /// @brief 清除所有告警
+ 545          void AlarmMonitor_ClearAll(void)
+ 546          {
+ 547   1          uint8_t i;
+ 548   1          for (i = 0; i < ALARM_COUNT; i++)
+ 549   1          {
+C51 COMPILER V9.60.7.0   ALARMMONITOR                                                      10/20/2026 17:28:30 PAGE 10  
+
+ 550   2              g_alarm_monitor.items[i].alarm_cnt = 0;
+ 551   2              g_alarm_monitor.items[i].stop_cnt = 0;
+ 552   2              g_alarm_monitor.items[i].alarm_active = 0;
+ 553   2              g_alarm_monitor.items[i].stop_active = 0;
+ 554   2          }
+ 555   1      }
+ 556          
+ 557          /// @brief 获取 OVP 输入电源电压(0.01V)，未采样时返回0
+ 558          uint16_t AlarmMonitor_GetInputVoltageCv(void)
+ 559          {
+ 560   1          return s_ovp_volt_cv;
+ 561   1      }
+ 562          
+ 563          /// @brief 获取 NTC 驱动模块温度(0.1℃)，NTC_TEMP_ERR=9999 表示无效
+ 564          int16_t AlarmMonitor_GetNtcTempX10(void)
+ 565          {
+ 566   1          return mcFocCtrl.NTCTempNum;
+ 567   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   2674    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =    102      40
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

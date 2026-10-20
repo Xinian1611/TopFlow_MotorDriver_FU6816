@@ -1,0 +1,244 @@
+C51 COMPILER V9.60.7.0   UART                                                              10/20/2026 16:09:20 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE UART
+OBJECT MODULE PLACED IN .\Output\UART.obj
+COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\User\source\Hardware\UART.c LARGE OMF2 OPTIMIZE(8,SPEED) BROWSE
+                    - INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include;..\User\source\RingBuffer) DEBUG PRINT(.\Listings\UART.lst) TA
+                    -BS(2) OBJECT(.\Output\UART.obj)
+
+line level    source
+
+   1          /**
+   2           * @copyright (C) COPYRIGHT 2022 Fortiortech Shenzhen
+   3           * @file      xxx.c
+   4           * @author    Fortiortech  Appliction Team
+   5           * @since     Create:2022-08-05
+   6           * @date      Last modify:2022-08-05
+   7           * @note      Last modify author is Leo.li
+   8           * @brief
+   9           */
+  10           
+  11          #include <definition.h>            /* 新增 */
+  12          #include <Customer.h>              /* 新增：DEBUG_UART_OR_CAN */
+  13          #include <CAN.h>                   /* 新增：模式2 需要 can_hw_send / CAN_SR / TXING */
+  14          #include <UART.h>
+  15          
+  16          #define             USART1_INIT    0
+  17          #define             USART2_INIT    1
+  18          #define             USART_INIT     USART1_INIT
+  19          
+  20          /* ==================== CAN 调试文本通道（DEBUG_UART_OR_CAN == 2 时启用）====================
+  21           * printf 的字符先进 8 字节小缓冲，满 8 字节或遇到 '\n' 就发一帧标准帧 ID=CAN_DEBU
+             -G_TEXT_ID。
+  22           * 发送是“忙就丢”的非阻塞写法：CAN_SR.TXING 还高就整帧丢掉并计数，绝不进 CA
+             -N_Send 里的
+  23           * 超时等待 —— 否则总线对端不 ACK 时每帧都要空转上万次循环，主循环和 1ms �
+             -��拍会被拖垮。
+  24           * 纪律：printf 只能在主循环里调，任何中断里都不能进这里。
+  25           */
+  26          #if (DEBUG_UART_OR_CAN == 2)
+              static uint8    xdata g_dbgTxBuf[8];
+              static uint8    xdata g_dbgTxLen = 0;
+              volatile uint16 xdata g_dbgTxDrop = 0;
+              
+              static void DebugCanFlush(void)
+              {
+                  if (g_dbgTxLen == 0)
+                  {
+                      return;
+                  }
+              
+                  while (g_dbgTxLen < 8)                       /* 补 0 对齐 8 字节 */
+                  {
+                      g_dbgTxBuf[g_dbgTxLen++] = 0x00;
+                  }
+              
+                  if (ReadBit(CAN_SR, TXING))                  /* 上一帧还没发完 → 丢这一帧，不阻塞 */
+                  {
+                      g_dbgTxDrop++;
+                  }
+                  else
+                  {
+                      (void)can_hw_send(CAN_DEBUG_TEXT_ID, g_dbgTxBuf, 8);
+                  }
+C51 COMPILER V9.60.7.0   UART                                                              10/20/2026 16:09:20 PAGE 2   
+
+              
+                  g_dbgTxLen = 0;
+              }
+              #endif
+  55          
+  56          
+  57          /** 
+  58           * @brief        Uart2初始化函数
+  59           * @param        None
+  60           * @return       none
+  61           * @author       Marcel
+  62           * @date         2022-07-13
+  63           * @version      1.0   
+  64           * @property     Public
+  65          */
+  66          void UART2_Init(void)
+  67          {
+  68   1          SetBit(PH_SEL , UART2EN);   /* 端口复用为 UART2 */
+  69   1      
+  70   1          /*  新增：UART2 功能转移，TXD2/RXD2 由 P3.7/P3.6 挪到 P0.0/P0.1
+  71   1             PH_SEL1.UART2CH1 = 1 → P37-->P00(TXD2S)   P36-->P01(RXD2S)
+  72   1             见 FU68xx_6_MCU.h:1251  */
+  73   1          SetBit(PH_SEL1, UART2CH1);
+  74   1      
+  75   1          /*  新增：RXD2(P0.1) 配成输入并软件上拉，避免悬空误触发起始位；
+  76   1             TXD2(P0.0) 由 UART2 外设驱动，不用配输出使能 */
+  77   1          ClrBit(P0_OE , P01);
+  78   1          SetBit(P0_PU , P01);
+  79   1          SetBit(P0_OE , P00);        /* ★ TXD2 = P0.0 输出使能（对照 dir_usart.c:74） */
+  80   1      
+  81   1      #if 0   /* P3.6/P3.7 已不用（板上接外部晶振），保留作参考 */
+                  ClrBit(P3_OE , P36);        //输入使能
+                  SetBit(P3_PU , P36);        //上拉电阻
+                  SetBit(P3_OE , P37);        //输出使能            
+                  SetBit(P3_PU , P37);        //上拉电阻  
+              #endif
+  87   1      
+  88   1          ClrBit(UT2_CR , UT2MOD1); //00-->单线制8bit    01-->8bit uart(波特率可设置)
+  89   1          SetBit(UT2_CR , UT2MOD0); //10-->单线制9bit      11-->9bit uart(波特率可设置)
+  90   1      
+  91   1          ClrBit(UT2_CR , UT2SM2);    //0-->单机通讯      1-->多机通讯；
+  92   1          SetBit(UT2_CR , UT2REN);    //0-->不允许串行输入 1-->允许串行输入，软件清0;
+  93   1          ClrBit(UT2_CR , UT2TB8);  //模式2/3下数据发送第9位，在多机通信中，可用于判断当�
+             -�数据帧的数据是地址还是数据，TB8=0为数据，TB8=1为地址
+  94   1          ClrBit(UT2_CR , UT2RB8);  //模式2/3下数据接收第9位，若SM2=0,作为停止位
+  95   1      
+  96   1          ClrBit(IP3 , PSPI_UT21);  //中断优先级时最低
+  97   1          ClrBit(IP3 , PSPI_UT20);  //中断优先级时最低
+  98   1      //    PSPI_UT21 = 0;              //中断优先级时最低
+  99   1      //    PSPI_UT20 = 0;
+ 100   1      
+ 101   1          ClrBit(UT2_BAUD , BAUD2_SEL);//倍频使能0-->Disable  1-->Enable
+ 102   1      //    ClrBit(UT2_BAUD , UART2CH);  //UART2端口功能转移使能0：P36->RXD P37->TXD 1:P01->RXD P00->TX
+             -D
+ 103   1          ClrBit(UT2_BAUD , UART2IEN); //UART2中断使能0-->Disable  1-->Enable
+ 104   1          UT2_BAUD = 0x000c;           //波特率可设置 = 24000000/(16/(1+ UT_BAUD[BAUD_SEL]))/(UT_BAUD+1)
+ 105   1                                       //9B-->9600 0x000c-->115200 0x0005-->256000
+ 106   1      }
+ 107          
+ 108          void UART1_Init(void)
+ 109          {
+ 110   1          /* ---- ① 端口复用：UART1 从 P0.5(TXD)/P0.6(RXD) 转移到 P1.0(TXDS)/P1.1(RXDS) ---- */
+C51 COMPILER V9.60.7.0   UART                                                              10/20/2026 16:09:20 PAGE 3   
+
+ 111   1          SetBit(PH_SEL , UART1EN);   /* UART1 端口复用总开关，转移后仍然要置 1 */
+ 112   1      
+ 113   1          /* ---- ② P1.0/P1.1 按普通数字口配置（这两脚默认是 LIN/高压脚）---- */
+ 114   1          ClrBit(P1_PU, P10HV_EN);    /* 关 P1.0 高压 PAD → 普通 TTL 电平 */
+ 115   1          ClrBit(P1_PU, P11HV_EN);    /* 关 P1.1 高压 PAD */
+ 116   1          SetBit(P1_OE, P10);         /* P1.0 = TXD → 输出使能（同 UART2_Init 对 P0.0 的写法）*/
+ 117   1          ClrBit(P1_OE, P11);         /* P1.1 = RXD → 输入 */
+ 118   1      
+ 119   1          /* ---- ③ UART1 本体：8bit UART，允许接收，不开中断（printf 轮询 TI）---- */
+ 120   1          UT_MOD1 = 0;                /* 00 单线8bit  01 8bit UART */
+ 121   1          UT_MOD0 = 1;
+ 122   1          SM2 = 0;
+ 123   1          REN = 1;
+ 124   1          TB8 = 0;
+ 125   1          RB8 = 0;
+ 126   1      
+ 127   1          ClrBit(IP3 , PI2C_UT11);    /* 中断优先级最低 */
+ 128   1          ClrBit(IP3 , PI2C_UT10);
+ 129   1      
+ 130   1          ClrBit(UT_BAUD , UART_2xBAUD);
+ 131   1          ES0 = 0;                    /* UART1 中断关：printf 只做查询发送 */
+ 132   1          /*  关键一句：bit12 UART_CH=1 → 端口转移；低 12 位 0x00C → 115200 8N1
+ 133   1             必须整字一次写！不能先 SetBit(UT_BAUD, UART_CH) 再写 0x000c，会被冲掉 */
+ 134   1          UT_BAUD = 0x100c;
+ 135   1      }
+ 136          
+ 137          // void put_char(unsigned char c)
+ 138          // {
+ 139          //     UT2_DR = c;
+ 140          //     while(!ReadBit(UT2_CR , UT2TI));
+ 141          //     ClrBit(UT2_CR , UT2TI);
+ 142          // }
+ 143          void put_char(unsigned char c)
+ 144          {
+ 145   1      #if(USART_INIT == 0)
+ 146   1          UT_DR = c;                              /* UART1 数据寄存器（原来写的是 UART2 的 UT2_DR）
+             -*/
+ 147   1          while(!ReadBit(UT_CR , TI));            /* UART1 发送完成标志：TI = UT_CR^1 */
+ 148   1          ClrBit(UT_CR , TI);
+ 149   1      #elif(USART_INIT == 1)
+                  UT2TI = 0;                    /* 清 UART2 发送完成标志 */
+                  UT2_DR = c;                   /* UART2 数据寄存器 */
+                  while (UT2TI == 0);           /* 等这一字节发完：UT2TI = UT2_CR^1 */
+                  UT2TI = 0;
+              #endif
+ 155   1      }
+ 156          
+ 157          void put_string(unsigned char *str)
+ 158          {
+ 159   1          while(*str != 0)
+ 160   1          {
+ 161   2              put_char(*str);
+ 162   2              str++;
+ 163   2          }
+ 164   1      }
+ 165          
+ 166          char putchar(char c)
+ 167          {
+ 168   1      #if (DEBUG_UART_OR_CAN == 1)
+ 169   1          /* 【模式1：UART 调试】UART1 = P0.5(TXD) / P0.6(RXD)，115200 8N1。
+ 170   1           * 每字符阻塞等 TI（约 87us/字符 @115200），调试期够用。
+ 171   1           * P0.5/P0.6 与 MT6701 的硬件 I2C 是同一对脚，用串口期间不要调 MT6701_Init()。*/
+C51 COMPILER V9.60.7.0   UART                                                              10/20/2026 16:09:20 PAGE 4   
+
+ 172   1          #if(USART_INIT == 0)
+ 173   1              TI = 0;                             /* 清掉上一次的完成标志，作为本次发送起点 *
+             -/
+ 174   1              UT_DR = (unsigned char)c;
+ 175   1              while (TI == 0)                     /* 等这一字节发完 */
+ 176   1              {
+ 177   2                  ;
+ 178   2              }
+ 179   1              TI = 0;
+ 180   1          #elif(USART_INIT == 1)
+                      UT2TI = 0;
+                      UT2_DR = (unsigned char)c;
+                      while (UT2TI == 0)
+                      {
+                          ;
+                      }
+                      UT2TI = 0;
+                  #endif
+ 189   1      #elif (DEBUG_UART_OR_CAN == 2)
+                  /* 【模式2：CAN 调试】printf → CAN 标准帧文本 */
+                  g_dbgTxBuf[g_dbgTxLen++] = (uint8)c;
+                  if ((g_dbgTxLen >= 8) || (c == '\n'))
+                  {
+                      DebugCanFlush();
+                  }
+              #else
+                  /* 【模式0：调试关闭】*/
+                  (void)c;
+              #endif
+ 200   1      
+ 201   1          return (c);
+ 202   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    232    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

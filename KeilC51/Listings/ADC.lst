@@ -1,0 +1,85 @@
+C51 COMPILER V9.60.7.0   ADC                                                               10/20/2026 17:28:32 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE ADC
+OBJECT MODULE PLACED IN .\Output\ADC.obj
+COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\User\source\Hardware\ADC.c LARGE OMF2 OPTIMIZE(8,SPEED) BROWSE 
+                    -INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include;..\User\source\RingBuffer) DEBUG PRINT(.\Listings\ADC.lst) TABS
+                    -(2) OBJECT(.\Output\ADC.obj)
+
+line level    source
+
+   1          /**
+   2           * @copyright (C) COPYRIGHT 2022 Fortiortech Shenzhen
+   3           * @file      xxx.c
+   4           * @author    Fortiortech  Appliction Team
+   5           * @since     Create:2022-08-05
+   6           * @date      Last modify:2022-08-05
+   7           * @note      Last modify author is Leo.li
+   8           * @brief
+   9           */
+  10          #include <MyProject.h>
+  11          
+  12          #include <ADC.h>
+  13          
+  14          /**
+  15           * @brief        ADC初始化
+  16           * @date         2022-09-13
+  17           */
+  18          void ADC_Init(void)
+  19          {
+  20   1           /* AD0 = P2.0：新板该脚与 P4.6 相连，本工程不使用 → 不配模拟、不使能通道 *
+             -/
+  21   1          SetBit(P2_AN, PIN3);    //AD1  P2.3  抱闸电磁铁通/断电检测
+  22   1          SetBit(P2_AN, PIN4);    //AD2  P2.4  NTC 温度分压
+  23   1          SetBit(P2_AN, PIN5);    //AD3  P2.5  霍尔信号采集（配模拟输入，通道在下面使能）
+  24   1          ClrBit(P2_OE, PIN5);    //霍尔脚按输入用
+  25   1          SetBit(P2_AN, PIN7);    //AD4  P2.7  单电阻母线电流（AMP0O）
+  26   1          /* AD7 = P3.4：新板未使用 → 不配 */
+  27   1          SetBit(P2_AN , PIN6);   //AD11 P2.6  I_BUS（AMP0O 经 10k + 1uF 滤波）
+  28   1          /* AD6 = P3.3：OVP 输入电源（PWR+）分压检测，网络标名 OVP */
+  29   1          SetBit(P3_AN, PIN3);
+  30   1          ClrBit(P3_OE, PIN3);    //输入脚
+  31   1          /* AD15 是内部 VCC 通道（VOLTAGE_MODE = INTERNAL 时 FOC 用它测母线），不需要配引脚
+             - */
+  32   1          /* P2.3 是三重复用脚（AD1 / AMP2O / DA1）：必须禁止 DA1 输出到 PAD，
+  33   1               否则 DA1 会顶掉抱闸电磁铁的状态检测 */
+  34   1          ClrBit(P2_OE , PIN3);
+  35   1          /****************************************************************/
+  36   1          //通道使能：AD1 抱闸 / AD2 NTC / AD3 霍尔 / AD4 母线电流 / AD6 OVP / AD15 内部VCC
+  37   1          SetBit(ADC_MASK, CH1EN | CH2EN | CH3EN | CH4EN | CH6EN | CH15EN);   
+  38   1      
+  39   1          #if(VOLTAGE_MODE == INTERNAL)
+  40   1          {
+  41   2              #if(VOLTAGE_SCALE == Ratio_6_5)
+  42   2              SetBit(ADC_CR, ADCRATIO);           //
+  43   2              #else
+                      ClrBit(ADC_CR, ADCRATIO);
+                      #endif
+  46   2          }
+  47   1          #endif
+  48   1          SetBit(ADC_CR, ADCALIGN);       //ADC数据次高位对齐使能0-->Disable 1-->Enable
+  49   1          ClrBit(ADC_CR, ADCIE);          //ADC中断使能
+  50   1          SetBit(ADC_CR, ADCEN);          //Enable ADC0
+  51   1      }
+C51 COMPILER V9.60.7.0   ADC                                                               10/20/2026 17:28:32 PAGE 2   
+
+  52          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =     81    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
