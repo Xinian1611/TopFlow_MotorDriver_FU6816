@@ -140,10 +140,10 @@ typedef enum {
 
 /************************ 拖钓电机消息载荷长度定义(不含公共头部) ************************/
 #define EXT_MSG_LEN_CMD        8      // 指令报文载荷长度
-#define EXT_MSG_LEN_STATUS     10     // 状态报文载荷长度(控制1+转速2+电流2+功率2+故障1+闭环反馈2)
+#define EXT_MSG_LEN_STATUS     11     // 状态报文载荷长度：控制1+转速2+电流2+功率2+故障1+闭环2+堵转1
 #define EXT_MSG_LEN_HEARTBEAT  0      // 心跳报文载荷长度(协议仅公共头部,无额外字段)
 #define EXT_MSG_LEN_LOG        32     // 日志报文载荷长度
-#define EXT_MSG_LEN_CONFIG     88     // 配置报文载荷长度
+#define EXT_MSG_LEN_CONFIG     96     // 配置报文载荷长度：读/应答/保留8 + 正文88
 #define EXT_MSG_LEN_CFG_RSP    8      // 配置应答报文载荷长度
 
 // 计算多帧帧数
@@ -295,6 +295,7 @@ typedef struct {
     uint8_t fault_code;        // Byte7: 故障代码
     uint8_t closed_loop_hi;    // Byte8: 闭环反馈高字节(转向0.01°，升降0.1%)
     uint8_t closed_loop_lo;    // Byte9: 闭环反馈低字节
+    uint8_t stall;             // Byte10: 0=未堵转 1=堵转
 } ExtStatusMsg_t;
 
 // 心跳报文载荷

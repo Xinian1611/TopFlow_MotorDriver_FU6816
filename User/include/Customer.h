@@ -16,35 +16,46 @@
                                    0. 调试通道选择（全工程唯一开关）
    ============================================================================================================================
    DEBUG_UART_OR_CAN : 0 = 关闭调试，CAN 正常通信（量产 / 正式跑电机）
-                       1 = UART 调试（printf → UART1：P0.5=TXD / P0.6=RXD，115200 8N1）
-                       2 = CAN  调试（printf → CAN 标准帧 ID 0x1F8，8 字节 ASCII 分包）
-
-   派生关系（）：
-     Customer_Debug.h : DBG_MODE            = 模式1 → DBG_UART，其余 → DBG_DISABLE
-     CAN.h            : CAN_DEBUG_PRINTF_EN = (DEBUG_UART_OR_CAN != 0)
-                        CAN_DEBUG_FRAME_EN  = (DEBUG_UART_OR_CAN == 2)
-                        CAN_APP_PROTOCOL_EN = 1（固定：正常 CAN 通信常开，电机靠它起停）
-     UART.c           : putchar()           = 模式1 → UART1；模式2 → CAN 文本帧；模式0 → 不碰硬件
-
-   引脚冲突提醒：模式1 占用 P0.5/P0.6，与 MT6701 硬件 I2C 同脚
-                 → 串口调试期间不要调用 MT6701_Init() / MT6701_Probe()
+                       1 = UART 调试
+                       2 = CAN  调试
    ============================================================================================================================ */
 #define   DEBUG_UART_OR_CAN    1     //(0:禁用调试正常can通信，  1：uart调试，  2：can调试)
 
-/* ============================================================================================================================
-   位置闭环选择
-     0：不启用，保持原速度/电流闭环
-     1：角度位置闭环（转向电机）
-     2：位置百分比闭环（升降/折叠电机）
-   ============================================================================================================================ */
-#ifndef MOTOR_POSITION_CLOSE_LOOP
-#define MOTOR_POSITION_CLOSE_LOOP   1
+/* 0=驱动 1=转向 2=升降 3=折叠 */
+#ifndef MOTOR_DEV_NUM
+#define MOTOR_DEV_NUM   1
 #endif
 
-#ifndef MOTOR_DEV_NUM     //0 = 驱动     1 = 转向     2 = 升降     3 = 折叠
-#define MOTOR_DEV_NUM               1
+#if (MOTOR_DEV_NUM == 1)                 /* 转向 */
+  #define MOTOR_POSITION_CLOSE_LOOP  0              /* 0=不启用位置环，     1=角度位置环0.01°，   2=百分比位置环0.1% */
+  #define MOTOR_POS_CMD_EN           1              /* 0=不接收CAN位置指令，1=接收(转向用CmdPosition) */
+  #define MOTOR_LOOP_FB_MODE         1              /* 0=反馈0，           1=角度raw0.01°，      2=百分比raw0.1%，   3=折叠状态0-4 */
+  #define MOTOR_FOLD_STATE           0              /* 0=非折叠机，        1=折叠机(维护g_fold_state 0-4) */
+#elif (MOTOR_DEV_NUM == 2)               /* 升降 */
+  #define MOTOR_POSITION_CLOSE_LOOP  0   /* 不做位置环（无刷版本升降没有MT6701） */
+  #define MOTOR_POS_CMD_EN           0   /* 主机用速度，不接位置指令 */
+  #define MOTOR_LOOP_FB_MODE         0   /* 无 MT6701：状态闭环报 0；以后加传感器再改 2 */
+  #define MOTOR_FOLD_STATE           0
+#elif (MOTOR_DEV_NUM == 3)               /* 折叠 */
+  #define MOTOR_POSITION_CLOSE_LOOP  0   /* 不做位置环 */
+  #define MOTOR_POS_CMD_EN           0
+  #define MOTOR_LOOP_FB_MODE         3   /* 状态闭环报 0-4 状态码 */
+  #define MOTOR_FOLD_STATE           1
+#else                                    /* 驱动 */
+  #define MOTOR_POSITION_CLOSE_LOOP  0
+  #define MOTOR_POS_CMD_EN           0
+  #define MOTOR_LOOP_FB_MODE         0
+  #define MOTOR_FOLD_STATE           0
 #endif
 
+/* ==================== 保护开关 ==================== */
+#ifndef MOTOR_LOCKED_ROTOR
+#define MOTOR_LOCKED_ROTOR   1    /* 堵转（到位）检测开关：0=关闭，1=开启 */
+#endif
+
+#ifndef MOTOR_LIMIT_SWITCH
+#define MOTOR_LIMIT_SWITCH   0      /* 0=限位保护不生效，1=生效 */
+#endif
  /**********************基础参数*****************************
  1. 芯片参数
  2. 电机参数
@@ -119,7 +130,7 @@
  * @param (VREF4_5)       参考电压设置为4.5V
  * @param (VREF5_0)       参考电压设置为5.0V
  */
-#define HW_ADC_VREF                    (VREF4_5)        ///< (V)  ADC参考电压
+#define HW_ADC_VREF                    (VREF3_0)        ///< (V)  ADC参考电压
 
 /**
  * 电流采样模式选择
@@ -475,10 +486,10 @@
  * 0：ONOFFTEST_REF 生效 —— 固定给定运行，台架测试用（上电即运行）
  * 1：ONOFFTEST_REF 不生效 —— 走正常调速源（当前为 CAN 调速/调试）
  */
-#define MOTOR_TEXT_OR_DEBUG            (1)
+#define MOTOR_TEXT_OR_DEBUG            (0)
 
 /* -----启停测试参数配置----- */
-#define ONOFFTEST_REF                  S_Value(600)        ///< (RPM)速度环测试给定，注意闭环方式不同给定值需要更改
+#define ONOFFTEST_REF                  S_Value(300)        ///< (RPM)速度环测试给定，注意闭环方式不同给定值需要更改
 #define ONOFFTEST_CurrentREF           I_Value(10.0)        ///< (A)电流环测试给定，注意闭环方式不同给定值需要更改
 #define ONOFFTEST_PowerREF             (2000)              ///< (W)功率环测试给定，注意闭环方式不同给定值需要更改
 #define ONOFFTEST_ON_TIME              (6000)               ///< (ms) 启动运行时间

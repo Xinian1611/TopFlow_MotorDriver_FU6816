@@ -21,22 +21,32 @@
  ******************************************************************************/
 
 #define AT24CXX_CFG_ADDR              0x0000
-#define WARNING_INFO(enable, time)    (((enable & 0x01) << 6) | (time & 0x3F))
-#define VALUE2TRAN(value)             ((int16_t)(value) - 32767)
+#define WARNING_INFO(enable, time)    (((enable & 0x03) << 6) | (time & 0x3F))
+#define VALUE2TRAN(value)             ((uint16_t)(32767 + (int32)(value)))
 
 #define MOTOR_DRV_CFG_DEFAULT() do { \
         s_dev_cfg.motor_cfg.hw_ver[0]           = 1; \
+        s_dev_cfg.motor_cfg.hw_ver[1]           = 0xFF; \
+        s_dev_cfg.motor_cfg.hw_ver[2]           = 0xFF; \
+        s_dev_cfg.motor_cfg.hw_ver[3]           = 0xFF; \
         s_dev_cfg.motor_cfg.sw_ver[0]           = 1; \
-        s_dev_cfg.motor_cfg.proto_ver[0]        = 1; \  
+        s_dev_cfg.motor_cfg.sw_ver[1]           = 0xFF; \
+        s_dev_cfg.motor_cfg.sw_ver[2]           = 0xFF; \
+        s_dev_cfg.motor_cfg.sw_ver[3]           = 0xFF; \
+        s_dev_cfg.motor_cfg.proto_ver[0]        = 1; \
+        s_dev_cfg.motor_cfg.proto_ver[1]        = 0xFF; \
+        s_dev_cfg.motor_cfg.proto_ver[2]        = 0xFF; \
+        s_dev_cfg.motor_cfg.proto_ver[3]        = 0xFF; \
         s_dev_cfg.motor_cfg.ctrl_type           = DEV_CTRL_TYPE; \
-        s_dev_cfg.motor_cfg.speed_kp            = SKP; \
-        s_dev_cfg.motor_cfg.speed_ki            = SKI; \
-        s_dev_cfg.motor_cfg.speed_kd            = SKD; \
         s_dev_cfg.motor_cfg.motor_type          = MOTOR_SELECT; \
-        s_dev_cfg.motor_cfg.reserved3           = BATTERY_TYPE_DEFAULT; \
+        s_dev_cfg.motor_cfg.reserved3           = 0xFF; \
+        memset(s_dev_cfg.motor_cfg.reserved1, 0xFF, sizeof(s_dev_cfg.motor_cfg.reserved1)); \
+        memset(s_dev_cfg.motor_cfg.reserved2, 0xFF, sizeof(s_dev_cfg.motor_cfg.reserved2)); \
+        memset(s_dev_cfg.motor_cfg.reserved4, 0xFF, sizeof(s_dev_cfg.motor_cfg.reserved4)); \
+        memset(s_dev_cfg.motor_cfg.reserved5, 0xFF, sizeof(s_dev_cfg.motor_cfg.reserved5)); \
         s_dev_cfg.motor_cfg.speed_precision     = SPEED_PRECISION; \
         s_dev_cfg.motor_cfg.max_speed           = MAX_SPEED; \
-        s_dev_cfg.motor_cfg.idle_speed          = IDLE_SPEED; \ 
+        s_dev_cfg.motor_cfg.idle_speed          = IDLE_SPEED; \
         s_dev_cfg.motor_cfg.drv_water_alarm.value   = WARNING_INFO(0, 30); \
         s_dev_cfg.motor_cfg.drv_water_stop.value    = WARNING_INFO(0, 30); \
         s_dev_cfg.motor_cfg.mot_water_alarm.value   = WARNING_INFO(0, 30); \
@@ -46,9 +56,9 @@
         s_dev_cfg.motor_cfg.rated_voltage       = 3600; \
         s_dev_cfg.motor_cfg.rated_current       = 10000; \
         s_dev_cfg.motor_cfg.fwd_power_pct       = 100; \
-        s_dev_cfg.motor_cfg.rev_power_pct       = 100; \  
+        s_dev_cfg.motor_cfg.rev_power_pct       = 100; \
         s_dev_cfg.motor_cfg.max_voltage         =  3600; \
-        s_dev_cfg.motor_cfg.min_voltage         =  3000; \  
+        s_dev_cfg.motor_cfg.min_voltage         =  3000; \
         s_dev_cfg.motor_cfg.max_current         = 10000; \
         s_dev_cfg.motor_cfg.volt_high_alarm     = VALUE2TRAN(3600); \
         s_dev_cfg.motor_cfg.volt_low_alarm      = VALUE2TRAN(3000); \
@@ -62,17 +72,17 @@
         s_dev_cfg.motor_cfg.curr_stop.value     = WARNING_INFO(0, 30); \
         s_dev_cfg.motor_cfg.drv_temp_high_alarm = VALUE2TRAN(100); \
         s_dev_cfg.motor_cfg.drv_temp_low_alarm  = VALUE2TRAN(0); \
-        s_dev_cfg.motor_cfg.drv_temp_high_stop  = VALUE2TRAN(0); \  
+        s_dev_cfg.motor_cfg.drv_temp_high_stop  = VALUE2TRAN(0); \
         s_dev_cfg.motor_cfg.drv_temp_alarm.value= WARNING_INFO(0, 30); \
-        s_dev_cfg.motor_cfg.drv_temp_stop.value = WARNING_INFO(0, 30); \    
+        s_dev_cfg.motor_cfg.drv_temp_stop.value = WARNING_INFO(0, 30); \
         s_dev_cfg.motor_cfg.mot_temp_high_alarm = VALUE2TRAN(100); \
         s_dev_cfg.motor_cfg.mot_temp_low_alarm  = VALUE2TRAN(0); \
         s_dev_cfg.motor_cfg.mot_temp_high_stop  = VALUE2TRAN(0); \
         s_dev_cfg.motor_cfg.mot_temp_alarm.value= WARNING_INFO(0, 30); \
         s_dev_cfg.motor_cfg.mot_temp_stop.value = WARNING_INFO(0, 30); \
-        s_dev_cfg.motor_cfg.overspeed_alarm     = VALUE2TRAN(100); \
-        s_dev_cfg.motor_cfg.stall_alarm         = VALUE2TRAN(0); \
-        s_dev_cfg.motor_cfg.overspeed_stop      = VALUE2TRAN(0); \
+        s_dev_cfg.motor_cfg.overspeed_alarm     = 100; \
+        s_dev_cfg.motor_cfg.stall_alarm         = 0; \
+        s_dev_cfg.motor_cfg.overspeed_stop      = 0; \
         s_dev_cfg.motor_cfg.speed_alarm.value   = WARNING_INFO(0, 30); \
         s_dev_cfg.motor_cfg.speed_stop.value    = WARNING_INFO(0, 30); \
     } while(0)
@@ -160,8 +170,10 @@ void *DevConfig_GetParam(void)
 /// @retval None
 void DevConfig_ApplySpeedPI(void)
 {
-    PI1_KP = g_motor_cfg->speed_kp;
-    PI1_KI = g_motor_cfg->speed_ki;
+    /* 0015 配置里没有 PI 字段，PI 用编译期默认值；
+     * 如果还要在线调 PI，另开 EEPROM 区/私有报文，不要占 CAN 保留字节。 */
+    PI1_KP = SKP;
+    PI1_KI = SKI;
 }
 
 

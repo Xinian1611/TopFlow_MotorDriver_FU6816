@@ -584,12 +584,11 @@ void Motor_Static_Open(void)
     FOC__ETHETA         = mcFocCtrl.AlignAngle_Temp - 4096;
     /*启动电流、KP、KI、FOC_EKP、FOC_EKI*/
     FOC_IDREF           = ID_Start_CURRENT;                         // D轴启动电流
-#if (MOTOR_POSITION_CLOSE_LOOP != 0)
-    /* 位置闭环需要足够启动转矩把转速拉过 MOTOR_LOOP_RPM(100rpm)，
-       1.25A 太小会一直停在开环慢转；先给 5A，仍不够再改 IQ_Start_CURRENT */
-    mcFocCtrl.IqRef     = IQ_Start_CURRENT >> 1;                 // Q轴启动电流(位置模式)
+#if (MOTOR_DEV_NUM == 1)
+    /* 只有转向位置环需要更大的启动转矩；升降/折叠是速度模式，用普通启动电流 */
+    mcFocCtrl.IqRef     = IQ_Start_CURRENT >> 1;
 #else
-    mcFocCtrl.IqRef     = IQ_Start_CURRENT >> 3;                 // Q轴启动电流
+    mcFocCtrl.IqRef     = IQ_Start_CURRENT >> 3;
 #endif
     FOC__UD             = mcFocCtrl.ud_align;
     FOC_DKP             = DKP;

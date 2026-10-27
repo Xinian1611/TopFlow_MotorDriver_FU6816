@@ -41,7 +41,8 @@ uint8 PositionProtect_LimitCheck(float target, float fb, uint8 posActive)
 /**
  * @brief  电流幅值堵转判断
  * @retval POS_PROTECT_STALL / POS_PROTECT_NONE
- * @note   任何 MOE=1 的状态都判，不看位置/速度/闭环状态。
+ * @note   任何 MOE=1 的状态都判，不看位置/闭环状态；
+ *         但要求 |SpeedFlt| < POS_STALL_SPEED_RPM，避免高速大电流误判。
  *         用 sqrt(Id^2 + Iq^2)，不能只看 Iq：Id 大时会低估实际电流。
  */
 uint8 PositionProtect_StallCheck(void)
@@ -66,7 +67,8 @@ uint8 PositionProtect_StallCheck(void)
     /* 一阶低通，滤掉 PWM 开关尖峰 */
     s_iqFilt += POS_STALL_CURRENT_LPF * (i_mag - s_iqFilt);
 
-    if (s_iqFilt > POS_STALL_CURRENT_A)          /* 15A */
+    /* 堵转判据：电流超过阈值 + 转速接近 0，两个条件同时满足才计数 */
+    if ((s_iqFilt > POS_STALL_CURRENT_A) && (POS_PROT_ABS_S16(mcFocCtrl.SpeedFlt) < S_Value(POS_STALL_SPEED_RPM)))
     {
         if (s_stallCnt < POS_PROT_STALL_CNT)
         {
@@ -75,6 +77,7 @@ uint8 PositionProtect_StallCheck(void)
 
         if (s_stallCnt >= POS_PROT_STALL_CNT)    /* 30ms */
         {
+            printf("电机堵转\n");
             return POS_PROTECT_STALL;
         }
     }

@@ -34,6 +34,9 @@
 
 //  电机运行状态
 MotorRunState_t xdata g_run_state;
+volatile uint8_t xdata g_motor_stall = 0;
+volatile uint8_t xdata g_fold_state = 0;   /* 折叠状态 0-4；非折叠机保持 0 */
+volatile float xdata g_pos_speed_limit = 0.0f; /* 位置环速度上限 */
 
 
 /******************************************************************************
@@ -101,12 +104,17 @@ void MotorCtrl_Init(void)
 
     // 初始化运行状态
     memset(&g_run_state, 0, sizeof(g_run_state));
-#if (MOTOR_POSITION_CLOSE_LOOP != 0)
-    g_run_state.work_mode = EXT_WORK_MODE_POSITION;
+#if (MOTOR_DEV_NUM == 1)
+    g_run_state.work_mode = EXT_WORK_MODE_POSITION;  /* 转向默认位置模式 */
 #else
-    g_run_state.work_mode = EXT_WORK_MODE_SPEED;
+    g_run_state.work_mode = EXT_WORK_MODE_SPEED;     /* 升降/折叠/驱动默认速度模式 */
 #endif
-    g_run_state.fault_code = FAULT_NONE;   // 状态帧 Byte7 上电应为 0xFF，不是 0x00
+    g_run_state.fault_code = FAULT_NONE;
+    g_motor_stall = 0;
+#if (MOTOR_FOLD_STATE)
+    g_fold_state = 0;
+#endif
+    g_pos_speed_limit = POS_SPEED_MAX_RPM; /* 位置环默认上限，CmdPosition 会覆盖 */
     g_run_state.direction  = FR_MODE;      // 可选：与 mcFocCtrl.FR 对齐
 
     PositionCtrl_Init();                   // 清位置环状态/命令/输出
@@ -120,12 +128,18 @@ void MotorCtrl_SetEstop(uint8_t state)
     g_run_state.is_estop = state;
     if (state)
     {
-        g_pos_cmd_start = 0;               // 位置环停止
-        g_pos_cmd_raw   = 0xFFFF;          // 清目标
-        g_pos_state     = POS_IDLE;        // 状态回空闲
+        g_pos_cmd_start = 0;
+        g_pos_cmd_raw   = 0xFFFF;
+        g_pos_state     = POS_IDLE;
 
         g_run_state.ref = 0;
         g_run_state.run_time = 0;
+        g_motor_stall = 0;
+        /* 1/2 是运动中，停机清 0；3/4 是到位结果，保留给主机看 */
+        if ((g_fold_state == 1) || (g_fold_state == 2))
+        {
+            g_fold_state = 0;
+        }
     }
 }
 
@@ -136,11 +150,16 @@ void MotorCtrl_SetRun(uint8_t state)
 {
     if (state == 0)
     {
-        g_pos_cmd_start = 0;               // 位置环停止
-        g_pos_cmd_raw   = 0xFFFF;          // 清目标
-        g_pos_state     = POS_IDLE;        // 状态回空闲
+        g_pos_cmd_start = 0;
+        g_pos_cmd_raw   = 0xFFFF;
+        g_pos_state     = POS_IDLE;
         g_run_state.ref = 0;
         g_run_state.run_time = 0;
+        /* 1/2 是运动中，停机清 0；3/4 是到位结果，保留给主机看 */
+        if ((g_fold_state == 1) || (g_fold_state == 2))
+        {
+            g_fold_state = 0;
+        }
     }
 
     if (state == g_run_state.is_started)
@@ -150,7 +169,9 @@ void MotorCtrl_SetRun(uint8_t state)
 
     if (state == 1)
     {
-        g_pos_cmd_start = 1;               // 允许位置环启动
+        g_motor_stall = 0;          /* 新起机清堵转，主机下次 GetStall 重新判断 */
+        g_fold_state  = 0;          /* 新起机清折叠状态，等目标重新置 1/2 */
+        g_pos_cmd_start = 1;
     }
 }
 
@@ -178,7 +199,7 @@ void MotorCtrl_SetRun(uint8_t state)
 // }
 void MotorCtrl_SetMode(uint8_t mode)
 {
-#if (MOTOR_POSITION_CLOSE_LOOP != 0)
+#if (MOTOR_POS_CMD_EN)
     if (mode == EXT_WORK_MODE_POSITION)
     {
         if (mode == g_run_state.work_mode)
@@ -186,7 +207,7 @@ void MotorCtrl_SetMode(uint8_t mode)
 
         g_run_state.work_mode = mode;
         g_run_state.ref       = 0;
-        g_pos_cmd_raw         = 0xFFFF;    // 等新目标
+        g_pos_cmd_raw         = 0xFFFF;
         g_pos_state           = POS_IDLE;
         return;
     }
@@ -198,10 +219,10 @@ void MotorCtrl_SetMode(uint8_t mode)
     if (mode == g_run_state.work_mode)
         return;
 
-#if (MOTOR_POSITION_CLOSE_LOOP != 0)
+#if (MOTOR_POS_CMD_EN)
     if (g_run_state.work_mode == EXT_WORK_MODE_POSITION)
     {
-        g_pos_cmd_raw = 0xFFFF;            // 离开位置模式，清目标
+        g_pos_cmd_raw = 0xFFFF;
         g_pos_state   = POS_IDLE;
     }
 #endif
@@ -226,31 +247,43 @@ void MotorCtrl_SetTarget(uint16_t current, uint16_t speed, uint16_t closed_loop)
 {
     int32 v;
     float ref_val;
-#if (MOTOR_POSITION_CLOSE_LOOP == 0)
-    (void)closed_loop;                       /* 模式 0 不用位置目标 */
+    float base;
+#if (!MOTOR_POS_CMD_EN)
+    (void)closed_loop;
 #endif
 
-#if (MOTOR_POSITION_CLOSE_LOOP != 0)
-    /*
-     * 位置目标不依赖 is_started 锁存：
-     * 位置环可能因为“暂时没有目标”把 is_started 清 0，
-     * 目标单独到达时仍要能存进去，由 g_pos_cmd_start 决定是否运动。
-     */
+#if (MOTOR_POS_CMD_EN)
     if ((g_run_state.work_mode == EXT_WORK_MODE_POSITION) &&
         (!g_run_state.is_estop))
     {
-        g_pos_cmd_raw = closed_loop;           // 段字节15-16 才是位置目标
+        int16_t loop_raw = (int16_t)closed_loop;
+        g_pos_cmd_raw = (uint16_t)loop_raw;
+        g_motor_stall = 0;                       /* 新目标清堵转 */
 
-        /* 先按“目标 - 当前反馈”选启动方向，避免开环强拖往反方向顶限位 */
-        if ((g_pos_fb_raw != 0xFFFF) && (closed_loop != g_pos_fb_raw))
+        if ((g_pos_fb_raw != 0xFFFF) && (loop_raw != (int16_t)g_pos_fb_raw))
         {
             if (POS_FB_DIR > 0.0f)
             {
-                g_run_state.direction = (closed_loop > g_pos_fb_raw) ? CW : CCW;
+                g_run_state.direction = (loop_raw > (int16_t)g_pos_fb_raw) ? CW : CCW;
             }
             else
             {
-                g_run_state.direction = (closed_loop > g_pos_fb_raw) ? CCW : CW;
+                g_run_state.direction = (loop_raw > (int16_t)g_pos_fb_raw) ? CCW : CW;
+            }
+        }
+
+        /* 主机在位置模式下用目标转速字段给速度上限，例如 20% -> 440rpm；
+         * 目标转速为 0 时保持默认 POS_SPEED_MAX_RPM。 */
+        v = (int32)speed - 32767;
+        if (v != 0)
+        {
+            base = (g_motor_cfg->max_speed != 0)
+                 ? (float)g_motor_cfg->max_speed : 2200.0f;
+            g_pos_speed_limit = ((v > 0) ? (float)v : (float)(-v))
+                              / 10000.0f * base;
+            if (g_pos_speed_limit < POS_SPEED_MIN_RPM)
+            {
+                g_pos_speed_limit = POS_SPEED_MIN_RPM;
             }
         }
         return;
@@ -275,11 +308,22 @@ void MotorCtrl_SetTarget(uint16_t current, uint16_t speed, uint16_t closed_loop)
                 ref_val = (float)(-v);                             // 存储绝对值
             }
 
-            g_run_state.ref = ref_val / 10000.0f * MOTOR_SPEED_BASE;   /* 0.01% → 比例 → rpm */
+            /* 协议 100% = 主机约定的最大转速(2200)，不是 FOC 的 Q15 基准 4096 */
+            base = (g_motor_cfg->max_speed != 0) ? (float)g_motor_cfg->max_speed : 2200.0f;
+            g_run_state.ref = ref_val / 10000.0f * base;
 
+            #if (MOTOR_FOLD_STATE)
+            if (v != 0)
+            {
+                g_fold_state = (g_run_state.direction == MOTOR_FOLD_STOW_DIR) ? 1 : 2;
+            }
+#endif
             if (v == 0)
             {
                 g_run_state.is_started = 0;                        /* 目标 0% → 自动停机 */
+#if (MOTOR_FOLD_STATE)
+                g_fold_state = 0;
+#endif
             }
         }
         else if (g_run_state.work_mode == EXT_WORK_MODE_CURRENT)
@@ -305,6 +349,30 @@ void MotorCtrl_SetTarget(uint16_t current, uint16_t speed, uint16_t closed_loop)
             }
         }
     }
+}
+
+/// @brief 状态报文 byte18-19：按设备返回闭环反馈 raw
+uint16_t MotorCtrl_GetLoopFeedback(void)
+{
+#if (MOTOR_LOOP_FB_MODE == 1)
+    return (uint16_t)(int16_t)g_pos_fb_raw;      /* 转向：0.01° */
+#elif (MOTOR_LOOP_FB_MODE == 2)
+    return (g_pos_fb_raw == 0xFFFFU) ? 0U : g_pos_fb_raw; /* 升降：0.1% */
+#elif (MOTOR_LOOP_FB_MODE == 3)
+    return (uint16_t)g_fold_state;               /* 折叠：0-4 */
+#else
+    return 0U;
+#endif
+}
+
+/// @brief 状态报文 byte20：0 未堵转，1 堵转
+uint8_t MotorCtrl_GetStall(void)
+{
+#if (MOTOR_LOCKED_ROTOR)
+    return g_motor_stall ? 1U : 0U;
+#else
+    return (mcFaultSource == FaultStall) ? 1U : 0U;
+#endif
 }
 
 /// @brief 更新电机状态

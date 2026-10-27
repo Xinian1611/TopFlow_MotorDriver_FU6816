@@ -21,8 +21,12 @@ SLEEPMODE xdata SleepSet;                ///< 休眠结构体变量
 uint16 xdata Power_Currt;
 uint8 Flag_Single_Mode = 0;
 
-#if MOTOR_LOCKED_ROTOR
-static uint16 xdata s_stallTick = 0;     /* 堵转判断 10ms 分频 */
+uint16 I_Num4;
+uint16 I_Num11;
+uint16 ticks_1ms;
+
+#if (MOTOR_LOCKED_ROTOR)
+static uint16 xdata s_stallTick = 0;     /* 到位堵转判断 10ms 分频 */
 #endif
 
 #if MOTOR_LIMIT_SWITCH
@@ -531,26 +535,6 @@ void Speed_response(void)
                 {
 #if (Weak_MagneticEn == Disable)
                     {
-                        // /* 估算转速远超给定 → 观测器发散,退回强拖重新起 */
-                        // if ((mcFocCtrl.Ref > 0) &&
-                        //     ((mcFocCtrl.SpeedFlt > (mcFocCtrl.Ref * 3)) ||      /* 飞了 */
-                        //     (ReadBit(FOC_CR0, OMAF))))                          /* 或硬件过速标志 */
-                        // {
-                        //     mcFocCtrl.CtrlMode = 0;
-                        //     SetBit(FOC_CR1, EFAE);
-                        //     SetBit(FOC_CR1, ANGM);        /* ★ 别忘了角度源 */
-                        //     FOC_IQREF = 0;
-                        //     mcFocCtrl.Flg_ATORampEnd = 0; /* 让它重新走一遍交接 */
-                        //     break;
-                        // }
-                        // /* ★ 保护：估算转速与给定符号相反（观测器锁反了）→ 不要加电流，直接退开环重拖 */
-                        // if ((mcFocCtrl.Ref > 0) && (mcFocCtrl.SpeedFlt < 0))
-                        // {
-                        //     mcFocCtrl.CtrlMode = 0;                 /* 退回 CtrlMode 0（只有电流环）*/
-                        //     SetBit(FOC_CR1, EFAE);                  /* 角度退回强制欧米伽 */
-                        //     FOC_IQREF = 0;                          /* 先撤电流 */
-                        //     break;
-                        // }
                         mcFocCtrl.IqSpeedRef = MDU_PI1(refRampOut - mcFocCtrl.SpeedFlt);
                         mcFocCtrl.IqADCCurrentRef = MDU_PI2(Motor_Max_ADCCurrentbus - mcFocCtrl.mcADCCurrentbus); // 限制最大电流
 #if (ADCCurrentbusLitmitEn == Disable)
@@ -584,29 +568,11 @@ void Speed_response(void)
                         {
                             mcFocCtrl.WeakRef = mcFocCtrl.IqSpeedRef;
                         }
-						//   mcFocCtrl.WeakRef = mcFocCtrl.IqSpeedRef;
-                        // // 计算(UD^2+UQ^2)开根号
-                        // mcFocCtrl.sqrtUdq = SqrtUDQ(FOC__UD, FOC__UQ);
-                        // // 根据计算Id Iq分配角度
-                        // mcFocCtrl.Angle = MDU_PI3(_Q15(0.80) - mcFocCtrl.sqrtUdq);
-                        {
-                            uint16 udqNow = SqrtUDQ(FOC__UD, FOC__UQ);
-                            if (udqNow > 0x7FFF)
-                            {
-                                udqNow = 0x7FFF;        // 幅值输出饱和保护，防止回绕成正数导致弱磁反向退出
-                            }
-                            sqrtUdqFlt = MDU_LPF0((int16)udqNow, sqrtUdqFlt, 40);
-                        }
-                        mcFocCtrl.sqrtUdq = (uint16)sqrtUdqFlt;
-                        /* |U|超过阈值 → 负误差 → PI3 输出 0 ~ AMIN 的弱磁角；低于阈值 → 角回 0 */
-                        if (mcFocCtrl.sqrtUdq >= Weak_Mag_UDQ_Ref)
-                        {
-                            mcFocCtrl.Angle = MDU_PI3(-(int16)(mcFocCtrl.sqrtUdq - Weak_Mag_UDQ_Ref));
-                        }
-                        else
-                        {
-                            mcFocCtrl.Angle = MDU_PI3((int16)(Weak_Mag_UDQ_Ref - mcFocCtrl.sqrtUdq));
-                        }
+					    mcFocCtrl.WeakRef = mcFocCtrl.IqSpeedRef;
+                        // 计算(UD^2+UQ^2)开根号
+                        mcFocCtrl.sqrtUdq = SqrtUDQ(FOC__UD, FOC__UQ);
+                        // 根据计算Id Iq分配角度
+                        mcFocCtrl.Angle = MDU_PI3(_Q15(0.80) - mcFocCtrl.sqrtUdq);
                         // 根据角度分配 Id Iq，实现自动弱磁
                         SinCal(mcFocCtrl.WeakRef, mcFocCtrl.Angle, &mcFocCtrl.IdRef, &mcFocCtrl.IqRef);
                         FOC_IQREF = mcFocCtrl.IqRef;
@@ -965,6 +931,14 @@ void TickCycle_1ms(void)
     }
     /* -----母线电流值采样----- */
     Power_Currt = (ADCCurrentbusPort);
+    // ticks_1ms += 1;
+    // if(ticks_1ms == 99)
+    // {
+    //     I_Num11 = (Power_Currt & 0x7ff4) >> 3;
+    //     I_Num4 = (ADC4_DR & 0x7ff4) >> 3;
+    //     printf("ADC11 = %d, ADC4 = %d\r\n", I_Num11, I_Num4);
+    //     ticks_1ms = 0;
+    // }
 
     if (Power_Currt > mcCurOffset.Iw_busOffset)
     {
@@ -1015,17 +989,23 @@ void TickCycle_1ms(void)
     /* 故障保护函数功能，如过欠压保护、启动保护、缺相、堵转等 */
     Fault_Detection();
 
-#if MOTOR_LOCKED_ROTOR
-    /* 堵转：只看电流幅值，和位置/速度/开环/闭环无关。
-       10ms 一次，15A 持续 30ms 直接报 FaultStall。 */
+#if (MOTOR_LOCKED_ROTOR)
+    /* 到位堵转：10ms 一次，只置状态 byte20 并停机，不锁 FaultStall。
+     * 主机一键流程看到 GetStall()=1 后会发 CmdStop，下次 CmdSpeed/CmdPosition 会清标志。 */
     if (++s_stallTick >= 10)
     {
         s_stallTick = 0;
 
-        if (PositionProtect_StallCheck() == POS_PROTECT_STALL)
+        if (g_run_state.is_started &&
+            (PositionProtect_StallCheck() == POS_PROTECT_STALL))
         {
-            Fault.Stall.Type = 50;
-            mcFaultSource = FaultStall;
+            g_motor_stall = 1;
+            g_run_state.ref = 0.0f;
+            g_run_state.is_started = 0;
+
+#if (MOTOR_FOLD_STATE)
+            g_fold_state = (g_run_state.direction == MOTOR_FOLD_STOW_DIR) ? 3 : 4;
+#endif
         }
     }
 #endif

@@ -28,7 +28,8 @@ static uint8_t xdata s_ovp_inited   = 0;   /* 首次采样直接装载，避免�
 /// @retval 1=使能 0=未使能
 static uint8_t alarm_is_enabled(WorningInfo_t info)
 {
-    return (info.reg.enable != 0) ? 1 : 0;
+    /* 0=无操作，1=使能，2=禁止，3=无效 */
+    return (info.reg.enable == 1) ? 1 : 0;
 }
 
 /// @brief 获取WorningInfo_t超时时间(ms)
@@ -138,19 +139,23 @@ static void alarm_check_voltage(void)
     uint8_t  was_active;
 
     volt_cv = alarm_read_ovp_cv();
-    alarm_get_voltage_limits(&low_alarm, &high_alarm, &high_stop);
+    low_alarm  = (uint16_t)TRAN2VALUE(g_motor_cfg->volt_low_alarm);
+    high_alarm = (uint16_t)TRAN2VALUE(g_motor_cfg->volt_high_alarm);
+    high_stop  = (uint16_t)TRAN2VALUE(g_motor_cfg->volt_high_stop);
 
-    /* 电压高报警 */
-    was_active = g_alarm_monitor.items[ALARM_VOLT_HIGH].alarm_active;
-    alarm_update_timer(&g_alarm_monitor.items[ALARM_VOLT_HIGH].alarm_cnt,
-                       &g_alarm_monitor.items[ALARM_VOLT_HIGH].alarm_active,
-                       (volt_cv >= high_alarm) ? 1 : 0,
-                       BAT_ALARM_DELAY_MS);
-    if ((was_active == 0) && (g_alarm_monitor.items[ALARM_VOLT_HIGH].alarm_active != 0))
+    if (alarm_is_enabled(g_motor_cfg->volt_alarm))
     {
-        g_alarm_evt_value = volt_cv;
-        g_alarm_evt_limit = high_alarm;
-        g_alarm_evt       = ALARM_EVT_VOLT_HIGH;
+        was_active = g_alarm_monitor.items[ALARM_VOLT_HIGH].alarm_active;
+        alarm_update_timer(&g_alarm_monitor.items[ALARM_VOLT_HIGH].alarm_cnt,
+                        &g_alarm_monitor.items[ALARM_VOLT_HIGH].alarm_active,
+                        (volt_cv >= high_alarm) ? 1 : 0,
+                        alarm_get_timeout_ms(g_motor_cfg->volt_alarm));
+        if ((was_active == 0) && (g_alarm_monitor.items[ALARM_VOLT_HIGH].alarm_active != 0))
+        {
+            g_alarm_evt_value = volt_cv;
+            g_alarm_evt_limit = high_alarm;
+            g_alarm_evt       = ALARM_EVT_VOLT_HIGH;
+        }
     }
 
     /* 电压高停机(由配置 volt_stop 的使能位决定是否启用) */
@@ -159,20 +164,27 @@ static void alarm_check_voltage(void)
         alarm_update_timer(&g_alarm_monitor.items[ALARM_VOLT_HIGH].stop_cnt,
                            &g_alarm_monitor.items[ALARM_VOLT_HIGH].stop_active,
                            (volt_cv >= high_stop) ? 1 : 0,
-                           BAT_STOP_DELAY_MS);
+                           alarm_get_timeout_ms(g_motor_cfg->volt_stop));
     }
 
-    /* 电压低报警(只报警，不停机) */
-    was_active = g_alarm_monitor.items[ALARM_VOLT_LOW].alarm_active;
-    alarm_update_timer(&g_alarm_monitor.items[ALARM_VOLT_LOW].alarm_cnt,
-                       &g_alarm_monitor.items[ALARM_VOLT_LOW].alarm_active,
-                       (volt_cv <= low_alarm) ? 1 : 0,
-                       BAT_ALARM_DELAY_MS);
-    if ((was_active == 0) && (g_alarm_monitor.items[ALARM_VOLT_LOW].alarm_active != 0))
+    if (alarm_is_enabled(g_motor_cfg->volt_alarm))
     {
-        g_alarm_evt_value = volt_cv;
-        g_alarm_evt_limit = low_alarm;
-        g_alarm_evt       = ALARM_EVT_VOLT_LOW;
+        was_active = g_alarm_monitor.items[ALARM_VOLT_LOW].alarm_active;
+        alarm_update_timer(&g_alarm_monitor.items[ALARM_VOLT_LOW].alarm_cnt,
+                           &g_alarm_monitor.items[ALARM_VOLT_LOW].alarm_active,
+                           (volt_cv <= low_alarm) ? 1 : 0,
+                           alarm_get_timeout_ms(g_motor_cfg->volt_alarm));
+        if ((was_active == 0) && (g_alarm_monitor.items[ALARM_VOLT_LOW].alarm_active != 0))
+        {
+            g_alarm_evt_value = volt_cv;
+            g_alarm_evt_limit = low_alarm;
+            g_alarm_evt       = ALARM_EVT_VOLT_LOW;
+        }
+    }
+    else
+    {
+        g_alarm_monitor.items[ALARM_VOLT_LOW].alarm_cnt    = 0;
+        g_alarm_monitor.items[ALARM_VOLT_LOW].alarm_active = 0;
     }
 #endif
 }
@@ -183,10 +195,10 @@ static void alarm_check_current(void)
     int16_t curr_001A;
     uint8_t over_cond, under_cond;
 
-    curr_001A = (int16_t)(mcFocCtrl.mcADCCurrentbus / I_Value(0.1));
-
+    curr_001A = (int16_t)(mcFocCtrl.mcADCCurrentbus / I_Value(0.01));  /* 0.01A */
     // 电流高报警/停机
-    over_cond = (curr_001A > g_motor_cfg->curr_high_alarm) ? 1 : 0;
+    over_cond = (curr_001A > (int16_t)TRAN2VALUE(g_motor_cfg->curr_high_alarm)) ? 1 : 0;
+
     if (alarm_is_enabled(g_motor_cfg->curr_alarm))
     {
         alarm_update_timer(&g_alarm_monitor.items[ALARM_CURR_HIGH].alarm_cnt,
@@ -197,7 +209,7 @@ static void alarm_check_current(void)
 
     if (alarm_is_enabled(g_motor_cfg->curr_stop))
     {
-        over_cond = (curr_001A > g_motor_cfg->curr_high_stop) ? 1 : 0;
+        over_cond = (curr_001A > (int16_t)TRAN2VALUE(g_motor_cfg->curr_high_stop)) ? 1 : 0;
         alarm_update_timer(&g_alarm_monitor.items[ALARM_CURR_HIGH].stop_cnt,
                            &g_alarm_monitor.items[ALARM_CURR_HIGH].stop_active,
                            over_cond,
@@ -205,7 +217,7 @@ static void alarm_check_current(void)
     }
 
     // 电流低报警(仅报警)
-    under_cond = (curr_001A < g_motor_cfg->curr_low_alarm) ? 1 : 0;
+    under_cond = (curr_001A < (int16_t)TRAN2VALUE(g_motor_cfg->curr_low_alarm)) ? 1 : 0;
     if (alarm_is_enabled(g_motor_cfg->curr_alarm))
     {
         alarm_update_timer(&g_alarm_monitor.items[ALARM_CURR_LOW].alarm_cnt,
@@ -231,17 +243,25 @@ static void alarm_check_drv_temp(void)
         return;
     }
 
-    /* 驱动温度高报警(80.0℃) */
-    was_active = g_alarm_monitor.items[ALARM_DRV_TEMP_HIGH].alarm_active;
-    alarm_update_timer(&g_alarm_monitor.items[ALARM_DRV_TEMP_HIGH].alarm_cnt,
-                       &g_alarm_monitor.items[ALARM_DRV_TEMP_HIGH].alarm_active,
-                       (temp_01C >= BAT_NTC_HIGH_ALARM_01C) ? 1 : 0,
-                       BAT_ALARM_DELAY_MS);
-    if ((was_active == 0) && (g_alarm_monitor.items[ALARM_DRV_TEMP_HIGH].alarm_active != 0))
+    if (alarm_is_enabled(g_motor_cfg->drv_temp_alarm))
     {
-        g_alarm_evt_value = (uint16_t)temp_01C;
-        g_alarm_evt_limit = BAT_NTC_HIGH_ALARM_01C;
-        g_alarm_evt       = ALARM_EVT_TEMP_HIGH;
+        /* 驱动温度高报警：阈值/时间都来自配置 */
+        was_active = g_alarm_monitor.items[ALARM_DRV_TEMP_HIGH].alarm_active;
+        alarm_update_timer(&g_alarm_monitor.items[ALARM_DRV_TEMP_HIGH].alarm_cnt,
+                            &g_alarm_monitor.items[ALARM_DRV_TEMP_HIGH].alarm_active,
+                            (temp_01C >= (int16_t)TRAN2VALUE(g_motor_cfg->drv_temp_high_alarm)) ? 1 : 0,
+                           alarm_get_timeout_ms(g_motor_cfg->drv_temp_alarm));
+        if ((was_active == 0) && (g_alarm_monitor.items[ALARM_DRV_TEMP_HIGH].alarm_active != 0))
+        {
+            g_alarm_evt_value = (uint16_t)temp_01C;
+            g_alarm_evt_limit = (uint16_t)TRAN2VALUE(g_motor_cfg->drv_temp_high_alarm);
+            g_alarm_evt       = ALARM_EVT_TEMP_HIGH;
+        }
+    }
+    else
+    {
+        g_alarm_monitor.items[ALARM_DRV_TEMP_HIGH].alarm_cnt    = 0;
+        g_alarm_monitor.items[ALARM_DRV_TEMP_HIGH].alarm_active = 0;
     }
 
     /* 驱动温度高停机(默认不使能，由配置 drv_temp_stop 的使能位决定) */
@@ -249,8 +269,8 @@ static void alarm_check_drv_temp(void)
     {
         alarm_update_timer(&g_alarm_monitor.items[ALARM_DRV_TEMP_HIGH].stop_cnt,
                            &g_alarm_monitor.items[ALARM_DRV_TEMP_HIGH].stop_active,
-                           (temp_01C >= BAT_NTC_HIGH_STOP_01C) ? 1 : 0,
-                           BAT_STOP_DELAY_MS);
+                           (temp_01C >= (int16_t)TRAN2VALUE(g_motor_cfg->drv_temp_high_stop)) ? 1 : 0,
+                           alarm_get_timeout_ms(g_motor_cfg->drv_temp_stop));
     }
 #endif
 }

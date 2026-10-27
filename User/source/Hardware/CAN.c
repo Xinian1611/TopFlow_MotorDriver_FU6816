@@ -428,10 +428,10 @@ uint8 CAN_Send(void)
     return 1;
 }
 
-/* 新增：统一发送入口。len 必须为 8；can_id > 0x7FF 自动用扩展帧 */
+/* 统一发送入口。len 0~8；can_id > 0x7FF 自动用扩展帧 */
 uint8 can_hw_send(uint32_t can_id, const uint8_t *dat, uint8_t len)
 {
-    if (len != CAN_FRAME_DATA_LEN || dat == NULL) {
+    if (len > CAN_FRAME_DATA_LEN || dat == NULL) {
         return 0;
     }
     // 根据ID值自动判断帧类型: >0x7FF使用扩展帧

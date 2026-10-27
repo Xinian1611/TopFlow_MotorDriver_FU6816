@@ -4,10 +4,6 @@
 #include <FU68xx_6.h>
 #include "PositionCtrl.h"
 
-/* ==================== 保护开关 ==================== */
-#define MOTOR_LOCKED_ROTOR   0      /* 0=堵转保护不生效，1=生效 */
-#define MOTOR_LIMIT_SWITCH   0      /* 0=限位保护不生效，1=生效 */
-
 /* 三个判断结果 */
 #define POS_PROTECT_NONE     0      /* 正常，无限位/堵转 */
 #define POS_PROTECT_LIMIT    1      /* 机械限位 */
@@ -27,14 +23,25 @@
 #define POS_LIMIT_MAX        355.0f  /* °，软件上限，按机构改 */
 #endif
 
-/* 堵转电流阈值：额定 12.2A，超过 15A 判堵转 */
-#ifndef POS_STALL_CURRENT_A
-#define POS_STALL_CURRENT_A  15.0f
+/* 按设备设堵转电流；升降/折叠按实际电机额定电流再调 */
+#if (MOTOR_DEV_NUM == 1)
+  #define POS_STALL_CURRENT_A  15.0f
+#elif (MOTOR_DEV_NUM == 2)
+  #define POS_STALL_CURRENT_A  15.0f
+#elif (MOTOR_DEV_NUM == 3)
+  #define POS_STALL_CURRENT_A  15.0f
+#else
+  #define POS_STALL_CURRENT_A  15.0f
 #endif
 
 /* 堵转确认时间：30ms，滤掉 PWM 开关尖峰 */
 #ifndef POS_STALL_CURRENT_MS
 #define POS_STALL_CURRENT_MS 30
+#endif
+
+/* 堵转速度阈值：|SpeedFlt| 低于该值才认为“转不动”，单位 rpm */
+#ifndef POS_STALL_SPEED_RPM
+#define POS_STALL_SPEED_RPM 100.0f
 #endif
 
 /* 堵转电流一阶低通系数：0~1，越小越平滑 */

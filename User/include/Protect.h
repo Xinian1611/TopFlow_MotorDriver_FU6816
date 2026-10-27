@@ -21,7 +21,7 @@
 #define COMPARE_DAC_MODE                    (0)                                     ///< DAC设置硬件过流值
 #define COMPARE_HW_MODE                     (1)                                     ///< 硬件设置硬件过流值
 #define COMPARE_MODE                        (COMPARE_DAC_MODE)                      ///< 硬件过流值的来源
-#define HWOCValue                           (60.0)                                  ///< (A) DAC模式下的硬件过流值
+#define HWOCValue                           (30.0)                                  ///< (A) DAC模式下的硬件过流值
 
 /* Faults processing Enable */
 #define SWCurrentProtectEn                  (0)                                     ///< 相电流软件过流保护使能： 0,不使能；1，使能

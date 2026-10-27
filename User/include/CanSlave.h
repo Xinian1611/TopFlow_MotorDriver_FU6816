@@ -13,7 +13,7 @@ typedef struct {
 } ExtSlaveConfig_t;
 
 /************************ 通信超时定义 ************************/
-#define EXT_CMD_TIMEOUT_MS      100   // 指令报文通信超时(ms)
+#define EXT_CMD_TIMEOUT_MS      300   // 指令报文通信超时(ms)
 
 /************************ 接口 ************************/
 void ext_slave_init(const ExtSlaveConfig_t *config);

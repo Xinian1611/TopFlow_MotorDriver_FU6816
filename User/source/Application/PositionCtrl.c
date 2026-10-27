@@ -9,7 +9,7 @@
 #include "PositionCtrl.h"
 #include <string.h>
 
-#define POS_DEBUG_EN    1   //0:POS_DEBUG_TARGET_POSITION不生效
+#define POS_DEBUG_EN    0   //0:POS_DEBUG_TARGET_POSITION不生效
 
 #if POS_DEBUG_EN
 #define POS_DEBUG_TARGET_POSITION    18000   /* raw：18000 × 0.01° = 180.00° */
@@ -132,13 +132,13 @@ uint8 PositionCtrl_PID(void)                     /* 位置 PI 计算 */
     }
     out += s_pos.integ;                          /* P + I */
 
-    if (out > POS_SPEED_MAX_RPM)                 /* 正向超限 */
+    if (out > g_pos_speed_limit)                 /* 正向超限：由 CmdPosition 的 speed 字段决定 */
     {
-        out = POS_SPEED_MAX_RPM;                 /* 正向限幅 */
+        out = g_pos_speed_limit;                 /* 正向限幅 */
     }
-    else if (out < -POS_SPEED_MAX_RPM)           /* 反向超限 */
+    else if (out < -g_pos_speed_limit)           /* 反向超限 */
     {
-        out = -POS_SPEED_MAX_RPM;                /* 反向限幅 */
+        out = -g_pos_speed_limit;                /* 反向限幅 */
     }
 
     if ((out > 0.0f) && (out < POS_SPEED_MIN_RPM)) /* 正向小于最小速度 */
@@ -163,14 +163,26 @@ uint8 PositionCtrl_PID(void)                     /* 位置 PI 计算 */
  * @brief  位置环周期任务，1ms 调用一次，内部按 POS_CTRL_PERIOD_MS 分频
  * @note   只做：启停/故障判断、目标换算、读位置、读速度、调 PID。
  */
-void PositionCtrl_Update(void)                   /* 位置环周期任务 */
+void PositionCtrl_Update(void)      /* 位置环周期任务 */
 {
     float t;                                     /* 解码后的目标值 */
     if (++s_pos.tick < POS_CTRL_PERIOD_MS)       /* 还没到位置环周期 */
     {
-        return;                                  /* 直接返回 */
+        return;
     }
     s_pos.tick = 0;                              /* 到周期，清分频计数 */
+
+    /* 堵转后锁住，等新目标/新起机清 g_motor_stall，避免位置环又把电机拉起来 */
+    if (g_motor_stall)
+    {
+        s_pos.state     = POS_STALL;
+        g_pos_state     = POS_STALL;
+        s_pos.integ     = 0.0f;
+        s_pos.speedCmd  = 0.0f;
+        g_run_state.ref = 0.0f;
+        g_run_state.is_started = 0;
+        return;
+    }
 
 #if POS_DEBUG_EN
     g_pos_cmd_start = 1;                         /* 调试：强制起控 */

@@ -34,7 +34,7 @@ void ADC_Init(void)
     ClrBit(P2_OE , PIN3);
     /****************************************************************/
     //通道使能：AD1 抱闸 / AD2 NTC / AD3 霍尔 / AD4 母线电流 / AD6 OVP / AD15 内部VCC
-    SetBit(ADC_MASK, CH1EN | CH2EN | CH3EN | CH4EN | CH6EN | CH15EN);   
+    SetBit(ADC_MASK, CH1EN | CH2EN | CH3EN | CH4EN | CH6EN | CH11EN | CH15EN);   
 
     #if(VOLTAGE_MODE == INTERNAL)
     {

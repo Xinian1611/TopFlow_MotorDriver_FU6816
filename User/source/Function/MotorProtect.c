@@ -515,7 +515,7 @@ void Fault_Detection(void)
     }
     #endif
 
-    /* ★★★ 改动点：故障恢复不再受 ProtectRecoveryEn 管辖，也不再被"当前是否已在 mcFault"
+    /*  改动点：故障恢复不再受 ProtectRecoveryEn 管辖，也不再被"当前是否已在 mcFault"
      *     挡住 —— 后者会让"清故障码"和"跳转 mcReady"互为前提，谁也进不去。
      *     硬件过流(CMP3)是【始终有效】的保护（Protect.h:21 COMPARE_DAC_MODE），
      *     所以它的恢复通路必须无条件存在，否则一次跳闸 = 永久锁死、只能断电。 */

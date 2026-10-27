@@ -30,7 +30,7 @@
 
 #define MOTOR_SELECT                            MOTOR_36V_2400W
 #define SPEED_PRECISION                         (1)
-#define MAX_SPEED                               (2300)
+#define MAX_SPEED                               (2200)
 #define IDLE_SPEED                              (250)
 
 // 12V电机参数
@@ -91,6 +91,14 @@ typedef struct {
 
 extern MotorRunState_t xdata g_run_state;
 
+extern volatile uint8_t xdata g_motor_stall;
+extern volatile uint8_t xdata g_fold_state;   /* 折叠状态 0-4；非折叠机保持 0 */
+extern volatile float xdata g_pos_speed_limit; /* 位置环速度上限，来自 CmdPosition 的 speed 字段 */
+
+/* 折叠“收纳”对应的旋转方向：0=CW 1=CCW
+ * 主机 ZD_DIR_UP=+1 时，收纳速度是负的 -> CCW，所以默认 1。
+ * 如果机械反装或 ZD_DIR_UP 改成 -1，把这里改成 0。 */
+#define MOTOR_FOLD_STOW_DIR   1
 
 /******************************************************************************
  * 函数声明
@@ -102,5 +110,7 @@ extern void MotorCtrl_SetMode(uint8_t mode);
 extern void MotorCtrl_SetTarget(uint16_t current, uint16_t speed, uint16_t closed_loop);
 extern void MotorCtrl_Update(void);
 
+uint16_t MotorCtrl_GetLoopFeedback(void);
+uint8_t  MotorCtrl_GetStall(void);
 
 #endif // MOTOR_CTRL_H

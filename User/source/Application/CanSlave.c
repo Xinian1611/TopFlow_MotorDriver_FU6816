@@ -27,10 +27,11 @@ typedef struct
 static ExtAssembly_t xdata g_ext_asm;
 
 // 发送队列(每周期只发送1帧, 避免阻塞)
-#define CAN_TX_QUEUE_SIZE  16
+#define CAN_TX_QUEUE_SIZE  32          /* 配置 12 帧 + 状态 2 + 日志 4，16 不够 */
 
 typedef struct {
     uint32_t can_id;
+    uint8_t  len;
     uint8_t  dat[CAN_FRAME_DATA_LEN];
 } CanTxItem_t;
 
@@ -62,23 +63,26 @@ uint8_t  xdata g_dbg_lastCtrl = 0;   /* 最近一次真正进入指令处理的 
  * 由主循环 ext_slave_cfg_save_pending() 执行。
  *    0 = 无请求   1 = 主机下发的配置要落盘   2 = SAVE 命令：当前配置强制落盘 */
 static volatile uint8_t xdata g_cfgSaveReq = 0;
+static uint8_t xdata g_cfgPending[EXT_MSG_LEN_CONFIG - 8];   /* 88B 配置正文 */
 
 /************************ 内部辅助函数 ************************/
 
-static uint8_t tx_queue_push(uint32_t can_id, const uint8_t *dat)
+static uint8_t tx_queue_push(uint32_t can_id, const uint8_t *dat, uint8_t len)
 {
     if (g_tx_count >= CAN_TX_QUEUE_SIZE) return 0;
     g_tx_queue[g_tx_tail].can_id = can_id;
+    g_tx_queue[g_tx_tail].len    = len;
     memcpy(g_tx_queue[g_tx_tail].dat, dat, CAN_FRAME_DATA_LEN);
     g_tx_tail = (g_tx_tail + 1) % CAN_TX_QUEUE_SIZE;
     g_tx_count++;
     return 1;
 }
 
-static uint8_t tx_queue_pop(uint32_t *can_id, uint8_t *dat)
+static uint8_t tx_queue_pop(uint32_t *can_id, uint8_t *dat, uint8_t *len)
 {
     if (g_tx_count == 0) return 0;
     *can_id = g_tx_queue[g_tx_head].can_id;
+    *len    = g_tx_queue[g_tx_head].len;
     memcpy(dat, g_tx_queue[g_tx_head].dat, CAN_FRAME_DATA_LEN);
     g_tx_head = (g_tx_head + 1) % CAN_TX_QUEUE_SIZE;
     g_tx_count--;
@@ -114,16 +118,16 @@ static void ext_send_frames(uint8_t pri, const uint8_t *buf, uint16_t total_len)
 
         ext_id = EXTID_BUILD(pri, g_ext_config.sys_num, g_ext_config.main_cat,
                              g_ext_config.sub_cat, g_ext_config.dev_num, i + 1);
-        tx_queue_push(ext_id, dat);
+        tx_queue_push(ext_id, dat, len);
     }
 }
 
-// 单帧发送辅助
-static void ext_send_single(uint8_t pri, const uint8_t *dat)
+// 单帧发送辅助（指定 DLC）
+static void ext_send_single_len(uint8_t pri, const uint8_t *dat, uint8_t len)
 {
     uint32_t ext_id = EXTID_BUILD(pri, g_ext_config.sys_num, g_ext_config.main_cat,
                                   g_ext_config.sub_cat, g_ext_config.dev_num, 1);
-    tx_queue_push(ext_id, dat);
+    tx_queue_push(ext_id, dat, len);
 }
 
 /************************ 指令/状态/日志 ************************/
@@ -140,11 +144,16 @@ static void ext_process_cmd_message(const uint8_t *buf)
     g_ext_cmd_timeout = 0;                         /* 新协议 Byte5-6 是闭环指令，不再支持旧调试命令 */
 
     // 急停处理(最高优先级)
-    MotorCtrl_SetEstop(estop == EXT_ESTOP_ACTIVE);
     if (estop == EXT_ESTOP_ACTIVE)
     {
+        MotorCtrl_SetEstop(1);
         return;
     }
+    if (estop == EXT_ESTOP_RELEASE)
+    {
+        MotorCtrl_SetEstop(0);
+    }
+    /* estop == 0：无操作，不碰急停状态 */
 
     // 启停处理
     if (startstop >= EXT_STARTSTOP_START && startstop <= EXT_STARTSTOP_STOP)
@@ -193,7 +202,8 @@ static void ext_build_status(uint8_t *buf)
 
     msg->fault_code = g_run_state.fault_code;
 
-    EXT_SET_U16(msg->closed_loop_hi, msg->closed_loop_lo, g_pos_fb_raw); /* 字节18-19 */
+    EXT_SET_U16(msg->closed_loop_hi, msg->closed_loop_lo, MotorCtrl_GetLoopFeedback());       /* 字节18-19：转向0.01°/升降0.1%/折叠0-4 */
+    msg->stall = MotorCtrl_GetStall();              /* 字节20：0/1 */
 }
 
 // 构建日志报文(32字节载荷)
@@ -216,18 +226,22 @@ static void ext_build_log(uint8_t *buf)
     val = (int16_t)(mcFocCtrl.PowerFlt);
     EXT_SET_I16(msg->power_hi, msg->power_lo, val + 32767);
 
-    EXT_SET_I16(msg->mot_temp_hi, msg->mot_temp_lo, 32767);   // 电机温度不可用
+    EXT_SET_I16(msg->mot_temp_hi, msg->mot_temp_lo, 32767);   // 无电机温度传感器：0℃
 
-    val = (int16_t)(mcFocCtrl.MCU_TEMP);
+    val = mcFocCtrl.NTCTempNum;                    // NTC 驱动温度，0.1℃
+    if ((val <= -400) || (val >= 1500))            // 未采到/无效
+    {
+        val = (int16_t)mcFocCtrl.MCU_TEMP * 10;    // 芯片温度 1℃ -> 0.1℃
+    }
     EXT_SET_I16(msg->drv_temp_hi, msg->drv_temp_lo, val + 32767);
 
-    EXT_SET_I16(msg->torque_hi, msg->torque_lo, 32767);       // 转矩不可用
+    EXT_SET_I16(msg->torque_hi, msg->torque_lo, 32767);       // 无转矩估算：0Nm
 
-    val = mcFocCtrl.Max_ia;
+    val = (int16_t)(I_Value2F(FOC__IA) * 100.0f);  // Q15 -> A -> 0.01A
     EXT_SET_I16(msg->ia_hi, msg->ia_lo, val + 32767);
-    val = mcFocCtrl.Max_ib;
+    val = (int16_t)(I_Value2F(FOC__IB) * 100.0f);
     EXT_SET_I16(msg->ib_hi, msg->ib_lo, val + 32767);
-    val = mcFocCtrl.Max_ic;
+    val = (int16_t)(I_Value2F(FOC__IC) * 100.0f);
     EXT_SET_I16(msg->ic_hi, msg->ic_lo, val + 32767);
 
     EXT_SET_U32(msg->run_time[0], msg->run_time[1], msg->run_time[2], msg->run_time[3],
@@ -264,37 +278,33 @@ void ext_slave_init(const ExtSlaveConfig_t *config)
 /// @brief 处理配置报文
 void ext_process_cfg_message(void)
 {
-    uint8_t resp_buf[EXT_MSG_LEN_CONFIG];
+    static uint8_t xdata resp_buf[EXT_MSG_LEN_CONFIG];   /* 96B，别放栈上 */
 
     if (g_ext_asm.total_frames == 1)
     {
         ExtCfgMsg_t *msg = (ExtCfgMsg_t *)g_ext_asm.buf;
         if (msg->cfg_read == 1)
         {
-            // 读取配置参数请求：把当前 88 字节配置原样回传（分 11 帧）
+            /* 读配置：整段 96B 返回，data[0]=0(无操作)，data[1]=1(应答) */
             memset(resp_buf, 0xFF, sizeof(resp_buf));
-            memcpy(resp_buf, g_motor_cfg, EXT_MSG_LEN_CONFIG);
+            resp_buf[0] = 0;
+            resp_buf[1] = 1;
+            memcpy(&resp_buf[8], g_motor_cfg, sizeof(g_cfgPending));
             ext_send_frames(EXT_PRI_CONFIG, resp_buf, EXT_MSG_LEN_CONFIG);
         }
     }
-    else
+    else if (g_ext_asm.total_frames == EXT_FRAME_COUNT(EXT_MSG_LEN_CONFIG))
     {
-        if (g_ext_asm.total_frames == EXT_FRAME_COUNT(EXT_MSG_LEN_CONFIG))
-        {
-            /* 改动：这里不再直接写 EEPROM。
-             *   DevConfig_WriteParam() 要写 96 字节 = 2 次页写，约 50ms；
-             *   而本函数是在 1ms 任务里被调的：
-             *     CAN_MsgParse() → ext_slave_process_rx() → ext_process_cfg_message()
-             *   一写就把 Fault_Detection / Speed_response / AlarmMonitor_Process
-             *   / ext_slave_periodic_send 全部停摆 50ms。
-             *   现在只置标志，落盘交给 main.c 大循环调用 ext_slave_cfg_save_pending() */
-            g_cfgSaveReq = 1;
+        /* 写配置：data[8..95] 是 88B 正文；先拷到 pending，主循环再落 EEPROM */
+        memcpy(g_cfgPending, &g_ext_asm.buf[8], sizeof(g_cfgPending));
+        g_cfgSaveReq = 1;
 
-            // 发送配置参数确认
-            memset(resp_buf, 0xFF, sizeof(resp_buf));
-            resp_buf[1] = 1;    // 应答
-            ext_send_frames(EXT_PRI_CONFIG, resp_buf, EXT_MSG_LEN_CFG_RSP);
-        }
+        /* 写应答：同样整段 96B，data[1]=1 */
+        memset(resp_buf, 0xFF, sizeof(resp_buf));
+        resp_buf[0] = 0;
+        resp_buf[1] = 1;
+        memcpy(&resp_buf[8], g_cfgPending, sizeof(g_cfgPending));
+        ext_send_frames(EXT_PRI_CONFIG, resp_buf, EXT_MSG_LEN_CONFIG);
     }
 }
 
@@ -320,7 +330,8 @@ void ext_slave_process_rx(uint32_t ext_id, const uint8_t *dat, uint8_t len)
     // 过滤：只处理与本机匹配的帧
     if (main_cat != g_ext_config.main_cat ||
         sub_cat  != g_ext_config.sub_cat  ||
-        (dev_num != g_ext_config.dev_num && dev_num != 0))
+        dev_num  != g_ext_config.dev_num  ||
+        EXTID_GET_SYSNUM(ext_id) != g_ext_config.sys_num)
     {
         g_dbg_rxFiltered++;                             /* 【调试】地址不匹配被丢 */
         g_dbg_filtId = ext_id;                          /* 【调试】记下被丢的 ID */
@@ -351,20 +362,32 @@ void ext_slave_process_rx(uint32_t ext_id, const uint8_t *dat, uint8_t len)
     else if (pri == EXT_PRI_CONFIG)
     {
         // 配置报文: 11帧(88字节载荷), 需要多帧组装
-        if (msg_num == 1)
+                if (msg_num == 1)
         {
+            uint8_t read_op = (uint8_t)(dat[0] & 0x03);
+
             memset(&g_ext_asm, 0, sizeof(ExtAssembly_t));
             g_ext_asm.priority = pri;
-            if (dat[2] == 0xFF)
-                g_ext_asm.total_frames = 1;                                   // 读请求, 1帧
+
+            if (read_op == 1)                  /* data[0]=1：读请求，1 帧 */
+            {
+                g_ext_asm.total_frames = 1;
+            }
+            else if (read_op == 0)             /* data[0]=0：写配置，12 帧 */
+            {
+                g_ext_asm.total_frames = EXT_FRAME_COUNT(EXT_MSG_LEN_CONFIG);
+            }
             else
-                g_ext_asm.total_frames = EXT_FRAME_COUNT(EXT_MSG_LEN_CONFIG);  // 写配置, 11帧
+            {
+                return;                        /* 3：无效值 */
+            }
 
             memcpy(g_ext_asm.buf, dat, CAN_FRAME_DATA_LEN);
             g_ext_asm.received = 0x01;
             g_ext_asm.timeout_cnt = 0;
         }
-        else if (g_ext_asm.priority == pri && g_ext_asm.received != 0)
+        else if ((g_ext_asm.priority == pri) && (g_ext_asm.received != 0) &&
+                 (msg_num <= EXT_FRAME_COUNT(EXT_MSG_LEN_CONFIG)))
         {
             uint16_t offset = (uint16_t)(msg_num - 1) * CAN_FRAME_DATA_LEN;
             if (offset + CAN_FRAME_DATA_LEN <= sizeof(g_ext_asm.buf))
@@ -399,7 +422,7 @@ void ext_slave_cfg_save_pending(void)
 
     if (req == 1)
     {
-        DevConfig_WriteParam(g_ext_asm.buf);   /* 1：主机下发的 88 字节配置 */
+        DevConfig_WriteParam(g_cfgPending);
     }
     else
     {
@@ -476,7 +499,7 @@ static void ext_send_position_debug(void)
         g[6] = g_run_state.work_mode;
         g[7] = g_pos_cmd_start;
 
-        tx_queue_push(0x1F5, g);
+        tx_queue_push(0x1F5, g, CAN_FRAME_DATA_LEN);
     }
 }
 #endif
@@ -487,13 +510,13 @@ void ext_slave_periodic_send(void)
     uint8_t  buf[EXT_MSG_LEN_LOG];
     uint32_t can_id;
     uint8_t  tx_dat[CAN_FRAME_DATA_LEN];
+    uint8_t  tx_len;
 
-    // 发送队列处理: 每周期仅发送1帧, 避免阻塞
     if (g_tx_count > 0)
     {
-        if (tx_queue_pop(&can_id, tx_dat))
+        if (tx_queue_pop(&can_id, tx_dat, &tx_len))
         {
-            can_hw_send(can_id, tx_dat, CAN_FRAME_DATA_LEN);
+            can_hw_send(can_id, tx_dat, tx_len);
         }
     }
 
@@ -507,17 +530,26 @@ void ext_slave_periodic_send(void)
         }
     }
 
-    // 指令报文通信超时检测（初版为注释状态）
-    // if (g_run_state.is_started)
-    // {
-    //     g_ext_cmd_timeout++;
-    //     if (g_ext_cmd_timeout >= EXT_CMD_TIMEOUT_MS)
-    //     {
-    //         ext_set_fault(FAULT_LEVEL_3, FAULT3_COMM_STOP);
-    //         g_run_state.is_started = 0;
-    //         g_run_state.ref = 0;
-    //     }
-    // }
+    /* 指令超时：EXT_CMD_TIMEOUT_MS 内没收到本机命令就停机 */
+    if (g_run_state.is_started)
+    {
+        if (g_ext_cmd_timeout < EXT_CMD_TIMEOUT_MS)
+        {
+            g_ext_cmd_timeout++;
+        }
+        if (g_ext_cmd_timeout >= EXT_CMD_TIMEOUT_MS)
+        {
+            g_run_state.is_started = 0;     /* 速度/开环停 */
+            g_run_state.ref        = 0.0f;
+            g_pos_cmd_start        = 0;     /* 位置环也停 */
+            g_pos_cmd_raw          = 0xFFFF;/* 清位置目标 */
+            g_motor_stall          = 0;
+        }
+    }
+    else
+    {
+        g_ext_cmd_timeout = 0;
+    }
 
     // 运行时间统计(每1000ms累加1s)
     g_ext_runtime_cnt++;
@@ -535,9 +567,9 @@ void ext_slave_periodic_send(void)
     g_ext_heartbeat_cnt++;
     if (g_ext_heartbeat_cnt >= 500)
     {
-        uint8_t dummy[CAN_FRAME_DATA_LEN] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+        uint8_t dummy[CAN_FRAME_DATA_LEN] = {0};
         g_ext_heartbeat_cnt = 0;
-        ext_send_single(EXT_PRI_HEARTBEAT, dummy);
+        ext_send_single_len(EXT_PRI_HEARTBEAT, dummy, 0);   /* 0015 心跳数据长 0，DLC 0 */
     }
 
     // 状态报文: 每150ms发送(单帧)
@@ -546,7 +578,7 @@ void ext_slave_periodic_send(void)
     {
         g_ext_status_cnt = 0;
         ext_build_status(buf);
-        ext_send_frames(EXT_PRI_STATUS, buf, EXT_MSG_LEN_STATUS);  /* 10字节 -> 2帧 */
+        ext_send_frames(EXT_PRI_STATUS, buf, EXT_MSG_LEN_STATUS);  /* 11字节 -> 2帧(8+3) */
     }
 
 #if (DEBUG_UART_OR_CAN == 2)
