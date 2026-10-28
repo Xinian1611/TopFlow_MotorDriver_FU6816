@@ -1,4 +1,4 @@
-C51 COMPILER V9.60.7.0   POSITIONPROTECT                                                   10/20/2026 17:28:31 PAGE 1   
+C51 COMPILER V9.60.7.0   POSITIONPROTECT                                                   10/27/2026 17:50:53 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE POSITIONPROTECT
@@ -53,57 +53,61 @@ line level    source
   41          /**
   42           * @brief  电流幅值堵转判断
   43           * @retval POS_PROTECT_STALL / POS_PROTECT_NONE
-  44           * @note   任何 MOE=1 的状态都判，不看位置/速度/闭环状态。
-  45           *         用 sqrt(Id^2 + Iq^2)，不能只看 Iq：Id 大时会低估实际电流。
-  46           */
-  47          uint8 PositionProtect_StallCheck(void)
-  48          {
-  49   1          float id_a;                                  /* Id 实际电流，单位 A */
-  50   1          float iq_a;                                  /* Iq 实际电流，单位 A */
-  51   1          float i_mag;                                 /* 电流幅值，单位 A */
-  52   1      
-C51 COMPILER V9.60.7.0   POSITIONPROTECT                                                   10/20/2026 17:28:31 PAGE 2   
+  44           * @note   任何 MOE=1 的状态都判，不看位置/闭环状态；
+  45           *         但要求 |SpeedFlt| < POS_STALL_SPEED_RPM，避免高速大电流误判。
+  46           *         用 sqrt(Id^2 + Iq^2)，不能只看 Iq：Id 大时会低估实际电流。
+  47           */
+  48          uint8 PositionProtect_StallCheck(void)
+  49          {
+  50   1          float id_a;                                  /* Id 实际电流，单位 A */
+  51   1          float iq_a;                                  /* Iq 实际电流，单位 A */
+  52   1          float i_mag;                                 /* 电流幅值，单位 A */
+C51 COMPILER V9.60.7.0   POSITIONPROTECT                                                   10/27/2026 17:50:53 PAGE 2   
 
-  53   1          if (MOE == 0)                                /* 输出没开，清状态即可 */
-  54   1          {
-  55   2              s_stallCnt = 0;
-  56   2              s_iqFilt   = 0.0f;
-  57   2              return POS_PROTECT_NONE;
-  58   2          }
-  59   1      
-  60   1          /* Q15 -> A */
-  61   1          id_a = (float)FOC__ID / 32767.0f * (float)HW_ADC_REF / ((float)HW_RSHUNT * (float)HW_AMPGAIN);
-  62   1          iq_a = (float)FOC__IQ / 32767.0f * (float)HW_ADC_REF / ((float)HW_RSHUNT * (float)HW_AMPGAIN);
-  63   1      
-  64   1          i_mag = (float)sqrt((double)(id_a * id_a + iq_a * iq_a));
-  65   1      
-  66   1          /* 一阶低通，滤掉 PWM 开关尖峰 */
-  67   1          s_iqFilt += POS_STALL_CURRENT_LPF * (i_mag - s_iqFilt);
-  68   1      
-  69   1          if (s_iqFilt > POS_STALL_CURRENT_A)          /* 15A */
-  70   1          {
-  71   2              if (s_stallCnt < POS_PROT_STALL_CNT)
-  72   2              {
-  73   3                  s_stallCnt++;
-  74   3              }
-  75   2      
-  76   2              if (s_stallCnt >= POS_PROT_STALL_CNT)    /* 30ms */
-  77   2              {
-  78   3                  return POS_PROTECT_STALL;
-  79   3              }
-  80   2          }
-  81   1          else
-  82   1          {
-  83   2              s_stallCnt = 0;
-  84   2          }
-  85   1      
-  86   1          return POS_PROTECT_NONE;
-  87   1      }
+  53   1      
+  54   1          if (MOE == 0)                                /* 输出没开，清状态即可 */
+  55   1          {
+  56   2              s_stallCnt = 0;
+  57   2              s_iqFilt   = 0.0f;
+  58   2              return POS_PROTECT_NONE;
+  59   2          }
+  60   1      
+  61   1          /* Q15 -> A */
+  62   1          id_a = (float)FOC__ID / 32767.0f * (float)HW_ADC_REF / ((float)HW_RSHUNT * (float)HW_AMPGAIN);
+  63   1          iq_a = (float)FOC__IQ / 32767.0f * (float)HW_ADC_REF / ((float)HW_RSHUNT * (float)HW_AMPGAIN);
+  64   1      
+  65   1          i_mag = (float)sqrt((double)(id_a * id_a + iq_a * iq_a));
+  66   1      
+  67   1          /* 一阶低通，滤掉 PWM 开关尖峰 */
+  68   1          s_iqFilt += POS_STALL_CURRENT_LPF * (i_mag - s_iqFilt);
+  69   1      
+  70   1          /* 堵转判据：电流超过阈值 + 转速接近 0，两个条件同时满足才计数 */
+  71   1          if ((s_iqFilt > POS_STALL_CURRENT_A) && (POS_PROT_ABS_S16(mcFocCtrl.SpeedFlt) < S_Value(POS_STALL_SPEE
+             -D_RPM)))
+  72   1          {
+  73   2              if (s_stallCnt < POS_PROT_STALL_CNT)
+  74   2              {
+  75   3                  s_stallCnt++;
+  76   3              }
+  77   2      
+  78   2              if (s_stallCnt >= POS_PROT_STALL_CNT)    /* 30ms */
+  79   2              {
+  80   3                  printf("电机堵转\n");
+  81   3                  return POS_PROTECT_STALL;
+  82   3              }
+  83   2          }
+  84   1          else
+  85   1          {
+  86   2              s_stallCnt = 0;
+  87   2          }
+  88   1      
+  89   1          return POS_PROTECT_NONE;
+  90   1      }
 
 
 MODULE INFORMATION:   STATIC OVERLAYABLE
-   CODE SIZE        =    472    ----
-   CONSTANT SIZE    =   ----    ----
+   CODE SIZE        =    525    ----
+   CONSTANT SIZE    =     14    ----
    XDATA SIZE       =      6      17
    PDATA SIZE       =   ----    ----
    DATA SIZE        =   ----    ----

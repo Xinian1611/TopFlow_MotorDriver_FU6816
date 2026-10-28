@@ -1,4 +1,4 @@
-C51 COMPILER V9.60.7.0   MOTORPROTECT                                                      10/20/2026 17:28:31 PAGE 1   
+C51 COMPILER V9.60.7.0   MOTORPROTECT                                                      10/27/2026 17:50:53 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE MOTORPROTECT
@@ -62,7 +62,7 @@ line level    source
   50   1      
   51   1          if (g_reArmEnable == 0) { return; }     /* 需要人工复位：一直关着 */
   52   1      
-C51 COMPILER V9.60.7.0   MOTORPROTECT                                                      10/20/2026 17:28:31 PAGE 2   
+C51 COMPILER V9.60.7.0   MOTORPROTECT                                                      10/27/2026 17:50:53 PAGE 2   
 
   53   1          if (holdCnt < RECOVER_HOLDOFF_MS) { holdCnt++; }
   54   1          else if (Power_Currt <= RECOVER_CURRENT_MAX)
@@ -126,7 +126,7 @@ line level    source
  111   2              if ((mcFocCtrl.NTCTempNum != NTC_TEMP_ERR) && (mcFocCtrl.NTCTempNum >= OVER_Temperature))
  112   2              {
  113   3                  if (Fault.Temperature.NTCDetecCnt < TemperatureProtectTime)
-C51 COMPILER V9.60.7.0   MOTORPROTECT                                                      10/20/2026 17:28:31 PAGE 3   
+C51 COMPILER V9.60.7.0   MOTORPROTECT                                                      10/27/2026 17:50:53 PAGE 3   
 
  114   3                  {
  115   4                      Fault.Temperature.NTCDetecCnt++;
@@ -190,7 +190,7 @@ line level    source
  171   2              else
  172   2              {
  173   3                  if (Fault.Voltage.UnderVoltDetecCnt > 0)
-C51 COMPILER V9.60.7.0   MOTORPROTECT                                                      10/20/2026 17:28:31 PAGE 4   
+C51 COMPILER V9.60.7.0   MOTORPROTECT                                                      10/27/2026 17:50:53 PAGE 4   
 
  174   3                  {
  175   4                      Fault.Voltage.UnderVoltDetecCnt--;
@@ -254,7 +254,7 @@ line level    source
                                   
                                   if (Fault.Stall.SpeedAndEsDectCnt >= 1000)
                                   {
-C51 COMPILER V9.60.7.0   MOTORPROTECT                                                      10/20/2026 17:28:31 PAGE 5   
+C51 COMPILER V9.60.7.0   MOTORPROTECT                                                      10/27/2026 17:50:53 PAGE 5   
 
                                       Fault.Stall.SpeedAndEsDectCnt = 0;
                                       mcFaultSource         = FaultStall;
@@ -318,7 +318,7 @@ line level    source
  286   2          {
  287   3            Fault.Stall.StartDealyCnt++;
  288   3            GP02 =~GP02;
-C51 COMPILER V9.60.7.0   MOTORPROTECT                                                      10/20/2026 17:28:31 PAGE 6   
+C51 COMPILER V9.60.7.0   MOTORPROTECT                                                      10/27/2026 17:50:53 PAGE 6   
 
  289   3          }
  290   2          
@@ -382,7 +382,7 @@ line level    source
                               if (mcFocCtrl.Max_ic > SW_OC_CurrentVal)//C相电流峰值大于设定值
                               {
                                   mcCurVarible.OverCurCCnt++;
-C51 COMPILER V9.60.7.0   MOTORPROTECT                                                      10/20/2026 17:28:31 PAGE 7   
+C51 COMPILER V9.60.7.0   MOTORPROTECT                                                      10/27/2026 17:50:53 PAGE 7   
 
                               }
                               else
@@ -446,7 +446,7 @@ line level    source
  406   4                      mcFocCtrl.Max_ib = 0;
  407   4                      mcFocCtrl.Max_ic = 0;
  408   4                      SetBit(FOC_CR2, ICLR);
-C51 COMPILER V9.60.7.0   MOTORPROTECT                                                      10/20/2026 17:28:31 PAGE 8   
+C51 COMPILER V9.60.7.0   MOTORPROTECT                                                      10/27/2026 17:50:53 PAGE 8   
 
  409   4                      
  410   4                      if ((Fault.PhaseLoss.AOpencnt > 20) || (Fault.PhaseLoss.BOpencnt > 20) || (Fault.PhaseLoss
@@ -510,7 +510,7 @@ line level    source
                               if (mcCurOffset.Iw_busOffset > GetCurrentOffsetValue)
                               {
                                   mcFaultSource = FaultOffset;
-C51 COMPILER V9.60.7.0   MOTORPROTECT                                                      10/20/2026 17:28:31 PAGE 9   
+C51 COMPILER V9.60.7.0   MOTORPROTECT                                                      10/27/2026 17:50:53 PAGE 9   
 
                               }
                       
@@ -570,11 +570,11 @@ line level    source
                   }
                   #endif
  517   1      
- 518   1          /* ★★★ 改动点：故障恢复不再受 ProtectRecoveryEn 管辖，也不再被"当前是否已
-             -在 mcFault"
+ 518   1          /*  改动点：故障恢复不再受 ProtectRecoveryEn 管辖，也不再被"当前是否已在 mcFau
+             -lt"
  519   1           *     挡住 —— 后者会让"清故障码"和"跳转 mcReady"互为前提，谁也进不去。
  520   1           *     硬件过流(CMP3)是【始终有效】的保护（Protect.h:21 COMPARE_DAC_MODE），
-C51 COMPILER V9.60.7.0   MOTORPROTECT                                                      10/20/2026 17:28:31 PAGE 10  
+C51 COMPILER V9.60.7.0   MOTORPROTECT                                                      10/27/2026 17:50:53 PAGE 10  
 
  521   1           *     所以它的恢复通路必须无条件存在，否则一次跳闸 = 永久锁死、只能断�
              -�。 */
@@ -638,7 +638,7 @@ line level    source
  578   6                              Restart.OT_DelayTcnt ++;
  579   6                          }
  580   5                          else
-C51 COMPILER V9.60.7.0   MOTORPROTECT                                                      10/20/2026 17:28:31 PAGE 11  
+C51 COMPILER V9.60.7.0   MOTORPROTECT                                                      10/27/2026 17:50:53 PAGE 11  
 
  581   5                          {
  582   6                              Restart.OT_Times++;
@@ -702,7 +702,7 @@ line level    source
  640   4                      {
  641   5                          Restart.Stall_DealyTcnt ++;
  642   5                      }
-C51 COMPILER V9.60.7.0   MOTORPROTECT                                                      10/20/2026 17:28:31 PAGE 12  
+C51 COMPILER V9.60.7.0   MOTORPROTECT                                                      10/27/2026 17:50:53 PAGE 12  
 
  643   4                      else
  644   4                      {
@@ -766,7 +766,7 @@ line level    source
  702   5                      }
  703   4                  }
  704   3              }
-C51 COMPILER V9.60.7.0   MOTORPROTECT                                                      10/20/2026 17:28:31 PAGE 13  
+C51 COMPILER V9.60.7.0   MOTORPROTECT                                                      10/27/2026 17:50:53 PAGE 13  
 
  705   2              
  706   2              #endif

@@ -1,4 +1,4 @@
-C51 COMPILER V9.60.7.0   CAN                                                               10/20/2026 17:28:34 PAGE 1   
+C51 COMPILER V9.60.7.0   CAN                                                               10/27/2026 17:50:55 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE CAN
@@ -62,7 +62,7 @@ line level    source
   49          
   50          volatile uint16 xdata g_can_rxIntCnt  = 0;
   51          volatile uint16 xdata g_can_popCnt    = 0;
-C51 COMPILER V9.60.7.0   CAN                                                               10/20/2026 17:28:34 PAGE 2   
+C51 COMPILER V9.60.7.0   CAN                                                               10/27/2026 17:50:55 PAGE 2   
 
   52          volatile uint16 xdata g_can_txCnt     = 0;
   53          volatile uint16 xdata g_can_txToCnt   = 0;
@@ -126,7 +126,7 @@ line level    source
  108   1          BRP  = 11;                                                               //范围0-0x3FF           时
              -间单元tq=(BRP+1)/ 24MHz  
  109   1          SEG2 = 0;                                                               //范围0-0x07            时�
-C51 COMPILER V9.60.7.0   CAN                                                               10/20/2026 17:28:34 PAGE 3   
+C51 COMPILER V9.60.7.0   CAN                                                               10/27/2026 17:50:55 PAGE 3   
 
              -��段2时间长度tSEG2=tq*(SEG2+1)
  110   1          SEG1 = 5;                                                               //范围0-0x0F            时�
@@ -190,7 +190,7 @@ line level    source
                           CAN_FIR0 = EXTID2 >> 21;
                           CAN_FIR1 = ((EXTID2 >> 18) & 0xE0) | (CAN_IDE << 3) | (CAN_RTR << 4) | ((EXTID2 >> 15) & 0x07)
              -;
-C51 COMPILER V9.60.7.0   CAN                                                               10/20/2026 17:28:34 PAGE 4   
+C51 COMPILER V9.60.7.0   CAN                                                               10/27/2026 17:50:55 PAGE 4   
 
                           CAN_FMR0 = 0xFF;
                           CAN_FMR1 = 0xFF;
@@ -254,7 +254,7 @@ line level    source
  217   1          /* 接收环形缓冲初始化。size 必须是 2 的整数次幂（256 满足）*/
  218   1          rb_init(&Can_RcvRb, Can_RcvBuf, CAN_RCV_BUF_SIZE);
  219   1      }
-C51 COMPILER V9.60.7.0   CAN                                                               10/20/2026 17:28:34 PAGE 5   
+C51 COMPILER V9.60.7.0   CAN                                                               10/27/2026 17:50:55 PAGE 5   
 
  220          
  221          /* 函数名称：CAN_Read
@@ -318,7 +318,7 @@ line level    source
  279   3                  }
  280   2                  else
  281   2                  {
-C51 COMPILER V9.60.7.0   CAN                                                               10/20/2026 17:28:34 PAGE 6   
+C51 COMPILER V9.60.7.0   CAN                                                               10/27/2026 17:50:55 PAGE 6   
 
  282   3                      Can.STDID = 0;
  283   3                      Can.STDID |= CAN_RX1ID0 << 3 ;
@@ -382,7 +382,7 @@ line level    source
  341   1          return rb_is_empty(&Can_RcvRb);
  342   1      }
  343          
-C51 COMPILER V9.60.7.0   CAN                                                               10/20/2026 17:28:34 PAGE 7   
+C51 COMPILER V9.60.7.0   CAN                                                               10/27/2026 17:50:55 PAGE 7   
 
  344          bool CAN_MsgIsFull(void)
  345          {
@@ -446,7 +446,7 @@ line level    source
  403   1          if (CanSend.CAN_IDE)
  404   1          {
  405   2              CAN_TXID0 = CanSend.EXTID >> 21;
-C51 COMPILER V9.60.7.0   CAN                                                               10/20/2026 17:28:34 PAGE 8   
+C51 COMPILER V9.60.7.0   CAN                                                               10/27/2026 17:50:55 PAGE 8   
 
  406   2              CAN_TXID1 = CanSend.EXTID >> 13;
  407   2              CAN_TXID2 = CanSend.EXTID >> 5;
@@ -473,10 +473,10 @@ line level    source
  428   1          return 1;
  429   1      }
  430          
- 431          /* 新增：统一发送入口。len 必须为 8；can_id > 0x7FF 自动用扩展帧 */
+ 431          /* 统一发送入口。len 0~8；can_id > 0x7FF 自动用扩展帧 */
  432          uint8 can_hw_send(uint32_t can_id, const uint8_t *dat, uint8_t len)
  433          {
- 434   1          if (len != CAN_FRAME_DATA_LEN || dat == NULL) {
+ 434   1          if (len > CAN_FRAME_DATA_LEN || dat == NULL) {
  435   2              return 0;
  436   2          }
  437   1          // 根据ID值自动判断帧类型: >0x7FF使用扩展帧
@@ -510,7 +510,7 @@ line level    source
  465   2          }
  466   1      
  467   1          if (CAN_MsgIsEmpty())
-C51 COMPILER V9.60.7.0   CAN                                                               10/20/2026 17:28:34 PAGE 9   
+C51 COMPILER V9.60.7.0   CAN                                                               10/27/2026 17:50:55 PAGE 9   
 
  468   1          {
  469   2              return;
@@ -574,7 +574,7 @@ line level    source
  518   1           * REC  = 接收错误计数  : 正常 = 0；涨 = 收到波形但解不出来（波特率不对/接�
              -�问题）
  519   1           * ESR  = 错误状态寄存器: bit7=bus-off  bit6=错误警告(计数≥96)；正常 = 0
-C51 COMPILER V9.60.7.0   CAN                                                               10/20/2026 17:28:34 PAGE 10  
+C51 COMPILER V9.60.7.0   CAN                                                               10/27/2026 17:50:55 PAGE 10  
 
  520   1           * P0_OE= P0 输出使能   : 正常 = 128 (0x80，只有 bit7=P0.7 EEPROM_WP 是输出)
  521   1           *                        bit0/bit1 若为 1 => P0.0/P0.1 被当成 GPIO 占用了
@@ -638,7 +638,7 @@ line level    source
  572   1          uint16 i;
  573   1          uint8  dat[8];
  574   1      
-C51 COMPILER V9.60.7.0   CAN                                                               10/20/2026 17:28:34 PAGE 11  
+C51 COMPILER V9.60.7.0   CAN                                                               10/27/2026 17:50:55 PAGE 11  
 
  575   1          memset(dat, 0x11, 8);
  576   1      
@@ -702,7 +702,7 @@ line level    source
  633           * 原理：如果收发器确实接在 CANTX/CANRX 上，那么我们发帧时它会把总线状态回送
              -到 RXD，
  634           *       于是采样 CANRX 能看到"显性=低"电平；若发帧期间 CANRX 一直是高，
-C51 COMPILER V9.60.7.0   CAN                                                               10/20/2026 17:28:34 PAGE 12  
+C51 COMPILER V9.60.7.0   CAN                                                               10/27/2026 17:50:55 PAGE 12  
 
  635           *       说明这两根脚上没有收发器（或收发器没供电/没使能）。
  636           *
@@ -766,7 +766,7 @@ line level    source
  692   1          CAN_SendAndSample(0x01, 0x02, &txLow, &rxLow, &txing);
  693   1          printf("[PB] P0.0/P0.1 txLow=%u rxLow=%u txing=%u P0=%u\r\n",
  694   1                 txLow, rxLow, txing, (uint16)P0);
-C51 COMPILER V9.60.7.0   CAN                                                               10/20/2026 17:28:34 PAGE 13  
+C51 COMPILER V9.60.7.0   CAN                                                               10/27/2026 17:50:55 PAGE 13  
 
  695   1          printf("[PB] SR=%u TEC=%u REC=%u IFR=%u\r\n",
  696   1                 (uint16)CAN_SR, (uint16)CAN_TEC, (uint16)CAN_REC, (uint16)CAN_IFR);
@@ -830,7 +830,7 @@ line level    source
  753   2                  EXT_SET_U16(g_dbgDat[6], g_dbgDat[7], (uint16)FOC__IQ);
  754   2                  break;
  755   2      
-C51 COMPILER V9.60.7.0   CAN                                                               10/20/2026 17:28:34 PAGE 14  
+C51 COMPILER V9.60.7.0   CAN                                                               10/27/2026 17:50:55 PAGE 14  
 
  756   2              case 3:     /* ID 0x103：母线 / NTC / 故障 */
  757   2                  EXT_SET_U16(g_dbgDat[0], g_dbgDat[1], (uint16)mcFocCtrl.mcDcbusFlt);
@@ -869,7 +869,7 @@ line level    source
 
 
 MODULE INFORMATION:   STATIC OVERLAYABLE
-   CODE SIZE        =   3828    ----
+   CODE SIZE        =   3830    ----
    CONSTANT SIZE    =    522    ----
    XDATA SIZE       =    349      61
    PDATA SIZE       =   ----    ----

@@ -1,4 +1,4 @@
-C51 COMPILER V9.60.7.0   SPI                                                               10/20/2026 16:09:19 PAGE 1   
+C51 COMPILER V9.60.7.0   SPI                                                               10/27/2026 17:50:55 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE SPI
@@ -62,7 +62,7 @@ line level    source
   45   2              ClrBit(SPI_CR1,NSSMOD1);
   46   2              SetBit(SPI_CR1,NSSMOD0);
   47   2          
-C51 COMPILER V9.60.7.0   SPI                                                               10/20/2026 16:09:19 PAGE 2   
+C51 COMPILER V9.60.7.0   SPI                                                               10/27/2026 17:50:55 PAGE 2   
 
   48   2          //SetBit(PH_SEL1 , SPICT0);                         //单线制SPI功能转移(P05-->P00)
   49   2          }

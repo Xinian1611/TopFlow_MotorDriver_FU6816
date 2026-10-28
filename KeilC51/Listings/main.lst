@@ -1,4 +1,4 @@
-C51 COMPILER V9.60.7.0   MAIN                                                              10/20/2026 17:28:29 PAGE 1   
+C51 COMPILER V9.60.7.0   MAIN                                                              10/27/2026 17:50:52 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE MAIN
@@ -62,7 +62,7 @@ line level    source
                   SPI_Init();
                   Set_DBG_DMA(&HARD_SPIDATA);
                   #elif (DBG_MODE ==  DBG_SPI_SW)   // 软件调试模式
-C51 COMPILER V9.60.7.0   MAIN                                                              10/20/2026 17:28:29 PAGE 2   
+C51 COMPILER V9.60.7.0   MAIN                                                              10/27/2026 17:50:52 PAGE 2   
 
                   SPI_Init();
                   Set_DBG_DMA(spidebug);
@@ -126,7 +126,7 @@ line level    source
                   LIN_Init();
                   #endif
  108   1      
-C51 COMPILER V9.60.7.0   MAIN                                                              10/20/2026 17:28:29 PAGE 3   
+C51 COMPILER V9.60.7.0   MAIN                                                              10/27/2026 17:50:52 PAGE 3   
 
  109   1        
  110   1        /*----- Can初始化 -----*/
@@ -184,23 +184,23 @@ line level    source
  160          {
  161   1          /************************VREF&VHALF Config************************/
  162   1          #if (HW_ADC_VREF == VREF3_0)
+ 163   1          {
+ 164   2              SetBit(VREF_VHALF_CR, VRVSEL1);             //00-->4.5V   01-->VDD5
+ 165   2              ClrBit(VREF_VHALF_CR, VRVSEL0);             //10-->3.0V   11-->4.0V
+ 166   2          }
+ 167   1          #elif (HW_ADC_VREF == VREF4_0)
                   {
-                      SetBit(VREF_VHALF_CR, VRVSEL1);             //00-->4.5V   01-->VDD5
-                      ClrBit(VREF_VHALF_CR, VRVSEL0);             //10-->3.0V   11-->4.0V
-                  }
-                  #elif (HW_ADC_VREF == VREF4_0)
-                  {
-C51 COMPILER V9.60.7.0   MAIN                                                              10/20/2026 17:28:29 PAGE 4   
+C51 COMPILER V9.60.7.0   MAIN                                                              10/27/2026 17:50:52 PAGE 4   
 
                       SetBit(VREF_VHALF_CR, VRVSEL1);             //00-->4.5V   01-->VDD5
                       SetBit(VREF_VHALF_CR, VRVSEL0);             //10-->3.0V   11-->4.0V
                   }
                   #elif (HW_ADC_VREF == VREF4_5)
- 173   1          {
- 174   2              ClrBit(VREF_VHALF_CR, VRVSEL1);             //00-->4.5V   01-->VDD5
- 175   2              ClrBit(VREF_VHALF_CR, VRVSEL0);             //10-->3.0V   11-->4.0V
- 176   2          }
- 177   1          #elif (HW_ADC_VREF == VREF5_0)
+                  {
+                      ClrBit(VREF_VHALF_CR, VRVSEL1);             //00-->4.5V   01-->VDD5
+                      ClrBit(VREF_VHALF_CR, VRVSEL0);             //10-->3.0V   11-->4.0V
+                  }
+                  #elif (HW_ADC_VREF == VREF5_0)
                   {
                       ClrBit(VREF_VHALF_CR, VRVSEL1);             //00-->4.5V   01-->VDD5
                       SetBit(VREF_VHALF_CR, VRVSEL0);             //10-->3.0V   11-->4.0V
@@ -254,7 +254,7 @@ line level    source
  226   1          
  227   1          /* ----- 部分变量初始化 ----- */
  228   1          SoftwareInit();
-C51 COMPILER V9.60.7.0   MAIN                                                              10/20/2026 17:28:29 PAGE 5   
+C51 COMPILER V9.60.7.0   MAIN                                                              10/27/2026 17:50:52 PAGE 5   
 
  229   1        
  230   1          /* ----- 硬件初始化，配置MCU外设 ----- */
@@ -318,7 +318,7 @@ line level    source
  288   2              /* 电压/温度报警事件：1ms任务只置位，这里打印，避免 printf 阻塞 1ms 节拍
              - */
  289   2              if (g_alarm_evt != ALARM_EVT_NONE)
-C51 COMPILER V9.60.7.0   MAIN                                                              10/20/2026 17:28:29 PAGE 6   
+C51 COMPILER V9.60.7.0   MAIN                                                              10/27/2026 17:50:52 PAGE 6   
 
  290   2              {
  291   3                  switch (g_alarm_evt)
@@ -382,7 +382,7 @@ line level    source
  347   2              //     (int16)mcFocCtrl.SpeedFlt,     /* spd   : 滤波后转速 Q15 */
  348   2              //     (int16)mcFocCtrl.Ref,          /* ref   : 速度给定 Q15 */
  349   2              //     (int16)mcFocCtrl.IqRef,             /* iqref : 电流环 Iq 给定 */
-C51 COMPILER V9.60.7.0   MAIN                                                              10/20/2026 17:28:29 PAGE 7   
+C51 COMPILER V9.60.7.0   MAIN                                                              10/27/2026 17:50:52 PAGE 7   
 
  350   2              //     (int16)FOC__IQ,                /* iq    : 反馈 Iq */
  351   2              //     (int16)FOC__ID,                /* id    : 反馈 Id */
@@ -446,7 +446,7 @@ line level    source
  406   3                  /* -----电机控制状态机----- */
  407   3                  MC_Control();
  408   3              }
-C51 COMPILER V9.60.7.0   MAIN                                                              10/20/2026 17:28:29 PAGE 8   
+C51 COMPILER V9.60.7.0   MAIN                                                              10/27/2026 17:50:52 PAGE 8   
 
  409   2              
  410   2              /* -----1ms处理函数----- */

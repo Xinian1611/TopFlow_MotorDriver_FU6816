@@ -1,4 +1,4 @@
-C51 COMPILER V9.60.7.0   MT6701                                                            10/20/2026 17:28:34 PAGE 1   
+C51 COMPILER V9.60.7.0   MT6701                                                            10/27/2026 17:50:56 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE MT6701
@@ -62,7 +62,7 @@ line level    source
   49           */
   50          #define MT_I2C_TO   3000
   51          
-C51 COMPILER V9.60.7.0   MT6701                                                            10/20/2026 17:28:34 PAGE 2   
+C51 COMPILER V9.60.7.0   MT6701                                                            10/27/2026 17:50:56 PAGE 2   
 
   52          static uint8 xdata g_mt_srSnap = 0, g_mt_crSnap = 0;   /* 超时瞬间寄存器快照（排查用）*/
   53          
@@ -126,7 +126,7 @@ line level    source
  109   2              SetBit(P0_OE, P06); GP06 = 0; mt_dly_short();
  110   2              ClrBit(P0_OE, P06);           mt_dly_short();
  111   2          }
-C51 COMPILER V9.60.7.0   MT6701                                                            10/20/2026 17:28:34 PAGE 3   
+C51 COMPILER V9.60.7.0   MT6701                                                            10/27/2026 17:50:56 PAGE 3   
 
  112   1          SetBit(P0_OE, P05); GP05 = 0; mt_dly_short();
  113   1          SetBit(P0_OE, P06);           mt_dly_short();
@@ -190,7 +190,7 @@ line level    source
  171   1          if (ReadBit(I2C_SR, NACK)) { mt_stop(); return 1; }
  172   1      
  173   1          /* --- 相位2：寄存器地址 --- */
-C51 COMPILER V9.60.7.0   MT6701                                                            10/20/2026 17:28:34 PAGE 4   
+C51 COMPILER V9.60.7.0   MT6701                                                            10/27/2026 17:50:56 PAGE 4   
 
  174   1          I2C_DR = reg;                             /* 配置数据字节 */
  175   1          ClrBit(I2C_SR, STR);                      /* 执行 */
@@ -254,7 +254,7 @@ line level    source
               }
               
               static uint8 mt_rbyte(void)
-C51 COMPILER V9.60.7.0   MT6701                                                            10/20/2026 17:28:34 PAGE 5   
+C51 COMPILER V9.60.7.0   MT6701                                                            10/27/2026 17:50:56 PAGE 5   
 
               {
                   uint8 i, b = 0;
@@ -318,7 +318,7 @@ line level    source
                   mt_stop();
                   return 0;
               }
-C51 COMPILER V9.60.7.0   MT6701                                                            10/20/2026 17:28:34 PAGE 6   
+C51 COMPILER V9.60.7.0   MT6701                                                            10/27/2026 17:50:56 PAGE 6   
 
               #endif
  295          
@@ -382,7 +382,7 @@ line level    source
  353   1          g_mt6701_err = mt_i2c_read(MT6701_ADDR, reg, pDat, 1);
  354   1          if (g_mt6701_err != 0) { g_mt6701_errCnt++; }
  355   1          return g_mt6701_err;
-C51 COMPILER V9.60.7.0   MT6701                                                            10/20/2026 17:28:34 PAGE 7   
+C51 COMPILER V9.60.7.0   MT6701                                                            10/27/2026 17:50:56 PAGE 7   
 
  356   1      }
  357          
@@ -446,7 +446,7 @@ line level    source
  414   1          {
  415   2              g_mt6701_boot[1] = tmp;
  416   2              if (MT6701_ANGLE_DIR == 0) { tmp &= (uint8)~(1 << 1); }
-C51 COMPILER V9.60.7.0   MT6701                                                            10/20/2026 17:28:34 PAGE 8   
+C51 COMPILER V9.60.7.0   MT6701                                                            10/27/2026 17:50:56 PAGE 8   
 
  417   2              else                       { tmp |= (uint8)(1 << 1); }
  418   2              MT_WR(MT6701_REG_29, tmp);
@@ -510,7 +510,7 @@ line level    source
  476   4                  }
  477   3                  else { g_mt6701_boot[0] |= 0x10; }
  478   3              }
-C51 COMPILER V9.60.7.0   MT6701                                                            10/20/2026 17:28:34 PAGE 9   
+C51 COMPILER V9.60.7.0   MT6701                                                            10/27/2026 17:50:56 PAGE 9   
 
  479   2              else { g_mt6701_boot[0] |= 0x08; }        /* 角度在跳 → 拒绝写零点 */
  480   2          }
@@ -574,7 +574,7 @@ line level    source
  537   1          f[5] = g_mt6701_boot[2];
  538   1          f[6] = g_mt6701_boot[3];
  539   1          f[7] = g_mt6701_boot[4];
-C51 COMPILER V9.60.7.0   MT6701                                                            10/20/2026 17:28:34 PAGE 10  
+C51 COMPILER V9.60.7.0   MT6701                                                            10/27/2026 17:50:56 PAGE 10  
 
  540   1          can_hw_send(0x1F0, f, 8);
  541   1      
@@ -638,7 +638,7 @@ line level    source
  597   1          s_anaCnt = 0;
  598   1      
  599   1          /* 升序插入排序（本工程 TSD.c 的 NTC 滤波器同写法）*/
-C51 COMPILER V9.60.7.0   MT6701                                                            10/20/2026 17:28:34 PAGE 11  
+C51 COMPILER V9.60.7.0   MT6701                                                            10/27/2026 17:50:56 PAGE 11  
 
  600   1          for (i = 1; i < MT6701_ANA_POINTS; i++)
  601   1          {
@@ -702,7 +702,7 @@ line level    source
  657           * @note   ↔ Inter_zxmotor.c: MT6701_GetAngleRaw()
  658           */
  659          uint16 MT6701_GetAngle10(void)
-C51 COMPILER V9.60.7.0   MT6701                                                            10/20/2026 17:28:34 PAGE 12  
+C51 COMPILER V9.60.7.0   MT6701                                                            10/27/2026 17:50:56 PAGE 12  
 
  660          {
  661   1          return g_mt6701_angle10;
@@ -766,7 +766,7 @@ line level    source
  718   1          if (ReadBit(CAN_SR, TXING)) { return; }
  719   1      
  720   1          pp = g_mt6701_pp;
-C51 COMPILER V9.60.7.0   MT6701                                                            10/20/2026 17:28:34 PAGE 13  
+C51 COMPILER V9.60.7.0   MT6701                                                            10/27/2026 17:50:56 PAGE 13  
 
  721   1          if (pp > 255U) { pp = 255U; }
  722   1      

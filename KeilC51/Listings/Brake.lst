@@ -1,4 +1,4 @@
-C51 COMPILER V9.60.7.0   BRAKE                                                             10/20/2026 17:28:34 PAGE 1   
+C51 COMPILER V9.60.7.0   BRAKE                                                             10/27/2026 17:50:56 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE BRAKE
@@ -62,7 +62,7 @@ line level    source
   47   1      
   48   1          /*  改动：不再自己触发 ADC。
   49   1           *   上游 TickCycle_1ms() 现在每 1ms 无条件做一次顺序采样，ADC1_DR 会被一起刷新�
-C51 COMPILER V9.60.7.0   BRAKE                                                             10/20/2026 17:28:34 PAGE 2   
+C51 COMPILER V9.60.7.0   BRAKE                                                             10/27/2026 17:50:56 PAGE 2   
 
              -��
   50   1           *   而 main.c 的 1ms 块里顺序是 TickCycle_1ms() → Brake_Update()，
@@ -126,7 +126,7 @@ line level    source
                   s_state   = BRAKE_STATE_RELEASED;           /* 不检测：立即视为动作完成 */
               #endif
  107   1      }
-C51 COMPILER V9.60.7.0   BRAKE                                                             10/20/2026 17:28:34 PAGE 3   
+C51 COMPILER V9.60.7.0   BRAKE                                                             10/27/2026 17:50:56 PAGE 3   
 
  108          
  109          /**
@@ -190,7 +190,7 @@ line level    source
  166   3                      s_waitCnt++;
  167   3                  }
  168   2                  else
-C51 COMPILER V9.60.7.0   BRAKE                                                             10/20/2026 17:28:34 PAGE 4   
+C51 COMPILER V9.60.7.0   BRAKE                                                             10/27/2026 17:50:56 PAGE 4   
 
  169   2                  {
  170   3                      s_state = BRAKE_STATE_FAULT;        /* 开闸超时：禁止驱动电机 */
@@ -254,7 +254,7 @@ line level    source
  227          #else   /* ============ BRAKE_ENABLE == 0：整个模块编译成空实现（调试用）============ */
                       /* P4.3 不初始化、不输出；互锁视为常开，电机可直接驱动 */
               
-C51 COMPILER V9.60.7.0   BRAKE                                                             10/20/2026 17:28:34 PAGE 5   
+C51 COMPILER V9.60.7.0   BRAKE                                                             10/27/2026 17:50:56 PAGE 5   
 
               void          Brake_Init(void)           { }
               void          Brake_Update(void)         { }

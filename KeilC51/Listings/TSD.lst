@@ -1,4 +1,4 @@
-C51 COMPILER V9.60.7.0   TSD                                                               10/20/2026 17:28:33 PAGE 1   
+C51 COMPILER V9.60.7.0   TSD                                                               10/27/2026 17:50:55 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE TSD
@@ -62,7 +62,7 @@ line level    source
   51   1          return SetTJ_Value;
   52   1      }
   53          
-C51 COMPILER V9.60.7.0   TSD                                                               10/20/2026 17:28:33 PAGE 2   
+C51 COMPILER V9.60.7.0   TSD                                                               10/27/2026 17:50:55 PAGE 2   
 
   54          /* ==================== NTC 原值的 50 点截尾平均 ====================
   55           * 为什么存 8 位：ADC2_DR 是"左次高位对齐"（ADCALIGN=1 → 结果在 [14:3]），取高 8 �
@@ -126,7 +126,7 @@ line level    source
              -2
  111           *    ② ADC_Filter_GetChannelValueF(ch)（旧工程 DMA 多点去极值均值）
  112           *       → FU6866 是硬件自动扫通道，用本工程已经在跑的滤波器 mcFocCtrl.NTCTempFlt
-C51 COMPILER V9.60.7.0   TSD                                                               10/20/2026 17:28:33 PAGE 3   
+C51 COMPILER V9.60.7.0   TSD                                                               10/27/2026 17:50:55 PAGE 3   
 
  113           *  注：分压网络 5V 供电而 ADC 参考 4.5V（旧工程 3.3V，本板 4.5V，同样有饱和限制
              -）
@@ -190,7 +190,7 @@ line level    source
  169   1      }
 
 
-C51 COMPILER V9.60.7.0   TSD                                                               10/20/2026 17:28:33 PAGE 4   
+C51 COMPILER V9.60.7.0   TSD                                                               10/27/2026 17:50:55 PAGE 4   
 
 MODULE INFORMATION:   STATIC OVERLAYABLE
    CODE SIZE        =    598    ----

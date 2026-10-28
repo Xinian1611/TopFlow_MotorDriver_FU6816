@@ -1,4 +1,4 @@
-C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      10/20/2026 17:28:31 PAGE 1   
+C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      10/27/2026 17:50:53 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE MOTORCONTROL
@@ -62,7 +62,7 @@ line level    source
   47   4                          {
   48   5                              mcFaultSource = FaultBrake;      /* 抱闸确认超时 → 报故障 */
   49   5                          }
-C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      10/20/2026 17:28:31 PAGE 2   
+C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      10/27/2026 17:50:53 PAGE 2   
 
   50   4                          break;                               /* 未确认开闸：留在 mcReady 等 */
   51   4                      }
@@ -126,7 +126,7 @@ line level    source
  106   2                  
  107   2                  break;
  108   2      #if (CHARGE_EN == Enable)           
-C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      10/20/2026 17:28:31 PAGE 3   
+C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      10/27/2026 17:50:53 PAGE 3   
 
  109   2              case mcCharge:
  110   2                  if (isCtrlPowOn == false)
@@ -190,7 +190,7 @@ line level    source
                           
                           break;
               #endif
-C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      10/20/2026 17:28:31 PAGE 4   
+C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      10/27/2026 17:50:53 PAGE 4   
 
  170   2      #if (PosCheckEnable == Enable)          
                       case mcPosiCheck:
@@ -254,7 +254,7 @@ line level    source
  229   2                  else if (mcFocCtrl.Start_Mode == HEADWIND_START) // 逆风启动
  230   2                  {
  231   3                      if (mcFocCtrl.State_Count > 0) // 逆风启动刹车过程
-C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      10/20/2026 17:28:31 PAGE 5   
+C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      10/27/2026 17:50:53 PAGE 5   
 
  232   3                      {
  233   4                          // 配置刹车代码
@@ -318,7 +318,7 @@ line level    source
  291   2                    MC_Stop();
  292   2              
  293   2                  break;
-C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      10/20/2026 17:28:31 PAGE 6   
+C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      10/27/2026 17:50:53 PAGE 6   
 
  294   2                  
  295   2              case mcBrake:
@@ -382,7 +382,7 @@ MODULE INFORMATION:   STATIC OVERLAYABLE
    BIT SIZE         =   ----    ----
    EDATA SIZE       =   ----    ----
    HDATA SIZE       =   ----    ----
-C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      10/20/2026 17:28:31 PAGE 7   
+C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      10/27/2026 17:50:53 PAGE 7   
 
    XDATA CONST SIZE =   ----    ----
    FAR CONST SIZE   =   ----    ----

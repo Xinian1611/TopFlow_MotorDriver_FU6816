@@ -1,4 +1,4 @@
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/20/2026 17:28:30 PAGE 1   
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/27/2026 17:50:52 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE ADDFUNCTION
@@ -32,374 +32,378 @@ line level    source
   21          uint16 xdata Power_Currt;
   22          uint8 Flag_Single_Mode = 0;
   23          
-  24          #if MOTOR_LOCKED_ROTOR
-              static uint16 xdata s_stallTick = 0;     /* 堵转判断 10ms 分频 */
-              #endif
+  24          uint16 I_Num4;
+  25          uint16 I_Num11;
+  26          uint16 ticks_1ms;
   27          
-  28          #if MOTOR_LIMIT_SWITCH
+  28          #if (MOTOR_LOCKED_ROTOR)
+  29          static uint16 xdata s_stallTick = 0;     /* 到位堵转判断 10ms 分频 */
+  30          #endif
+  31          
+  32          #if MOTOR_LIMIT_SWITCH
               static uint16 xdata s_limitTick = 0;     /* 速度模式限位 10ms 分频 */
               #endif
-  31          
-  32          /**
-  33              @brief        对变量取16位的绝对值
-  34              @param[in]    value
-  35              @return       绝对值
-  36              @date         2022-07-13
-  37          */
-  38          uint16 Abs_F16(int16 value)
-  39          {
-  40   1          if (value < 0)
-  41   1          {
-  42   2              return (-value);
-  43   2          }
-  44   1          else
+  35          
+  36          /**
+  37              @brief        对变量取16位的绝对值
+  38              @param[in]    value
+  39              @return       绝对值
+  40              @date         2022-07-13
+  41          */
+  42          uint16 Abs_F16(int16 value)
+  43          {
+  44   1          if (value < 0)
   45   1          {
-  46   2              return (value);
+  46   2              return (-value);
   47   2          }
-  48   1      }
-  49          
-  50          /**
-  51              @brief        对变量取32位的绝对值
-  52              @param[in]    value
-  53              @return       绝对值
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/20/2026 17:28:30 PAGE 2   
+  48   1          else
+  49   1          {
+  50   2              return (value);
+  51   2          }
+  52   1      }
+  53          
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/27/2026 17:50:52 PAGE 2   
 
-  54              @date         2022-07-13
-  55          */
-  56          uint32 Abs_F32(int32 value)
-  57          {
-  58   1          if (value < 0)
-  59   1          {
-  60   2              return (-value);
-  61   2          }
-  62   1          else
+  54          /**
+  55              @brief        对变量取32位的绝对值
+  56              @param[in]    value
+  57              @return       绝对值
+  58              @date         2022-07-13
+  59          */
+  60          uint32 Abs_F32(int32 value)
+  61          {
+  62   1          if (value < 0)
   63   1          {
-  64   2              return (value);
+  64   2              return (-value);
   65   2          }
-  66   1      }
-  67          
-  68          /**
-  69           * @brief        PWM调速信号计算，本例程提供Duty计算，如需频率信号可自行使用mcPw
+  66   1          else
+  67   1          {
+  68   2              return (value);
+  69   2          }
+  70   1      }
+  71          
+  72          /**
+  73           * @brief        PWM调速信号计算，本例程提供Duty计算，如需频率信号可自行使用mcPw
              -mInput.Period周期值计算
-  70           * @date         2022-07-14
-  71           */
-  72          void PWMDutyCal(void)
-  73          {
-  74   1          static uint16 dutyTemp = 0;
-  75   1      
-  76   1          if (mcPwmInput.isUpdate) // 有新的duty更新
-  77   1          {
-  78   2              if ((Abs_F32(mcPwmInput.TimerDR - mcPwmInput.TimerDROld) < 0xFF)       // 误差在1个Byte之间�
+  74           * @date         2022-07-14
+  75           */
+  76          void PWMDutyCal(void)
+  77          {
+  78   1          static uint16 dutyTemp = 0;
+  79   1      
+  80   1          if (mcPwmInput.isUpdate) // 有新的duty更新
+  81   1          {
+  82   2              if ((Abs_F32(mcPwmInput.TimerDR - mcPwmInput.TimerDROld) < 0xFF)       // 误差在1个Byte之间�
              -��处理
-  79   2                  && (Abs_F32(mcPwmInput.TimerARROld - mcPwmInput.TimerARR) < 0xFF)) // 误差在1个Byte之间�
+  83   2                  && (Abs_F32(mcPwmInput.TimerARROld - mcPwmInput.TimerARR) < 0xFF)) // 误差在1个Byte之间�
              -��处理
-  80   2              {
-  81   3                  mcPwmInput.Compare = mcPwmInput.TimerDR; // 读取DR与ARR值
-  82   3                  mcPwmInput.Period = mcPwmInput.TimerARR;
-  83   3                  mcPwmInput.Duty = MDU_DIV0_GetQL16(mcPwmInput.Compare >> 1, 0x0000, mcPwmInput.Period);
-  84   3      /***速度随PWM增大而增大***/
-  85   3      #if (PWMDUTY_POLARITY == NegaPWMDUTY)
+  84   2              {
+  85   3                  mcPwmInput.Compare = mcPwmInput.TimerDR; // 读取DR与ARR值
+  86   3                  mcPwmInput.Period = mcPwmInput.TimerARR;
+  87   3                  mcPwmInput.Duty = MDU_DIV0_GetQL16(mcPwmInput.Compare >> 1, 0x0000, mcPwmInput.Period);
+  88   3      /***速度随PWM增大而增大***/
+  89   3      #if (PWMDUTY_POLARITY == NegaPWMDUTY)
                           {
                               dutyTemp = 32768 - mcPwmInput.Duty;
                           }
               /***速度随PWM增大而减小***/
               #else
-  91   3                  {
-  92   4                      dutyTemp = mcPwmInput.Duty;
-  93   4                  }
-  94   3      #endif
-  95   3      
-  96   3                  if ((dutyTemp > ONPWMDuty) && (dutyTemp <= OFFPWMDutyHigh))
-  97   3                  {
-  98   4                      mcPwmInput.MotorOffFilter = MotorOffFilterTime;
-  99   4                      if (mcPwmInput.MotorOnFilter == 0) // 开机滤波
- 100   4                      {
- 101   5                          mcPwmInput.MotorOnFilter = MotorOnFilterTime;
- 102   5                          isCtrlPowOn = true; // 开机
- 103   5                      }
- 104   4                  }
- 105   3                  else if ((dutyTemp < OFFPWMDuty) || (dutyTemp > OFFPWMDutyHigh))
- 106   3                  {
- 107   4                      mcPwmInput.MotorOnFilter = MotorOnFilterTime;
- 108   4                      if (mcPwmInput.MotorOffFilter == 0) // 关机滤波
- 109   4                      {
- 110   5                          mcPwmInput.MotorOffFilter = MotorOffFilterTime;
- 111   5                          isCtrlPowOn = false; // 关机
- 112   5                      }
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/20/2026 17:28:30 PAGE 3   
+  95   3                  {
+  96   4                      dutyTemp = mcPwmInput.Duty;
+  97   4                  }
+  98   3      #endif
+  99   3      
+ 100   3                  if ((dutyTemp > ONPWMDuty) && (dutyTemp <= OFFPWMDutyHigh))
+ 101   3                  {
+ 102   4                      mcPwmInput.MotorOffFilter = MotorOffFilterTime;
+ 103   4                      if (mcPwmInput.MotorOnFilter == 0) // 开机滤波
+ 104   4                      {
+ 105   5                          mcPwmInput.MotorOnFilter = MotorOnFilterTime;
+ 106   5                          isCtrlPowOn = true; // 开机
+ 107   5                      }
+ 108   4                  }
+ 109   3                  else if ((dutyTemp < OFFPWMDuty) || (dutyTemp > OFFPWMDutyHigh))
+ 110   3                  {
+ 111   4                      mcPwmInput.MotorOnFilter = MotorOnFilterTime;
+ 112   4                      if (mcPwmInput.MotorOffFilter == 0) // 关机滤波
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/27/2026 17:50:52 PAGE 3   
 
- 113   4                  }
- 114   3                  else
- 115   3                  {
- 116   4                      // 不做处理，保持前一个状态
+ 113   4                      {
+ 114   5                          mcPwmInput.MotorOffFilter = MotorOffFilterTime;
+ 115   5                          isCtrlPowOn = false; // 关机
+ 116   5                      }
  117   4                  }
- 118   3      
- 119   3                  // 转速曲线计算
- 120   3                  if (isCtrlPowOn == true)
- 121   3                  {
- 122   4                      if (dutyTemp <= MINPWMDuty)
- 123   4                      {
- 124   5                          mcFocCtrl.Ref = MOTOR_SPEED_MIN_RPM;
- 125   5                      }
- 126   4                      else if (dutyTemp >= MAXPWMDuty)
+ 118   3                  else
+ 119   3                  {
+ 120   4                      // 不做处理，保持前一个状态
+ 121   4                  }
+ 122   3      
+ 123   3                  // 转速曲线计算
+ 124   3                  if (isCtrlPowOn == true)
+ 125   3                  {
+ 126   4                      if (dutyTemp <= MINPWMDuty)
  127   4                      {
- 128   5                          mcFocCtrl.Ref = MOTOR_SPEED_MAX_RPM;
+ 128   5                          mcFocCtrl.Ref = MOTOR_SPEED_MIN_RPM;
  129   5                      }
- 130   4                      else
+ 130   4                      else if (dutyTemp >= MAXPWMDuty)
  131   4                      {
- 132   5                          mcFocCtrl.Ref = MOTOR_SPEED_MIN_RPM + SPEED_K * (dutyTemp - MINPWMDuty);
+ 132   5                          mcFocCtrl.Ref = MOTOR_SPEED_MAX_RPM;
  133   5                      }
- 134   4                  }
- 135   3                  else
- 136   3                  {
- 137   4                      mcFocCtrl.Ref = 0;
+ 134   4                      else
+ 135   4                      {
+ 136   5                          mcFocCtrl.Ref = MOTOR_SPEED_MIN_RPM + SPEED_K * (dutyTemp - MINPWMDuty);
+ 137   5                      }
  138   4                  }
- 139   3              }
- 140   2      
- 141   2              mcPwmInput.isUpdate = 0;
- 142   2              mcPwmInput.TimerDROld = mcPwmInput.TimerDR;   // 将此次比较值赋值给上次比较值
- 143   2              mcPwmInput.TimerARROld = mcPwmInput.TimerARR; // 将此次周期值赋值给上次周期值
- 144   2          }
- 145   1      }
- 146          
- 147          /**
- 148           * @brief        VSP调速信号处理
- 149           * @date         2022-07-14
- 150           */
- 151          void VSPSample(void)
- 152          {
- 153   1          static int16 VSP = 0;
- 154   1          /*****VREF的采样获取值并滤波******/
- 155   1          VSP = MDU_LPF0(ADC7_DR, VSP, 10); // 注意低通滤波器系数范围为0---127
- 156   1      
- 157   1          if ((VSP > ONPWMDuty) && (VSP <= OFFPWMDutyHigh)) // 在ONPWMDuty-OFFPWMDutyHigh之间，电机有转�
+ 139   3                  else
+ 140   3                  {
+ 141   4                      mcFocCtrl.Ref = 0;
+ 142   4                  }
+ 143   3              }
+ 144   2      
+ 145   2              mcPwmInput.isUpdate = 0;
+ 146   2              mcPwmInput.TimerDROld = mcPwmInput.TimerDR;   // 将此次比较值赋值给上次比较值
+ 147   2              mcPwmInput.TimerARROld = mcPwmInput.TimerARR; // 将此次周期值赋值给上次周期值
+ 148   2          }
+ 149   1      }
+ 150          
+ 151          /**
+ 152           * @brief        VSP调速信号处理
+ 153           * @date         2022-07-14
+ 154           */
+ 155          void VSPSample(void)
+ 156          {
+ 157   1          static int16 VSP = 0;
+ 158   1          /*****VREF的采样获取值并滤波******/
+ 159   1          VSP = MDU_LPF0(ADC7_DR, VSP, 10); // 注意低通滤波器系数范围为0---127
+ 160   1      
+ 161   1          if ((VSP > ONPWMDuty) && (VSP <= OFFPWMDutyHigh)) // 在ONPWMDuty-OFFPWMDutyHigh之间，电机有转�
              -��运行
- 158   1          {
- 159   2              isCtrlPowOn = true; // 开机
- 160   2          }
- 161   1          else if ((VSP < OFFPWMDuty) || (VSP > OFFPWMDutyHigh))
  162   1          {
- 163   2              isCtrlPowOn = false; // 关机
+ 163   2              isCtrlPowOn = true; // 开机
  164   2          }
- 165   1      
- 166   1          // 转速曲线计算
- 167   1          if (isCtrlPowOn == true) //
- 168   1          {
- 169   2      #if (MOTOR_CTRL_MODE == SPEED_LOOP_CONTROL)
- 170   2              {
- 171   3                  if (VSP <= MINPWMDuty) // 最小转速运行
- 172   3                  {
- 173   4                      mcFocCtrl.Ref = MOTOR_SPEED_MIN_RPM;
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/20/2026 17:28:30 PAGE 4   
+ 165   1          else if ((VSP < OFFPWMDuty) || (VSP > OFFPWMDutyHigh))
+ 166   1          {
+ 167   2              isCtrlPowOn = false; // 关机
+ 168   2          }
+ 169   1      
+ 170   1          // 转速曲线计算
+ 171   1          if (isCtrlPowOn == true) //
+ 172   1          {
+ 173   2      #if (MOTOR_CTRL_MODE == SPEED_LOOP_CONTROL)
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/27/2026 17:50:52 PAGE 4   
 
- 174   4                  }
- 175   3                  else if (VSP < MAXPWMDuty) // 调速
+ 174   2              {
+ 175   3                  if (VSP <= MINPWMDuty) // 最小转速运行
  176   3                  {
- 177   4                      mcFocCtrl.Ref = MOTOR_SPEED_MIN_RPM + SPEED_K * (VSP - MINPWMDuty);
+ 177   4                      mcFocCtrl.Ref = MOTOR_SPEED_MIN_RPM;
  178   4                  }
- 179   3                  else // 最大转速运行
+ 179   3                  else if (VSP < MAXPWMDuty) // 调速
  180   3                  {
- 181   4                      mcFocCtrl.Ref = MOTOR_SPEED_MAX_RPM;
+ 181   4                      mcFocCtrl.Ref = MOTOR_SPEED_MIN_RPM + SPEED_K * (VSP - MINPWMDuty);
  182   4                  }
- 183   3              }
- 184   2      #endif
- 185   2          }
- 186   1          else
- 187   1          {
- 188   2              mcFocCtrl.Ref = 0;
+ 183   3                  else // 最大转速运行
+ 184   3                  {
+ 185   4                      mcFocCtrl.Ref = MOTOR_SPEED_MAX_RPM;
+ 186   4                  }
+ 187   3              }
+ 188   2      #endif
  189   2          }
- 190   1      }
- 191          
- 192          /**
- 193           * @brief        启停测试工具，用于测试启动可靠性
- 194           * @date         2022-07-14
- 195           */
- 196          void ONOFF_Test(void)
- 197          {
- 198   1          if (debug_ONOFFTest.State == 1) // 开机状态
- 199   1          {
- 200   2              debug_ONOFFTest.TimeCnt++;
- 201   2      
- 202   2              if (debug_ONOFFTest.TimeCnt > ONOFFTEST_ON_TIME)
- 203   2              {
- 204   3                  debug_ONOFFTest.Times++;   // 启停次数+1
- 205   3                  debug_ONOFFTest.State = 0; // 切换到关机状态
- 206   3                  debug_ONOFFTest.TimeCnt = 0;
- 207   3                  mcFocCtrl.Ref = 0;   // 目标值也给0
- 208   3                  isCtrlPowOn = false; // 关机
- 209   3              }
- 210   2          }
- 211   1          else // 关机状态
- 212   1          {
- 213   2              debug_ONOFFTest.TimeCnt++;
- 214   2      
- 215   2              if (debug_ONOFFTest.TimeCnt > ONOFFTEST_OFF_TIME)
- 216   2              {
- 217   3                  debug_ONOFFTest.TimeCnt = 0;
- 218   3      
- 219   3                  if ((mcState != mcFault) && (mcState != mcStop))
- 220   3                  {
- 221   4                      debug_ONOFFTest.State = 1; // 切换到开机状态
- 222   4      #if (MOTOR_CTRL_MODE == SPEED_LOOP_CONTROL)
- 223   4                      {
- 224   5                          mcFocCtrl.Ref = ONOFFTEST_REF; // 固定转速赋值
- 225   5                      }
- 226   4      #elif (MOTOR_CTRL_MODE == POWER_LOOP_CONTROL)
+ 190   1          else
+ 191   1          {
+ 192   2              mcFocCtrl.Ref = 0;
+ 193   2          }
+ 194   1      }
+ 195          
+ 196          /**
+ 197           * @brief        启停测试工具，用于测试启动可靠性
+ 198           * @date         2022-07-14
+ 199           */
+ 200          void ONOFF_Test(void)
+ 201          {
+ 202   1          if (debug_ONOFFTest.State == 1) // 开机状态
+ 203   1          {
+ 204   2              debug_ONOFFTest.TimeCnt++;
+ 205   2      
+ 206   2              if (debug_ONOFFTest.TimeCnt > ONOFFTEST_ON_TIME)
+ 207   2              {
+ 208   3                  debug_ONOFFTest.Times++;   // 启停次数+1
+ 209   3                  debug_ONOFFTest.State = 0; // 切换到关机状态
+ 210   3                  debug_ONOFFTest.TimeCnt = 0;
+ 211   3                  mcFocCtrl.Ref = 0;   // 目标值也给0
+ 212   3                  isCtrlPowOn = false; // 关机
+ 213   3              }
+ 214   2          }
+ 215   1          else // 关机状态
+ 216   1          {
+ 217   2              debug_ONOFFTest.TimeCnt++;
+ 218   2      
+ 219   2              if (debug_ONOFFTest.TimeCnt > ONOFFTEST_OFF_TIME)
+ 220   2              {
+ 221   3                  debug_ONOFFTest.TimeCnt = 0;
+ 222   3      
+ 223   3                  if ((mcState != mcFault) && (mcState != mcStop))
+ 224   3                  {
+ 225   4                      debug_ONOFFTest.State = 1; // 切换到开机状态
+ 226   4      #if (MOTOR_CTRL_MODE == SPEED_LOOP_CONTROL)
+ 227   4                      {
+ 228   5                          mcFocCtrl.Ref = ONOFFTEST_REF; // 固定转速赋值
+ 229   5                      }
+ 230   4      #elif (MOTOR_CTRL_MODE == POWER_LOOP_CONTROL)
                               {
                                   mcFocCtrl.Ref = ONOFFTEST_PowerREF; // 固定功率赋值
                               }
               #elif (MOTOR_CTRL_MODE == CURRENT_LOOP_CONTROL)
                               {
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/27/2026 17:50:52 PAGE 5   
+
                                   mcFocCtrl.Ref = ONOFFTEST_CurrentREF; // 固定相电流赋值
                               }
               #endif
- 235   4                      isCtrlPowOn = true; // 开机
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/20/2026 17:28:30 PAGE 5   
-
- 236   4      
- 237   4                      //                if (mcFocCtrl.FR == CW)
- 238   4                      //                {
- 239   4                      //                    mcFocCtrl.FR         = CCW;
- 240   4                      //                }
- 241   4                      //                else
+ 239   4                      isCtrlPowOn = true; // 开机
+ 240   4      
+ 241   4                      //                if (mcFocCtrl.FR == CW)
  242   4                      //                {
- 243   4                      //                    mcFocCtrl.FR        = CW;
+ 243   4                      //                    mcFocCtrl.FR         = CCW;
  244   4                      //                }
- 245   4                  }
- 246   3              }
- 247   2          }
- 248   1      }
- 249          
- 250          /**
- 251           * @brief        调速信号处理包含：开关机控制、将调速信号处理成控制目标给定�
+ 245   4                      //                else
+ 246   4                      //                {
+ 247   4                      //                    mcFocCtrl.FR        = CW;
+ 248   4                      //                }
+ 249   4                  }
+ 250   3              }
+ 251   2          }
+ 252   1      }
+ 253          
+ 254          /**
+ 255           * @brief        调速信号处理包含：开关机控制、将调速信号处理成控制目标给定�
              -�号
- 252           * @date         2022-07-14
- 253           */
- 254          void TargetRef_Process(void)
- 255          {
- 256   1      #if (MOTOR_TEXT_OR_DEBUG == 0)
-                  /* ===== 0：ONOFFTEST_REF 生效（固定给定测试） =====
-                   * 不依赖 CAN/PWM/LIN 调速源，直接接管给定；
-                   * 保留 CAN 急停，方便台架紧急停机。 */
-                  if (g_run_state.is_estop)
-                  {
-                      isCtrlPowOn   = false;
-                      mcFocCtrl.Ref = 0;
-                  }
-                  else
-                  {
-                      isCtrlPowOn = (ONOFFTEST_REF != 0);   // 给定 0 就不开机
-              #if (MOTOR_CTRL_MODE == SPEED_LOOP_CONTROL)
-                      mcFocCtrl.Ref = ONOFFTEST_REF;        // 固定转速
-              #elif (MOTOR_CTRL_MODE == POWER_LOOP_CONTROL)
+ 256           * @date         2022-07-14
+ 257           */
+ 258          void TargetRef_Process(void)
+ 259          {
+ 260   1      #if (MOTOR_TEXT_OR_DEBUG == 0)
+ 261   1          /* ===== 0：ONOFFTEST_REF 生效（固定给定测试） =====
+ 262   1           * 不依赖 CAN/PWM/LIN 调速源，直接接管给定；
+ 263   1           * 保留 CAN 急停，方便台架紧急停机。 */
+ 264   1          if (g_run_state.is_estop)
+ 265   1          {
+ 266   2              isCtrlPowOn   = false;
+ 267   2              mcFocCtrl.Ref = 0;
+ 268   2          }
+ 269   1          else
+ 270   1          {
+ 271   2              isCtrlPowOn = (ONOFFTEST_REF != 0);   // 给定 0 就不开机
+ 272   2      #if (MOTOR_CTRL_MODE == SPEED_LOOP_CONTROL)
+ 273   2              mcFocCtrl.Ref = ONOFFTEST_REF;        // 固定转速
+ 274   2      #elif (MOTOR_CTRL_MODE == POWER_LOOP_CONTROL)
                       mcFocCtrl.Ref = ONOFFTEST_PowerREF;   // 固定功率
               #elif (MOTOR_CTRL_MODE == CURRENT_LOOP_CONTROL)
                       mcFocCtrl.Ref = ONOFFTEST_CurrentREF; // 固定相电流
               #endif
-                  }
-              #else
- 277   1          /* ===== 1：ONOFFTEST_REF 不生效，走原来的调速源 ===== */
- 278   1      #if (SPEED_MODE == CANMODE)
- 279   1          {
- 280   2              uint8_t target_fr;
- 281   2              isCtrlPowOn = g_run_state.is_started;
- 282   2      
- 283   2      #if (MOTOR_POSITION_CLOSE_LOOP != 0)
- 284   2              /* 位置模式：到位/限位/堵转/故障时不允许再开机，防止主机持续 START 把�
+ 279   2          }
+ 280   1      #else
+                  /* ===== 1：ONOFFTEST_REF 不生效，走原来的调速源 ===== */
+              #if (SPEED_MODE == CANMODE)
+                  {
+                      uint8_t target_fr;
+                      isCtrlPowOn = g_run_state.is_started;
+              
+              #if (MOTOR_POSITION_CLOSE_LOOP != 0)
+                      /* 位置模式：到位/限位/堵转/故障时不允许再开机，防止主机持续 START 把�
              -��们重新拉起来 */
- 285   2              if (g_run_state.work_mode == EXT_WORK_MODE_POSITION)
- 286   2              {
- 287   3                  if ((g_pos_state == POS_IDLE) ||      /* 还没有有效位置目标 */
- 288   3                      (g_pos_state == POS_INPOS) ||
- 289   3                      (g_pos_state == POS_LIMIT) ||
- 290   3                      (g_pos_state == POS_STALL) ||
- 291   3                      (g_pos_state == POS_FAULT))
- 292   3                  {
- 293   4                      isCtrlPowOn     = false;
- 294   4                      mcFocCtrl.Ref   = 0;
- 295   4                      g_run_state.ref = 0.0f;
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/20/2026 17:28:30 PAGE 6   
+                      if (g_run_state.work_mode == EXT_WORK_MODE_POSITION)
+                      {
+                          if ((g_pos_state == POS_IDLE) ||      /* 还没有有效位置目标 */
+                              (g_pos_state == POS_INPOS) ||
+                              (g_pos_state == POS_LIMIT) ||
+                              (g_pos_state == POS_STALL) ||
+                              (g_pos_state == POS_FAULT))
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/27/2026 17:50:52 PAGE 6   
 
- 296   4                  }
- 297   3              }
- 298   2      #endif
- 299   2      
- 300   2              if (g_run_state.is_estop)
- 301   2              {
- 302   3                  mcFocCtrl.Ref = 0;
- 303   3                  isCtrlPowOn = false;
- 304   3                  g_run_state.is_started = false;
- 305   3                  g_run_state.reversal_braking = 0;  // 急停时退出换向
- 306   3              }
- 307   2      
- 308   2              // 目标方向
- 309   2              target_fr = (g_run_state.direction == CW) ? CW : CCW;
- 310   2      
- 311   2              // --- 换向减速处理 ---
- 312   2              // 原理: 电机正转动时收到反转指令，先减速到0，再切换方向加速到目标�
+                          {
+                              isCtrlPowOn     = false;
+                              mcFocCtrl.Ref   = 0;
+                              g_run_state.ref = 0.0f;
+                          }
+                      }
+              #endif
+              
+                      if (g_run_state.is_estop)
+                      {
+                          mcFocCtrl.Ref = 0;
+                          isCtrlPowOn = false;
+                          g_run_state.is_started = false;
+                          g_run_state.reversal_braking = 0;  // 急停时退出换向
+                      }
+              
+                      // 目标方向
+                      target_fr = (g_run_state.direction == CW) ? CW : CCW;
+              
+                      // --- 换向减速处理 ---
+                      // 原理: 电机正转动时收到反转指令，先减速到0，再切换方向加速到目标�
              -�
- 313   2              if (g_run_state.reversal_braking)
- 314   2              {
- 315   3                  // 检查退出条件: 方向一致、停机、目标为0、或实际速度已降至接近0
- 316   3                  if (target_fr == mcFocCtrl.FR || !g_run_state.is_started || g_run_state.ref == 0)
- 317   3                  {
- 318   4                      g_run_state.reversal_braking = 0;  // 条件变化，取消换向
- 319   4                  }
- 320   3                  else if (Abs_F16(mcFocCtrl.SpeedFlt) < S_Value(50.0))  // 速度低于50RPM视为停止
- 321   3                  {
- 322   4                      g_run_state.reversal_braking = 0;  // 减速到位，准备切换方向
- 323   4      
- 324   4                      // 应用旋转方向: 正数正转(CW), 负数反转(CCW)
- 325   4                      if (g_run_state.direction == CW)
- 326   4                      {
- 327   5                          mcFocCtrl.FR = CW;       // 正转
- 328   5                      }
- 329   4                      else
- 330   4                      {
- 331   5                          mcFocCtrl.FR = CCW;      // 反转
- 332   5                      }
- 333   4                  }
- 334   3              }
- 335   2              else
- 336   2              {
- 337   3                  // 正常模式: 检测是否需要启动换向减速
- 338   3                  // 条件: 方向改变、电机正在运行、速度大于停止阈值
- 339   3                  if (target_fr != mcFocCtrl.FR &&
- 340   3                      g_run_state.is_started && !g_run_state.is_estop &&
- 341   3                      g_run_state.ref > 0)
- 342   3                  {
- 343   4                      if (Abs_F16(mcFocCtrl.SpeedFlt) >= S_Value(50.0))
- 344   4                      {
- 345   5                          g_run_state.reversal_braking = 1;  // 启动换向减速
- 346   5                          mcState = mcStop;
- 347   5                      }
- 348   4                      else
- 349   4                      {
- 350   5                          mcFocCtrl.FR = target_fr;          // 低速直接换向，位置小步调节用
- 351   5                      }
- 352   4                  }
- 353   3      
- 354   3                  // 应用目标值
- 355   3                  if (g_run_state.work_mode == EXT_WORK_MODE_SPEED)
- 356   3                  {
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/20/2026 17:28:30 PAGE 7   
+                      if (g_run_state.reversal_braking)
+                      {
+                          // 检查退出条件: 方向一致、停机、目标为0、或实际速度已降至接近0
+                          if (target_fr == mcFocCtrl.FR || !g_run_state.is_started || g_run_state.ref == 0)
+                          {
+                              g_run_state.reversal_braking = 0;  // 条件变化，取消换向
+                          }
+                          else if (Abs_F16(mcFocCtrl.SpeedFlt) < S_Value(50.0))  // 速度低于50RPM视为停止
+                          {
+                              g_run_state.reversal_braking = 0;  // 减速到位，准备切换方向
+              
+                              // 应用旋转方向: 正数正转(CW), 负数反转(CCW)
+                              if (g_run_state.direction == CW)
+                              {
+                                  mcFocCtrl.FR = CW;       // 正转
+                              }
+                              else
+                              {
+                                  mcFocCtrl.FR = CCW;      // 反转
+                              }
+                          }
+                      }
+                      else
+                      {
+                          // 正常模式: 检测是否需要启动换向减速
+                          // 条件: 方向改变、电机正在运行、速度大于停止阈值
+                          if (target_fr != mcFocCtrl.FR &&
+                              g_run_state.is_started && !g_run_state.is_estop &&
+                              g_run_state.ref > 0)
+                          {
+                              if (Abs_F16(mcFocCtrl.SpeedFlt) >= S_Value(50.0))
+                              {
+                                  g_run_state.reversal_braking = 1;  // 启动换向减速
+                                  mcState = mcStop;
+                              }
+                              else
+                              {
+                                  mcFocCtrl.FR = target_fr;          // 低速直接换向，位置小步调节用
+                              }
+                          }
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/27/2026 17:50:52 PAGE 7   
 
- 357   4                      mcFocCtrl.Ref = S_Value(g_run_state.ref);
- 358   4                  }
- 359   3                  else if (g_run_state.work_mode == EXT_WORK_MODE_CURRENT)
- 360   3                  {
- 361   4                      mcFocCtrl.Ref = I_Value(g_run_state.ref);
- 362   4                  }
- 363   3      #if (MOTOR_POSITION_CLOSE_LOOP != 0)
- 364   3                  else if (g_run_state.work_mode == EXT_WORK_MODE_POSITION)
- 365   3                  {
- 366   4                      mcFocCtrl.Ref = S_Value(g_run_state.ref);  // 位置环输出的是 rpm 幅值
- 367   4                  }
- 368   3      #endif
- 369   3              }
- 370   2          }
- 371   1      #endif
- 372   1      #if (SPEED_MODE == PWMMODE)
+              
+                          // 应用目标值
+                          if (g_run_state.work_mode == EXT_WORK_MODE_SPEED)
+                          {
+                              mcFocCtrl.Ref = S_Value(g_run_state.ref);
+                          }
+                          else if (g_run_state.work_mode == EXT_WORK_MODE_CURRENT)
+                          {
+                              mcFocCtrl.Ref = I_Value(g_run_state.ref);
+                          }
+              #if (MOTOR_POSITION_CLOSE_LOOP != 0)
+                          else if (g_run_state.work_mode == EXT_WORK_MODE_POSITION)
+                          {
+                              mcFocCtrl.Ref = S_Value(g_run_state.ref);  // 位置环输出的是 rpm 幅值
+                          }
+              #endif
+                      }
+                  }
+              #endif
+              #if (SPEED_MODE == PWMMODE)
                   {
                       PWMDutyCal();
               #if (SLEEPEN == Enable)
@@ -442,12 +446,12 @@ line level    source
               #if (MOTOR_CTRL_MODE == SPEED_LOOP_CONTROL)
                       {
                           mcFocCtrl.Ref = ONOFFTEST_REF; // 固定转速赋值
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/27/2026 17:50:52 PAGE 8   
+
                       }
               #elif (MOTOR_CTRL_MODE == POWER_LOOP_CONTROL)
                       {
                           mcFocCtrl.Ref = ONOFFTEST_PowerREF; // 固定功率赋值
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/20/2026 17:28:30 PAGE 8   
-
                       }
               #elif (MOTOR_CTRL_MODE == CURRENT_LOOP_CONTROL)
                       {
@@ -460,69 +464,69 @@ line level    source
                       ONOFF_Test();
                   }
               #endif
- 430   1      #endif /* MOTOR_TEXT_OR_DEBUG */
- 431   1      }
- 432          
- 433          /**
- 434           * @brief        外部闭环控制函数，示例代码提供 电流环，速度环，功率环，UQ控�
+              #endif /* MOTOR_TEXT_OR_DEBUG */
+ 435   1      }
+ 436          
+ 437          /**
+ 438           * @brief        外部闭环控制函数，示例代码提供 电流环，速度环，功率环，UQ控�
              -�示例代码,可根据需要自行修改
- 435           *               建议使用默认1ms周期运行
- 436           * @date         2022-07-14
- 437           */
- 438          void Speed_response(void)
- 439          {
- 440   1          static int16 refRampOut = 0;
- 441   1      #if (Weak_MagneticEn != Disable)
+ 439           *               建议使用默认1ms周期运行
+ 440           * @date         2022-07-14
+ 441           */
+ 442          void Speed_response(void)
+ 443          {
+ 444   1          static int16 refRampOut = 0;
+ 445   1      #if (Weak_MagneticEn != Disable)
                   static int16 sqrtUdqFlt = 0;     // 电压幅值滤波值，仅弱磁使能时使用
               #endif
- 444   1      
- 445   1          if (mcState == mcFault)
- 446   1          {
- 447   2              /*  故障态强制撤给定：否则 refRampOut 会保留 3999，
- 448   2               *   下一轮 mcInit 时与实测量纲混在一起，容易误判"转速为 0" */
- 449   2              mcFocCtrl.IqRef = 0;
- 450   2              FOC_IQREF       = 0;
- 451   2              mcRefRamp.OutValue_float = 0;
- 452   2          }
- 453   1          else if ((mcState == mcRun) || (mcState == mcStop))
- 454   1          {
- 455   2              switch (mcFocCtrl.CtrlMode)
- 456   2              {
- 457   3              case 0: // 开环(电流环内环)
- 458   3              {
- 459   4                  if (mcFocCtrl.SpeedFlt > MOTOR_LOOP_RPM) // 转速大于一定值，切入转速闭环
- 460   4                  {
- 461   5                      mcFocCtrl.Mode0HoldCnt++;
- 462   5      
- 463   5                      if (mcFocCtrl.Mode0HoldCnt > 10) // 切换后保持电流
- 464   5                      {
- 465   6                          mcFocCtrl.CtrlMode = 1;
- 466   6                          FOC_QKP = QKP; // 电流环PI
- 467   6                          FOC_QKI = QKI;
- 468   6                          FOC_DKP = DKP;
- 469   6                          FOC_DKI = DKI;
- 470   6                          PI_Init();  // 速度环PI初始化
- 471   6                          PI2_Init(); // 限流环PI初始化
- 472   6                          PI3_Init(); // 弱磁PI初始化
- 473   6      // 启动电流环与外环给定衔接
- 474   6      #if (MOTOR_CTRL_MODE == SPEED_LOOP_CONTROL)
- 475   6                          {
- 476   7                              if (mcFocCtrl.Start_Mode == TAILWIND_START)
- 477   7                              {
- 478   8      #if (TAILWIND_MODE == RSDMethod)
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/20/2026 17:28:30 PAGE 9   
+ 448   1      
+ 449   1          if (mcState == mcFault)
+ 450   1          {
+ 451   2              /*  故障态强制撤给定：否则 refRampOut 会保留 3999，
+ 452   2               *   下一轮 mcInit 时与实测量纲混在一起，容易误判"转速为 0" */
+ 453   2              mcFocCtrl.IqRef = 0;
+ 454   2              FOC_IQREF       = 0;
+ 455   2              mcRefRamp.OutValue_float = 0;
+ 456   2          }
+ 457   1          else if ((mcState == mcRun) || (mcState == mcStop))
+ 458   1          {
+ 459   2              switch (mcFocCtrl.CtrlMode)
+ 460   2              {
+ 461   3              case 0: // 开环(电流环内环)
+ 462   3              {
+ 463   4                  if (mcFocCtrl.SpeedFlt > MOTOR_LOOP_RPM) // 转速大于一定值，切入转速闭环
+ 464   4                  {
+ 465   5                      mcFocCtrl.Mode0HoldCnt++;
+ 466   5      
+ 467   5                      if (mcFocCtrl.Mode0HoldCnt > 10) // 切换后保持电流
+ 468   5                      {
+ 469   6                          mcFocCtrl.CtrlMode = 1;
+ 470   6                          FOC_QKP = QKP; // 电流环PI
+ 471   6                          FOC_QKI = QKI;
+ 472   6                          FOC_DKP = DKP;
+ 473   6                          FOC_DKI = DKI;
+ 474   6                          PI_Init();  // 速度环PI初始化
+ 475   6                          PI2_Init(); // 限流环PI初始化
+ 476   6                          PI3_Init(); // 弱磁PI初始化
+ 477   6      // 启动电流环与外环给定衔接
+ 478   6      #if (MOTOR_CTRL_MODE == SPEED_LOOP_CONTROL)
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/27/2026 17:50:52 PAGE 9   
 
+ 479   6                          {
+ 480   7                              if (mcFocCtrl.Start_Mode == TAILWIND_START)
+ 481   7                              {
+ 482   8      #if (TAILWIND_MODE == RSDMethod)
                                           mcRefRamp.OutValue_float = mcRsd.Speed;
               #elif (TAILWIND_MODE == BEMFMethod)
                                           mcRefRamp.OutValue_float = mcBemf.BEMFSpeed;
               #endif
- 483   8                              }
- 484   7                              else
- 485   7                              {
- 486   8                                  mcRefRamp.OutValue_float = mcFocCtrl.SpeedFlt;
  487   8                              }
- 488   7                          }
- 489   6      #elif (MOTOR_CTRL_MODE == POWER_LOOP_CONTROL)
+ 488   7                              else
+ 489   7                              {
+ 490   8                                  mcRefRamp.OutValue_float = mcFocCtrl.SpeedFlt;
+ 491   8                              }
+ 492   7                          }
+ 493   6      #elif (MOTOR_CTRL_MODE == POWER_LOOP_CONTROL)
                                   {
                                       mcRefRamp.OutValue_float = mcFocCtrl.PowerFlt;
                                   }
@@ -532,75 +536,52 @@ line level    source
                                       SetBit(FOC_CR2, UQD);
                                   }
               #endif
- 499   6                          FOC_THECOMP = _Q15(3.0 / 180.0);
- 500   6                          mcFocCtrl.LoopTime = LOOP_TIME;
- 501   6                          mcRefRamp.IncValue = RAMP_INC;
- 502   6                          mcRefRamp.DecValue = RAMP_DEC;
- 503   6                          mcFocCtrl.IqRef = FOC_IQREF;
- 504   6                          FOC_IDREF = ID_RUN_CURRENT;
- 505   6                          PI1_UKH = mcFocCtrl.IqRef;
- 506   6                      }
- 507   5                  }
- 508   4                  else
- 509   4                  {
- 510   5                      mcFocCtrl.Angle_Com = _Q15(3.0 / 180.0);
- 511   5                      FOC_THECOMP = mcFocCtrl.Angle_Com;
- 512   5                      mcFocCtrl.Mode0HoldCnt = 0;
- 513   5                  }
- 514   4              }
- 515   3              break;
- 516   3      
- 517   3              case 1: // 闭环(速度闭环+电流内环)
- 518   3              {
- 519   4                  mcFocCtrl.LoopTime++;
- 520   4      
- 521   4                  if (mcFocCtrl.LoopTime >= LOOP_TIME)
- 522   4                  {
- 523   5                      mcFocCtrl.LoopTime = 0;
- 524   5                      refRampOut = Motor_Ramp(mcFocCtrl.Ref); // 控制命令爬坡函数，用于实现调速�
+ 503   6                          FOC_THECOMP = _Q15(3.0 / 180.0);
+ 504   6                          mcFocCtrl.LoopTime = LOOP_TIME;
+ 505   6                          mcRefRamp.IncValue = RAMP_INC;
+ 506   6                          mcRefRamp.DecValue = RAMP_DEC;
+ 507   6                          mcFocCtrl.IqRef = FOC_IQREF;
+ 508   6                          FOC_IDREF = ID_RUN_CURRENT;
+ 509   6                          PI1_UKH = mcFocCtrl.IqRef;
+ 510   6                      }
+ 511   5                  }
+ 512   4                  else
+ 513   4                  {
+ 514   5                      mcFocCtrl.Angle_Com = _Q15(3.0 / 180.0);
+ 515   5                      FOC_THECOMP = mcFocCtrl.Angle_Com;
+ 516   5                      mcFocCtrl.Mode0HoldCnt = 0;
+ 517   5                  }
+ 518   4              }
+ 519   3              break;
+ 520   3      
+ 521   3              case 1: // 闭环(速度闭环+电流内环)
+ 522   3              {
+ 523   4                  mcFocCtrl.LoopTime++;
+ 524   4      
+ 525   4                  if (mcFocCtrl.LoopTime >= LOOP_TIME)
+ 526   4                  {
+ 527   5                      mcFocCtrl.LoopTime = 0;
+ 528   5                      refRampOut = Motor_Ramp(mcFocCtrl.Ref); // 控制命令爬坡函数，用于实现调速�
              -�号之间平滑过渡
- 525   5      #if (MOTOR_CTRL_MODE == CURRENT_LOOP_CONTROL)
+ 529   5      #if (MOTOR_CTRL_MODE == CURRENT_LOOP_CONTROL)
                               {
                                   mcFocCtrl.IqRef = refRampOut;
                                   FOC_IQREF = mcFocCtrl.IqRef;
                               }
               #elif (MOTOR_CTRL_MODE == SPEED_LOOP_CONTROL)
- 531   5                      {
- 532   6      #if (Weak_MagneticEn == Disable)
- 533   6                          {
- 534   7                              // /* 估算转速远超给定 → 观测器发散,退回强拖重新起 */
- 535   7                              // if ((mcFocCtrl.Ref > 0) &&
- 536   7                              //     ((mcFocCtrl.SpeedFlt > (mcFocCtrl.Ref * 3)) ||      /* 飞了 */
- 537   7                              //     (ReadBit(FOC_CR0, OMAF))))                          /* 或硬件过速标�
-             -� */
- 538   7                              // {
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/20/2026 17:28:30 PAGE 10  
+ 535   5                      {
+ 536   6      #if (Weak_MagneticEn == Disable)
+ 537   6                          {
+ 538   7                              mcFocCtrl.IqSpeedRef = MDU_PI1(refRampOut - mcFocCtrl.SpeedFlt);
+ 539   7                              mcFocCtrl.IqADCCurrentRef = MDU_PI2(Motor_Max_ADCCurrentbus - mcFocCtrl.mcADCCurre
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/27/2026 17:50:52 PAGE 10  
 
- 539   7                              //     mcFocCtrl.CtrlMode = 0;
- 540   7                              //     SetBit(FOC_CR1, EFAE);
- 541   7                              //     SetBit(FOC_CR1, ANGM);        /* ★ 别忘了角度源 */
- 542   7                              //     FOC_IQREF = 0;
- 543   7                              //     mcFocCtrl.Flg_ATORampEnd = 0; /* 让它重新走一遍交接 */
- 544   7                              //     break;
- 545   7                              // }
- 546   7                              // /* ★ 保护：估算转速与给定符号相反（观测器锁反了）→ �
-             -�要加电流，直接退开环重拖 */
- 547   7                              // if ((mcFocCtrl.Ref > 0) && (mcFocCtrl.SpeedFlt < 0))
- 548   7                              // {
- 549   7                              //     mcFocCtrl.CtrlMode = 0;                 /* 退回 CtrlMode 0（只有电流
-             -环）*/
- 550   7                              //     SetBit(FOC_CR1, EFAE);                  /* 角度退回强制欧米伽 */
- 551   7                              //     FOC_IQREF = 0;                          /* 先撤电流 */
- 552   7                              //     break;
- 553   7                              // }
- 554   7                              mcFocCtrl.IqSpeedRef = MDU_PI1(refRampOut - mcFocCtrl.SpeedFlt);
- 555   7                              mcFocCtrl.IqADCCurrentRef = MDU_PI2(Motor_Max_ADCCurrentbus - mcFocCtrl.mcADCCurre
              -ntbus); // 限制最大电流
- 556   7      #if (ADCCurrentbusLitmitEn == Disable)
- 557   7                              {
- 558   8                                  mcFocCtrl.IqRef = mcFocCtrl.IqSpeedRef;
- 559   8                              }
- 560   7      #else
+ 540   7      #if (ADCCurrentbusLitmitEn == Disable)
+ 541   7                              {
+ 542   8                                  mcFocCtrl.IqRef = mcFocCtrl.IqSpeedRef;
+ 543   8                              }
+ 544   7      #else
                                       {
                                           if (mcFocCtrl.IqSpeedRef >= mcFocCtrl.IqADCCurrentRef) // 二者取其小
                                           {
@@ -612,9 +593,9 @@ line level    source
                                           }
                                       }
               #endif
- 572   7                              FOC_IQREF = mcFocCtrl.IqRef;
- 573   7                          }
- 574   6      #else
+ 556   7                              FOC_IQREF = mcFocCtrl.IqRef;
+ 557   7                          }
+ 558   6      #else
                                   {
                                       mcFocCtrl.IqSpeedRef = MDU_PI1(refRampOut - mcFocCtrl.SpeedFlt);
                                       mcFocCtrl.IqADCCurrentRef = MDU_PI2(Motor_Max_ADCCurrentbus - mcFocCtrl.mcADCCurre
@@ -628,41 +609,19 @@ line level    source
                                       {
                                           mcFocCtrl.WeakRef = mcFocCtrl.IqSpeedRef;
                                       }
-                          //   mcFocCtrl.WeakRef = mcFocCtrl.IqSpeedRef;
-                                      // // 计算(UD^2+UQ^2)开根号
-                                      // mcFocCtrl.sqrtUdq = SqrtUDQ(FOC__UD, FOC__UQ);
-                                      // // 根据计算Id Iq分配角度
-                                      // mcFocCtrl.Angle = MDU_PI3(_Q15(0.80) - mcFocCtrl.sqrtUdq);
-                                      {
-                                          uint16 udqNow = SqrtUDQ(FOC__UD, FOC__UQ);
-                                          if (udqNow > 0x7FFF)
-                                          {
-                                              udqNow = 0x7FFF;        // 幅值输出饱和保护，防止回绕成正�
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/20/2026 17:28:30 PAGE 11  
-
-             -�导致弱磁反向退出
-                                          }
-                                          sqrtUdqFlt = MDU_LPF0((int16)udqNow, sqrtUdqFlt, 40);
-                                      }
-                                      mcFocCtrl.sqrtUdq = (uint16)sqrtUdqFlt;
-                                      /* |U|超过阈值 → 负误差 → PI3 输出 0 ~ AMIN 的弱磁角；低于阈�
-             -�� → 角回 0 */
-                                      if (mcFocCtrl.sqrtUdq >= Weak_Mag_UDQ_Ref)
-                                      {
-                                          mcFocCtrl.Angle = MDU_PI3(-(int16)(mcFocCtrl.sqrtUdq - Weak_Mag_UDQ_Ref));
-                                      }
-                                      else
-                                      {
-                                          mcFocCtrl.Angle = MDU_PI3((int16)(Weak_Mag_UDQ_Ref - mcFocCtrl.sqrtUdq));
-                                      }
+                            mcFocCtrl.WeakRef = mcFocCtrl.IqSpeedRef;
+                                      // 计算(UD^2+UQ^2)开根号
+                                      mcFocCtrl.sqrtUdq = SqrtUDQ(FOC__UD, FOC__UQ);
+                                      // 根据计算Id Iq分配角度
+                                      mcFocCtrl.Angle = MDU_PI3(_Q15(0.80) - mcFocCtrl.sqrtUdq);
                                       // 根据角度分配 Id Iq，实现自动弱磁
                                       SinCal(mcFocCtrl.WeakRef, mcFocCtrl.Angle, &mcFocCtrl.IdRef, &mcFocCtrl.IqRef);
                                       FOC_IQREF = mcFocCtrl.IqRef;
                                       FOC_IDREF = mcFocCtrl.IdRef;
                                   }
               #endif
- 616   6                      }
- 617   5      #elif (MOTOR_CTRL_MODE == POWER_LOOP_CONTROL)
+ 582   6                      }
+ 583   5      #elif (MOTOR_CTRL_MODE == POWER_LOOP_CONTROL)
                               {
                                   mcFocCtrl.IqRef = MDU_PI1(refRampOut - mcFocCtrl.PowerFlt);
                                   FOC_IQREF = mcFocCtrl.IqRef;
@@ -678,12 +637,14 @@ line level    source
                                   /* ------------------自定义闭环 END--------------------- */
                               }
               #endif
- 633   5                  }
- 634   4              }
- 635   3              break;
- 636   3              }
- 637   2      
- 638   2      #if ((Shunt_Resistor_Mode == Single_Resistor) && (Single_Resistor_Mode == SVPWM_OPTIM))
+ 599   5                  }
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/27/2026 17:50:52 PAGE 11  
+
+ 600   4              }
+ 601   3              break;
+ 602   3              }
+ 603   2      
+ 604   2      #if ((Shunt_Resistor_Mode == Single_Resistor) && (Single_Resistor_Mode == SVPWM_OPTIM))
                       {
                           if ((FOC__UQ > Single_Resistor_Mode_SwitchDuty1) && (Flag_Single_Mode == 0)) // 新单电阻�
              -�样由于UQ高占空比（%60以下）存在不可采样区，必须切换为常规单电阻采样，也可用转速作
@@ -702,200 +663,198 @@ line level    source
                               FOC_TRGDLY = SVPWM_OPTIM_TRGDLY;
                           }
                       }
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/20/2026 17:28:30 PAGE 12  
-
               #endif
- 656   2          }
- 657   1      }
- 658          
- 659          /**
- 660           * @brief        控制给定爬坡函数
- 661           *               以浮点进行计算，解决整数爬坡由于精度的影响，导致爬坡结果阶�
+ 622   2          }
+ 623   1      }
+ 624          
+ 625          /**
+ 626           * @brief        控制给定爬坡函数
+ 627           *               以浮点进行计算，解决整数爬坡由于精度的影响，导致爬坡结果阶�
              -�变化
- 662           *               函数控制周期默认为闭环控制周期，建议使用默认1ms周期运行
- 663           * @param[in]    ref 给定目标值
- 664           * @return       爬坡结果（int16）
+ 628           *               函数控制周期默认为闭环控制周期，建议使用默认1ms周期运行
+ 629           * @param[in]    ref 给定目标值
+ 630           * @return       爬坡结果（int16）
+ 631           * @date         2022-07-14
+ 632           */
+ 633          int16 Motor_Ramp(int16 ref)
+ 634          {
+ 635   1          mcRefRamp.RefValue = ref; // 爬坡函数输入
+ 636   1      
+ 637   1          if (mcRefRamp.OutValue_float < mcRefRamp.RefValue)
+ 638   1          {
+ 639   2              if (mcRefRamp.OutValue_float + mcRefRamp.IncValue < mcRefRamp.RefValue)
+ 640   2              {
+ 641   3                  mcRefRamp.OutValue_float += mcRefRamp.IncValue;
+ 642   3              }
+ 643   2              else
+ 644   2              {
+ 645   3                  mcRefRamp.OutValue_float = mcRefRamp.RefValue;
+ 646   3              }
+ 647   2          }
+ 648   1          else
+ 649   1          {
+ 650   2              if (mcRefRamp.OutValue_float - mcRefRamp.DecValue > mcRefRamp.RefValue)
+ 651   2              {
+ 652   3                  mcRefRamp.OutValue_float -= mcRefRamp.DecValue;
+ 653   3              }
+ 654   2              else
+ 655   2              {
+ 656   3                  mcRefRamp.OutValue_float = mcRefRamp.RefValue;
+ 657   3              }
+ 658   2          }
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/27/2026 17:50:52 PAGE 12  
+
+ 659   1      
+ 660   1          return (int16)mcRefRamp.OutValue_float; // 输出浮点数取整
+ 661   1      }
+ 662          
+ 663          /**
+ 664           * @brief        预定位控制
  665           * @date         2022-07-14
  666           */
- 667          int16 Motor_Ramp(int16 ref)
+ 667          void Motor_Align_Angle(void)
  668          {
- 669   1          mcRefRamp.RefValue = ref; // 爬坡函数输入
- 670   1      
- 671   1          if (mcRefRamp.OutValue_float < mcRefRamp.RefValue)
- 672   1          {
- 673   2              if (mcRefRamp.OutValue_float + mcRefRamp.IncValue < mcRefRamp.RefValue)
+ 669   1          if ((mcFocCtrl.ud_align < mcFocCtrl.ud_align_ref) && (mcFocCtrl.ud_align_flag == 0))
+ 670   1          {
+ 671   2              mcFocCtrl.ud_align = mcFocCtrl.ud_align + 6;
+ 672   2      
+ 673   2              if (mcFocCtrl.FR == CW)
  674   2              {
- 675   3                  mcRefRamp.OutValue_float += mcRefRamp.IncValue;
- 676   3              }
- 677   2              else
- 678   2              {
- 679   3                  mcRefRamp.OutValue_float = mcRefRamp.RefValue;
- 680   3              }
- 681   2          }
- 682   1          else
- 683   1          {
- 684   2              if (mcRefRamp.OutValue_float - mcRefRamp.DecValue > mcRefRamp.RefValue)
+ 675   3                  mcFocCtrl.AlignAngle += 5;
+ 676   3                  FOC__THETA = mcFocCtrl.AlignAngle;
+ 677   3              }
+ 678   2              else
+ 679   2              {
+ 680   3                  mcFocCtrl.AlignAngle -= 5;
+ 681   3                  FOC__THETA = mcFocCtrl.AlignAngle;
+ 682   3              }
+ 683   2      
+ 684   2              if (mcFocCtrl.ud_align >= mcFocCtrl.ud_align_ref)
  685   2              {
- 686   3                  mcRefRamp.OutValue_float -= mcRefRamp.DecValue;
- 687   3              }
- 688   2              else
- 689   2              {
- 690   3                  mcRefRamp.OutValue_float = mcRefRamp.RefValue;
- 691   3              }
- 692   2          }
- 693   1      
- 694   1          return (int16)mcRefRamp.OutValue_float; // 输出浮点数取整
- 695   1      }
- 696          
- 697          /**
- 698           * @brief        预定位控制
- 699           * @date         2022-07-14
- 700           */
- 701          void Motor_Align_Angle(void)
- 702          {
- 703   1          if ((mcFocCtrl.ud_align < mcFocCtrl.ud_align_ref) && (mcFocCtrl.ud_align_flag == 0))
- 704   1          {
- 705   2              mcFocCtrl.ud_align = mcFocCtrl.ud_align + 6;
- 706   2      
- 707   2              if (mcFocCtrl.FR == CW)
- 708   2              {
- 709   3                  mcFocCtrl.AlignAngle += 5;
- 710   3                  FOC__THETA = mcFocCtrl.AlignAngle;
- 711   3              }
- 712   2              else
- 713   2              {
- 714   3                  mcFocCtrl.AlignAngle -= 5;
- 715   3                  FOC__THETA = mcFocCtrl.AlignAngle;
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/20/2026 17:28:30 PAGE 13  
+ 686   3                  mcFocCtrl.ud_align_flag = 1;
+ 687   3                  PI2_KP = _Q12(0.05);
+ 688   3                  PI2_KI = _Q15(0.005);
+ 689   3                  PI2_EK1 = 0;
+ 690   3                  PI2_EK = 0;
+ 691   3                  PI2_UKH = mcFocCtrl.ud_align_ref;
+ 692   3                  PI2_UKL = 0;
+ 693   3                  PI2_UKMAX = UD_Align_Duty_Max;
+ 694   3                  PI2_UKMIN = UD_Align_Duty_Min;
+ 695   3                  mcFocCtrl.AlignAngle = Align_Theta_End;
+ 696   3              }
+ 697   2      
+ 698   2              mcFocCtrl.AlignAngle_Temp = mcFocCtrl.AlignAngle;
+ 699   2              mcFocCtrl.id_align_sample_pre = ID_Align_CURRENT - 70;
+ 700   2          }
+ 701   1          else
+ 702   1          {
+ 703   2              mcFocCtrl.id_align_sample = FOC__ID;
+ 704   2              mcFocCtrl.id_align_sample_error = mcFocCtrl.id_align_sample_pre - mcFocCtrl.id_align_sample;
+ 705   2              mcFocCtrl.id_align_sample_pre = mcFocCtrl.id_align_sample;
+ 706   2              PI2_EK = ID_Align_CURRENT - mcFocCtrl.id_align_sample; // 填入EK
+ 707   2              SMDU_RunBlock(2, PI);
+ 708   2              mcFocCtrl.ud_align = PI2_UKH;
+ 709   2              MUL0_MA = _Q8(8.0);
+ 710   2      
+ 711   2              if (mcFocCtrl.id_align_sample_error > 0)
+ 712   2              {
+ 713   3                  MUL0_MB = mcFocCtrl.id_align_sample_error;
+ 714   3                  SMDU_RunBlock(0, UMUL);
+ 715   3                  mcFocCtrl.MDU_TEMP = MUL0_MCL;
+ 716   3                  mcFocCtrl.MDU_TEMP = mcFocCtrl.MDU_TEMP << 8;
+ 717   3      
+ 718   3                  if (mcFocCtrl.MDU_TEMP > 32767)
+ 719   3                  {
+ 720   4                      mcFocCtrl.align_theta_acc = (MUL0_MCH << 8) + (MUL0_MCL >> 8) + 1;
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/27/2026 17:50:52 PAGE 13  
 
- 716   3              }
- 717   2      
- 718   2              if (mcFocCtrl.ud_align >= mcFocCtrl.ud_align_ref)
- 719   2              {
- 720   3                  mcFocCtrl.ud_align_flag = 1;
- 721   3                  PI2_KP = _Q12(0.05);
- 722   3                  PI2_KI = _Q15(0.005);
- 723   3                  PI2_EK1 = 0;
- 724   3                  PI2_EK = 0;
- 725   3                  PI2_UKH = mcFocCtrl.ud_align_ref;
- 726   3                  PI2_UKL = 0;
- 727   3                  PI2_UKMAX = UD_Align_Duty_Max;
- 728   3                  PI2_UKMIN = UD_Align_Duty_Min;
- 729   3                  mcFocCtrl.AlignAngle = Align_Theta_End;
- 730   3              }
- 731   2      
- 732   2              mcFocCtrl.AlignAngle_Temp = mcFocCtrl.AlignAngle;
- 733   2              mcFocCtrl.id_align_sample_pre = ID_Align_CURRENT - 70;
- 734   2          }
- 735   1          else
- 736   1          {
- 737   2              mcFocCtrl.id_align_sample = FOC__ID;
- 738   2              mcFocCtrl.id_align_sample_error = mcFocCtrl.id_align_sample_pre - mcFocCtrl.id_align_sample;
- 739   2              mcFocCtrl.id_align_sample_pre = mcFocCtrl.id_align_sample;
- 740   2              PI2_EK = ID_Align_CURRENT - mcFocCtrl.id_align_sample; // 填入EK
- 741   2              SMDU_RunBlock(2, PI);
- 742   2              mcFocCtrl.ud_align = PI2_UKH;
- 743   2              MUL0_MA = _Q8(8.0);
- 744   2      
- 745   2              if (mcFocCtrl.id_align_sample_error > 0)
- 746   2              {
- 747   3                  MUL0_MB = mcFocCtrl.id_align_sample_error;
- 748   3                  SMDU_RunBlock(0, UMUL);
- 749   3                  mcFocCtrl.MDU_TEMP = MUL0_MCL;
- 750   3                  mcFocCtrl.MDU_TEMP = mcFocCtrl.MDU_TEMP << 8;
- 751   3      
- 752   3                  if (mcFocCtrl.MDU_TEMP > 32767)
- 753   3                  {
- 754   4                      mcFocCtrl.align_theta_acc = (MUL0_MCH << 8) + (MUL0_MCL >> 8) + 1;
- 755   4                  }
- 756   3                  else
- 757   3                  {
- 758   4                      mcFocCtrl.align_theta_acc = (MUL0_MCH << 8) + (MUL0_MCL >> 8);
- 759   4                  }
- 760   3              }
- 761   2              else
- 762   2              {
- 763   3                  MUL0_MB = -mcFocCtrl.id_align_sample_error;
- 764   3                  SMDU_RunBlock(0, UMUL);
- 765   3                  mcFocCtrl.MDU_TEMP = MUL0_MCL;
- 766   3                  mcFocCtrl.MDU_TEMP = mcFocCtrl.MDU_TEMP << 8;
- 767   3      
- 768   3                  if (mcFocCtrl.MDU_TEMP > 32767)
- 769   3                  {
- 770   4                      mcFocCtrl.align_theta_acc = (MUL0_MCH << 8) + (MUL0_MCL >> 8) + 1;
- 771   4                  }
- 772   3                  else
- 773   3                  {
- 774   4                      mcFocCtrl.align_theta_acc = (MUL0_MCH << 8) + (MUL0_MCL >> 8);
- 775   4                  }
- 776   3      
- 777   3                  mcFocCtrl.align_theta_acc = -mcFocCtrl.align_theta_acc;
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/20/2026 17:28:30 PAGE 14  
-
- 778   3              }
- 779   2      
- 780   2              mcFocCtrl.AlignAngle = mcFocCtrl.AlignAngle + mcFocCtrl.align_theta_acc;
- 781   2      
- 782   2              if (mcFocCtrl.AlignAngle_Temp > (mcFocCtrl.AlignAngle + 100))
- 783   2              {
- 784   3                  mcFocCtrl.AlignAngle_Temp = mcFocCtrl.AlignAngle_Temp - 100;
- 785   3              }
- 786   2              else if (mcFocCtrl.AlignAngle_Temp < (mcFocCtrl.AlignAngle - 100))
- 787   2              {
- 788   3                  mcFocCtrl.AlignAngle_Temp = mcFocCtrl.AlignAngle_Temp + 100;
- 789   3              }
- 790   2              else
- 791   2              {
- 792   3                  mcFocCtrl.AlignAngle_Temp = mcFocCtrl.AlignAngle;
- 793   3              }
- 794   2      
- 795   2              FOC__THETA = mcFocCtrl.AlignAngle_Temp;
- 796   2          }
- 797   1      }
- 798          
- 799          /* ---- 切观测器闭环的最低转速门槛（S 值口径：S_Value(rpm) ）---- */
- 800          #define SWITCH_SPEED_S      S_Value(100)
- 801          
- 802          /**
- 803           * @brief  估算转速绝对值（S 值口径，和 mcFocCtrl.SpeedFlt 同一量纲）
- 804           * @note   厂商工程里没有这个函数，是本工程新增的
- 805           */
- 806          static int16 AbsSpeedS(void)
- 807          {
- 808   1          int16 n;
- 809   1      
- 810   1          n = mcFocCtrl.SpeedFlt;             /* SpeedFlt 是 S 值，不是 rpm！*/
- 811   1          return (int16)((n < 0) ? -n : n);
- 812   1      }
- 813          
- 814          /**
- 815           * @brief        启动ATO爬坡函数，用于静止启动时候对ATO进行爬坡，提高启动可靠�
+ 721   4                  }
+ 722   3                  else
+ 723   3                  {
+ 724   4                      mcFocCtrl.align_theta_acc = (MUL0_MCH << 8) + (MUL0_MCL >> 8);
+ 725   4                  }
+ 726   3              }
+ 727   2              else
+ 728   2              {
+ 729   3                  MUL0_MB = -mcFocCtrl.id_align_sample_error;
+ 730   3                  SMDU_RunBlock(0, UMUL);
+ 731   3                  mcFocCtrl.MDU_TEMP = MUL0_MCL;
+ 732   3                  mcFocCtrl.MDU_TEMP = mcFocCtrl.MDU_TEMP << 8;
+ 733   3      
+ 734   3                  if (mcFocCtrl.MDU_TEMP > 32767)
+ 735   3                  {
+ 736   4                      mcFocCtrl.align_theta_acc = (MUL0_MCH << 8) + (MUL0_MCL >> 8) + 1;
+ 737   4                  }
+ 738   3                  else
+ 739   3                  {
+ 740   4                      mcFocCtrl.align_theta_acc = (MUL0_MCH << 8) + (MUL0_MCL >> 8);
+ 741   4                  }
+ 742   3      
+ 743   3                  mcFocCtrl.align_theta_acc = -mcFocCtrl.align_theta_acc;
+ 744   3              }
+ 745   2      
+ 746   2              mcFocCtrl.AlignAngle = mcFocCtrl.AlignAngle + mcFocCtrl.align_theta_acc;
+ 747   2      
+ 748   2              if (mcFocCtrl.AlignAngle_Temp > (mcFocCtrl.AlignAngle + 100))
+ 749   2              {
+ 750   3                  mcFocCtrl.AlignAngle_Temp = mcFocCtrl.AlignAngle_Temp - 100;
+ 751   3              }
+ 752   2              else if (mcFocCtrl.AlignAngle_Temp < (mcFocCtrl.AlignAngle - 100))
+ 753   2              {
+ 754   3                  mcFocCtrl.AlignAngle_Temp = mcFocCtrl.AlignAngle_Temp + 100;
+ 755   3              }
+ 756   2              else
+ 757   2              {
+ 758   3                  mcFocCtrl.AlignAngle_Temp = mcFocCtrl.AlignAngle;
+ 759   3              }
+ 760   2      
+ 761   2              FOC__THETA = mcFocCtrl.AlignAngle_Temp;
+ 762   2          }
+ 763   1      }
+ 764          
+ 765          /* ---- 切观测器闭环的最低转速门槛（S 值口径：S_Value(rpm) ）---- */
+ 766          #define SWITCH_SPEED_S      S_Value(100)
+ 767          
+ 768          /**
+ 769           * @brief  估算转速绝对值（S 值口径，和 mcFocCtrl.SpeedFlt 同一量纲）
+ 770           * @note   厂商工程里没有这个函数，是本工程新增的
+ 771           */
+ 772          static int16 AbsSpeedS(void)
+ 773          {
+ 774   1          int16 n;
+ 775   1      
+ 776   1          n = mcFocCtrl.SpeedFlt;             /* SpeedFlt 是 S 值，不是 rpm！*/
+ 777   1          return (int16)((n < 0) ? -n : n);
+ 778   1      }
+ 779          
+ 780          /**
+ 781           * @brief        启动ATO爬坡函数，用于静止启动时候对ATO进行爬坡，提高启动可靠�
              -�
- 816           * @date         2022-07-14
- 817           */
- 818          void ATORamp(void)
- 819          {
- 820   1          if (mcState == mcRun)
- 821   1          {
- 822   2              if (mcFocCtrl.CtrlMode == 0)
- 823   2              {
- 824   3                  if (mcFocCtrl.IqRef < IQ_Start_CURRENT) // 启动电流爬坡函数
- 825   3                  {
- 826   4                      mcFocCtrl.IqRef += 30;
- 827   4                  }
- 828   3                  else
- 829   3                  {
- 830   4                      mcFocCtrl.IqRef = IQ_Start_CURRENT;
- 831   4                  }
- 832   3      
- 833   3                  FOC_IQREF = mcFocCtrl.IqRef;
- 834   3              }
- 835   2      #if (Open_Start_Mode == Squ_Start)
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/27/2026 17:50:52 PAGE 14  
+
+ 782           * @date         2022-07-14
+ 783           */
+ 784          void ATORamp(void)
+ 785          {
+ 786   1          if (mcState == mcRun)
+ 787   1          {
+ 788   2              if (mcFocCtrl.CtrlMode == 0)
+ 789   2              {
+ 790   3                  if (mcFocCtrl.IqRef < IQ_Start_CURRENT) // 启动电流爬坡函数
+ 791   3                  {
+ 792   4                      mcFocCtrl.IqRef += 30;
+ 793   4                  }
+ 794   3                  else
+ 795   3                  {
+ 796   4                      mcFocCtrl.IqRef = IQ_Start_CURRENT;
+ 797   4                  }
+ 798   3      
+ 799   3                  FOC_IQREF = mcFocCtrl.IqRef;
+ 800   3              }
+ 801   2      #if (Open_Start_Mode == Squ_Start)
                       {
                           if (mcFocCtrl.State_Count == (ATO_RAMP_PERIOD << 2))
                           {
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/20/2026 17:28:30 PAGE 15  
-
                               FOC_EKP = OBSW_KP_GAIN_RUN1; // 估算器里的PI的KP
                               FOC_EKI = OBSW_KI_GAIN_RUN1; // 估算器里的PI的KI
                           }
@@ -935,188 +894,205 @@ line level    source
                               }
                           }
                       }
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/27/2026 17:50:52 PAGE 15  
+
               #else
- 876   2              {
- 877   3                  if (mcFocCtrl.State_Count == (ATO_RAMP_PERIOD << 2))
- 878   3                  {
- 879   4                      FOC_EKP = OBSW_KP_GAIN_RUN1; // 估算器里的PI的KP
- 880   4                      FOC_EKI = OBSW_KI_GAIN_RUN1; // 估算器里的PI的KI
- 881   4                  }
- 882   3                  else if (mcFocCtrl.State_Count == ((ATO_RAMP_PERIOD << 1) + ATO_RAMP_PERIOD))
- 883   3                  {
- 884   4                      FOC_EKLPFMIN = OBS_EA_KS2;
- 885   4                      FOC_EKP = OBSW_KP_GAIN_RUN2; // 估算器里的PI的KP
- 886   4                      FOC_EKI = OBSW_KI_GAIN_RUN2; // 估算器里的PI的KI
- 887   4                  }
- 888   3                  else if (mcFocCtrl.State_Count == (ATO_RAMP_PERIOD << 1))
- 889   3                  {
- 890   4                      FOC_EKLPFMIN = OBS_EA_KS;
- 891   4                      FOC_EKP = OBSW_KP_GAIN_RUN3; // 估算器里的PI的KP
- 892   4                      FOC_EKI = OBSW_KI_GAIN_RUN3; // 估算器里的PI的KI
- 893   4                  }
- 894   3                  else if (mcFocCtrl.State_Count <= ATO_RAMP_PERIOD && mcFocCtrl.Flg_ATORampEnd == 0)
- 895   3                  {
- 896   4                      FOC_EKP = OBSW_KP_GAIN_RUN4;  // 估算器里的PI的KP
- 897   4                      FOC_EKI = OBSW_KI_GAIN_RUN4;  // 估算器里的PI的KI
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/20/2026 17:28:30 PAGE 16  
-
- 898   4                      mcFocCtrl.Flg_ATORampEnd = 1; // ATO 爬坡结束
- 899   4      
- 900   4                      /*  估算器 PI 已升到 RUN4，此刻把角度从"强制欧米伽"交给估算器。
- 901   4                      *    只清 EFAE，ANGM 保持 1（估算模式）—— TopFlow 在本芯片上验证过�
+ 842   2              {
+ 843   3                  if (mcFocCtrl.State_Count == (ATO_RAMP_PERIOD << 2))
+ 844   3                  {
+ 845   4                      FOC_EKP = OBSW_KP_GAIN_RUN1; // 估算器里的PI的KP
+ 846   4                      FOC_EKI = OBSW_KI_GAIN_RUN1; // 估算器里的PI的KI
+ 847   4                  }
+ 848   3                  else if (mcFocCtrl.State_Count == ((ATO_RAMP_PERIOD << 1) + ATO_RAMP_PERIOD))
+ 849   3                  {
+ 850   4                      FOC_EKLPFMIN = OBS_EA_KS2;
+ 851   4                      FOC_EKP = OBSW_KP_GAIN_RUN2; // 估算器里的PI的KP
+ 852   4                      FOC_EKI = OBSW_KI_GAIN_RUN2; // 估算器里的PI的KI
+ 853   4                  }
+ 854   3                  else if (mcFocCtrl.State_Count == (ATO_RAMP_PERIOD << 1))
+ 855   3                  {
+ 856   4                      FOC_EKLPFMIN = OBS_EA_KS;
+ 857   4                      FOC_EKP = OBSW_KP_GAIN_RUN3; // 估算器里的PI的KP
+ 858   4                      FOC_EKI = OBSW_KI_GAIN_RUN3; // 估算器里的PI的KI
+ 859   4                  }
+ 860   3                  else if (mcFocCtrl.State_Count <= ATO_RAMP_PERIOD && mcFocCtrl.Flg_ATORampEnd == 0)
+ 861   3                  {
+ 862   4                      FOC_EKP = OBSW_KP_GAIN_RUN4;  // 估算器里的PI的KP
+ 863   4                      FOC_EKI = OBSW_KI_GAIN_RUN4;  // 估算器里的PI的KI
+ 864   4                      mcFocCtrl.Flg_ATORampEnd = 1; // ATO 爬坡结束
+ 865   4      
+ 866   4                      /*  估算器 PI 已升到 RUN4，此刻把角度从"强制欧米伽"交给估算器。
+ 867   4                      *    只清 EFAE，ANGM 保持 1（估算模式）—— TopFlow 在本芯片上验证过�
              -��做法：
- 902   4                      *    "绝不是 EFAE=0/RFAE=0/ANGM=0 那种没有角度源的中间态，否则角度会�
+ 868   4                      *    "绝不是 EFAE=0/RFAE=0/ANGM=0 那种没有角度源的中间态，否则角度会�
              -�变"。*/
- 903   4                      if (AbsSpeedS() >= SWITCH_SPEED_S)      /* 原来写的是 AbsSpeedRpm() >= 100 */
- 904   4                      {
- 905   5                          FOC__ETHETA = FOC__THETA - 4096;   /* 交接前把估算角摆到当前强制角上
- 906   5                                                              （原厂约定，见 Motor_Static_Open:584）*/
- 907   5                          ClrBit(FOC_CR1, EFAE);             /* 真正切到观测器角度 */
- 908   5                      }
- 909   4                      else
- 910   4                      {
- 911   5                          mcFocCtrl.Flg_ATORampEnd = 0;      /* 这次不切，下个 1ms 再试 */
- 912   5                      }
- 913   4                  }
- 914   3              }
- 915   2      #endif
- 916   2          }
- 917   1      }
- 918          /**
- 919           * @brief        默认1ms周期服务函数，运行信号采样，调速信号处理，闭环控制，�
+ 869   4                      if (AbsSpeedS() >= SWITCH_SPEED_S)      /* 原来写的是 AbsSpeedRpm() >= 100 */
+ 870   4                      {
+ 871   5                          FOC__ETHETA = FOC__THETA - 4096;   /* 交接前把估算角摆到当前强制角上
+ 872   5                                                              （原厂约定，见 Motor_Static_Open:584）*/
+ 873   5                          ClrBit(FOC_CR1, EFAE);             /* 真正切到观测器角度 */
+ 874   5                      }
+ 875   4                      else
+ 876   4                      {
+ 877   5                          mcFocCtrl.Flg_ATORampEnd = 0;      /* 这次不切，下个 1ms 再试 */
+ 878   5                      }
+ 879   4                  }
+ 880   3              }
+ 881   2      #endif
+ 882   2          }
+ 883   1      }
+ 884          /**
+ 885           * @brief        默认1ms周期服务函数，运行信号采样，调速信号处理，闭环控制，�
              -�障检测,ATO爬坡函数
- 920           *               该函数运行于大循环中，由SYSTICK定时器间隔1ms触发运行。
- 921           * @date         2022-07-14
- 922           */
- 923          void TickCycle_1ms(void)
- 924          {
- 925   1           /*  改动：去掉 (MOE==0)||(FOCEN==0) 这个门 —— 改成每 1ms 无条件触发一次"顺序�
+ 886           *               该函数运行于大循环中，由SYSTICK定时器间隔1ms触发运行。
+ 887           * @date         2022-07-14
+ 888           */
+ 889          void TickCycle_1ms(void)
+ 890          {
+ 891   1           /*  改动：去掉 (MOE==0)||(FOCEN==0) 这个门 —— 改成每 1ms 无条件触发一次"顺序�
              -��样"。
- 926   1           *   依据《FU6816_66Q1 V1.9》25 章 ADC（PDF 342 / 正文 341）：
- 927   1           *     顺序采样(结果进 ADCx_DR，软件写 ADCBSY 触发) 与 触发采样(FOC/Timer1 硬件自
+ 892   1           *   依据《FU6816_66Q1 V1.9》25 章 ADC（PDF 342 / 正文 341）：
+ 893   1           *     顺序采样(结果进 ADCx_DR，软件写 ADCBSY 触发) 与 触发采样(FOC/Timer1 硬件自
              -动，
- 928   1           *     结果进 FOC 模块、不写 ADCx_DR) 是两条独立通路；且"触发采样优先级比顺�
+ 894   1           *     结果进 FOC 模块、不写 ADCx_DR) 是两条独立通路；且"触发采样优先级比顺�
              -��采样优先级高"，
- 929   1           *     两者同时需要时先做触发采样、完成后自动恢复顺序采样
- 930   1           *     → 所以插顺序采样不会破坏电流环，被让路的是我们自己。
- 931   1           *   目的：让 ADC1_DR(抱闸检测) / ADC2_DR(NTC) 在电机运行时也能刷新
- 932   1           *        （原来这两个寄存器在电机跑起来后是冻结的）。*/
- 933   1          {
- 934   2              uint16 adcGuard = 0;
- 935   2      
- 936   2              if (ReadBit(ADC_CR, ADCBSY) == 0)           /* 忙就不重复启动（该位是 rw1）*/
- 937   2              {
- 938   3                  SetBit(ADC_CR, ADCBSY);
- 939   3                  while (ReadBit(ADC_CR, ADCBSY))
- 940   3                  {
- 941   4                      if (++adcGuard > 60000U) { break; } /* 超时保护，绝不无限等 */
- 942   4                  }
- 943   3              }
- 944   2          }
- 945   1          // SetBit(ADC_CR, ADCBSY); // 使能ADC的DCBUS采样
- 946   1          // while (ReadBit(ADC_CR, ADCBSY)); // ← 新增：等本次扫描转换完成
- 947   1      
- 948   1          if ((mcState != mcInit) && (mcState != mcReady))
- 949   1          {
- 950   2              /* -----速度滤波----- */
- 951   2              mcFocCtrl.SpeedFlt = MDU_LPF0(FOC__EOME, mcFocCtrl.SpeedFlt, 50);   /* -----估算器估算的速�
-             -��值滤波--- 注意低通滤波器系数范围为0---127 */
- 952   2              mcFocCtrl.EsValue = MDU_LPF0(FOC__EMF << 2, mcFocCtrl.EsValue, 50); /* -----估算器估算的反�
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/20/2026 17:28:30 PAGE 17  
+ 895   1           *     两者同时需要时先做触发采样、完成后自动恢复顺序采样
+ 896   1           *     → 所以插顺序采样不会破坏电流环，被让路的是我们自己。
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/27/2026 17:50:52 PAGE 16  
 
+ 897   1           *   目的：让 ADC1_DR(抱闸检测) / ADC2_DR(NTC) 在电机运行时也能刷新
+ 898   1           *        （原来这两个寄存器在电机跑起来后是冻结的）。*/
+ 899   1          {
+ 900   2              uint16 adcGuard = 0;
+ 901   2      
+ 902   2              if (ReadBit(ADC_CR, ADCBSY) == 0)           /* 忙就不重复启动（该位是 rw1）*/
+ 903   2              {
+ 904   3                  SetBit(ADC_CR, ADCBSY);
+ 905   3                  while (ReadBit(ADC_CR, ADCBSY))
+ 906   3                  {
+ 907   4                      if (++adcGuard > 60000U) { break; } /* 超时保护，绝不无限等 */
+ 908   4                  }
+ 909   3              }
+ 910   2          }
+ 911   1          // SetBit(ADC_CR, ADCBSY); // 使能ADC的DCBUS采样
+ 912   1          // while (ReadBit(ADC_CR, ADCBSY)); // ← 新增：等本次扫描转换完成
+ 913   1      
+ 914   1          if ((mcState != mcInit) && (mcState != mcReady))
+ 915   1          {
+ 916   2              /* -----速度滤波----- */
+ 917   2              mcFocCtrl.SpeedFlt = MDU_LPF0(FOC__EOME, mcFocCtrl.SpeedFlt, 50);   /* -----估算器估算的速�
+             -��值滤波--- 注意低通滤波器系数范围为0---127 */
+ 918   2              mcFocCtrl.EsValue = MDU_LPF0(FOC__EMF << 2, mcFocCtrl.EsValue, 50); /* -----估算器估算的反�
              -��动势值滤波--- */
- 953   2      
- 954   2              if (mcState == mcRun)
- 955   2              {
- 956   3                  mcFocCtrl.Power = FOC__POW << 1;
- 957   3                  /* -----功率滤波----- */
- 958   3                  mcFocCtrl.PowerFlt = LPFFunction(mcFocCtrl.Power, mcFocCtrl.PowerFlt, 30); /* -----功率值�
+ 919   2      
+ 920   2              if (mcState == mcRun)
+ 921   2              {
+ 922   3                  mcFocCtrl.Power = FOC__POW << 1;
+ 923   3                  /* -----功率滤波----- */
+ 924   3                  mcFocCtrl.PowerFlt = LPFFunction(mcFocCtrl.Power, mcFocCtrl.PowerFlt, 30); /* -----功率值�
              -�波----- */
- 959   3              }
- 960   2          }
- 961   1          else
- 962   1          {
- 963   2              mcFocCtrl.SpeedFlt = 0;
- 964   2              mcFocCtrl.PowerFlt = 0;
- 965   2          }
- 966   1          /* -----母线电流值采样----- */
- 967   1          Power_Currt = (ADCCurrentbusPort);
- 968   1      
- 969   1          if (Power_Currt > mcCurOffset.Iw_busOffset)
- 970   1          {
- 971   2              Power_Currt = Power_Currt - mcCurOffset.Iw_busOffset;
- 972   2          }
- 973   1          else
- 974   1          {
- 975   2              Power_Currt = 0;
- 976   2          }
- 977   1          mcFocCtrl.mcADCCurrentbus = MDU_LPF0(Power_Currt, mcFocCtrl.mcADCCurrentbus, 32); /* -----母线电流
+ 925   3              }
+ 926   2          }
+ 927   1          else
+ 928   1          {
+ 929   2              mcFocCtrl.SpeedFlt = 0;
+ 930   2              mcFocCtrl.PowerFlt = 0;
+ 931   2          }
+ 932   1          /* -----母线电流值采样----- */
+ 933   1          Power_Currt = (ADCCurrentbusPort);
+ 934   1          // ticks_1ms += 1;
+ 935   1          // if(ticks_1ms == 99)
+ 936   1          // {
+ 937   1          //     I_Num11 = (Power_Currt & 0x7ff4) >> 3;
+ 938   1          //     I_Num4 = (ADC4_DR & 0x7ff4) >> 3;
+ 939   1          //     printf("ADC11 = %d, ADC4 = %d\r\n", I_Num11, I_Num4);
+ 940   1          //     ticks_1ms = 0;
+ 941   1          // }
+ 942   1      
+ 943   1          if (Power_Currt > mcCurOffset.Iw_busOffset)
+ 944   1          {
+ 945   2              Power_Currt = Power_Currt - mcCurOffset.Iw_busOffset;
+ 946   2          }
+ 947   1          else
+ 948   1          {
+ 949   2              Power_Currt = 0;
+ 950   2          }
+ 951   1          mcFocCtrl.mcADCCurrentbus = MDU_LPF0(Power_Currt, mcFocCtrl.mcADCCurrentbus, 32); /* -----母线电流
              -值滤波----- */
- 978   1      #if (VOLTAGE_MODE == INTERNAL)
- 979   1          {
- 980   2              mcFocCtrl.mcDcbusFlt = MDU_LPF0(ADC15_DR, mcFocCtrl.mcDcbusFlt, 50); /* -----内部母线电压值
+ 952   1      #if (VOLTAGE_MODE == INTERNAL)
+ 953   1          {
+ 954   2              mcFocCtrl.mcDcbusFlt = MDU_LPF0(ADC15_DR, mcFocCtrl.mcDcbusFlt, 50); /* -----内部母线电压值
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/27/2026 17:50:52 PAGE 17  
+
              -滤波，固定为ADC15----- */
- 981   2          }
- 982   1      #else
+ 955   2          }
+ 956   1      #else
                   {
                       mcFocCtrl.mcDcbusFlt = MDU_LPF0(ADC2_DR, mcFocCtrl.mcDcbusFlt, 50); /* -----外部母线电压值�
              -��波，固定为ADC2----- */
                   }
               #endif
- 987   1          // mcFocCtrl.NTCTempFlt = MDU_LPF0(ADC2_DR, mcFocCtrl.NTCTempFlt, 50); /* -----NTC电压值滤波（AD
+ 961   1          // mcFocCtrl.NTCTempFlt = MDU_LPF0(ADC2_DR, mcFocCtrl.NTCTempFlt, 50); /* -----NTC电压值滤波（AD
              -C counts）----- */
- 988   1          /* 改动：NTC 改用 50 点截尾平均（1ms 一点，50ms 出一批；去最大10/最小10，取�
+ 962   1          /* 改动：NTC 改用 50 点截尾平均（1ms 一点，50ms 出一批；去最大10/最小10，取�
              -�间30平均）。
- 989   1           *   取 ADC2_DR 高 8 位（ADCALIGN=1 → 结果在 [14:3]），<<7 还原成 15 位量纲，
- 990   1           *   与原来 MDU_LPF0(ADC2_DR,...) 的输出同量纲 → TSD.c 的 Motor_MD() 一个字都不用改
+ 963   1           *   取 ADC2_DR 高 8 位（ADCALIGN=1 → 结果在 [14:3]），<<7 还原成 15 位量纲，
+ 964   1           *   与原来 MDU_LPF0(ADC2_DR,...) 的输出同量纲 → TSD.c 的 Motor_MD() 一个字都不用改
              -。*/
- 991   1          NTC_TrimPush((uint8)(ADC2_DR >> 7));
- 992   1          if (NTC_TrimValue() != 0)
- 993   1          {
- 994   2              mcFocCtrl.NTCTempFlt = (int16)(NTC_TrimValue() << 7);
- 995   2          }
- 996   1          else
- 997   1          {
- 998   2              mcFocCtrl.NTCTempFlt = MDU_LPF0(ADC2_DR, mcFocCtrl.NTCTempFlt, 50);  /* 头 50ms 兜底 */
- 999   2          }
-1000   1          mcFocCtrl.UqFlt = MDU_LPF0(FOC__UQ, mcFocCtrl.UqFlt, 50);           /* -----Q轴电压值滤波----- *
+ 965   1          NTC_TrimPush((uint8)(ADC2_DR >> 7));
+ 966   1          if (NTC_TrimValue() != 0)
+ 967   1          {
+ 968   2              mcFocCtrl.NTCTempFlt = (int16)(NTC_TrimValue() << 7);
+ 969   2          }
+ 970   1          else
+ 971   1          {
+ 972   2              mcFocCtrl.NTCTempFlt = MDU_LPF0(ADC2_DR, mcFocCtrl.NTCTempFlt, 50);  /* 头 50ms 兜底 */
+ 973   2          }
+ 974   1          mcFocCtrl.UqFlt = MDU_LPF0(FOC__UQ, mcFocCtrl.UqFlt, 50);           /* -----Q轴电压值滤波----- *
              -/
-1001   1          mcFocCtrl.UdFlt = MDU_LPF0(FOC__UD, mcFocCtrl.UdFlt, 50);           /* -----D轴电压值滤波----- *
+ 975   1          mcFocCtrl.UdFlt = MDU_LPF0(FOC__UD, mcFocCtrl.UdFlt, 50);           /* -----D轴电压值滤波----- *
              -/
-1002   1      
-1003   1          mcFocCtrl.MCU_TEMP = TSD_Gain(); // 获取芯片内部温度
-1004   1      
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/20/2026 17:28:30 PAGE 18  
+ 976   1      
+ 977   1          mcFocCtrl.MCU_TEMP = TSD_Gain(); // 获取芯片内部温度
+ 978   1      
+ 979   1      #if (MOTOR_POSITION_CLOSE_LOOP != 0)
+                  /* 只有位置模式才运行位置环，避免位置模块在速度模式里清掉启停位 */
+                  if (g_run_state.work_mode == EXT_WORK_MODE_POSITION)
+                  {
+                      PositionCtrl_Update();
+                  }
+              #endif
+ 986   1      
+ 987   1          /* 获取调速信号，不同调速模式(PWMMODE,NONEMODE,SREFMODE,KEYSCANMODE)的目标值修改 */
+ 988   1          TargetRef_Process();
+ 989   1          /* 故障保护函数功能，如过欠压保护、启动保护、缺相、堵转等 */
+ 990   1          Fault_Detection();
+ 991   1      
+ 992   1      #if (MOTOR_LOCKED_ROTOR)
+ 993   1          /* 到位堵转：10ms 一次，只置状态 byte20 并停机，不锁 FaultStall。
+ 994   1           * 主机一键流程看到 GetStall()=1 后会发 CmdStop，下次 CmdSpeed/CmdPosition 会清标志�
+             -�� */
+ 995   1          if (++s_stallTick >= 10)
+ 996   1          {
+ 997   2              s_stallTick = 0;
+ 998   2      
+ 999   2              if (g_run_state.is_started &&
+1000   2                  (PositionProtect_StallCheck() == POS_PROTECT_STALL))
+1001   2              {
+1002   3                  g_motor_stall = 1;
+1003   3                  g_run_state.ref = 0.0f;
+1004   3                  g_run_state.is_started = 0;
+1005   3      
+1006   3      #if (MOTOR_FOLD_STATE)
+                          g_fold_state = (g_run_state.direction == MOTOR_FOLD_STOW_DIR) ? 3 : 4;
+              #endif
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/27/2026 17:50:52 PAGE 18  
 
-1005   1      #if (MOTOR_POSITION_CLOSE_LOOP != 0)
-1006   1          /* 只有位置模式才运行位置环，避免位置模块在速度模式里清掉启停位 */
-1007   1          if (g_run_state.work_mode == EXT_WORK_MODE_POSITION)
-1008   1          {
-1009   2              PositionCtrl_Update();
+1009   3              }
 1010   2          }
 1011   1      #endif
 1012   1      
-1013   1          /* 获取调速信号，不同调速模式(PWMMODE,NONEMODE,SREFMODE,KEYSCANMODE)的目标值修改 */
-1014   1          TargetRef_Process();
-1015   1          /* 故障保护函数功能，如过欠压保护、启动保护、缺相、堵转等 */
-1016   1          Fault_Detection();
-1017   1      
-1018   1      #if MOTOR_LOCKED_ROTOR
-                  /* 堵转：只看电流幅值，和位置/速度/开环/闭环无关。
-                     10ms 一次，15A 持续 30ms 直接报 FaultStall。 */
-                  if (++s_stallTick >= 10)
-                  {
-                      s_stallTick = 0;
-              
-                      if (PositionProtect_StallCheck() == POS_PROTECT_STALL)
-                      {
-                          Fault.Stall.Type = 50;
-                          mcFaultSource = FaultStall;
-                      }
-                  }
-              #endif
-1032   1      
-1033   1      #if MOTOR_LIMIT_SWITCH
+1013   1      #if MOTOR_LIMIT_SWITCH
                   /* 纯速度模式限位：10ms 一次，到软件 MAX/MIN 且还在往外给速度 → 停 */
                   if (++s_limitTick >= 10)
                   {
@@ -1129,105 +1105,103 @@ line level    source
                       }
                   }
               #endif
-1046   1      
-1047   1          /* 启动ATO控制，环路响应，如速度环、转矩环、功率环等 */
-1048   1          Speed_response();
-1049   1          /* 电机启动ATO爬坡函数处理  */
-1050   1          ATORamp();
-1051   1          /* 电机状态机的时序处理 */
-1052   1          if (mcFocCtrl.State_Count > 0)
-1053   1          {
-1054   2              mcFocCtrl.State_Count--;
-1055   2          }
-1056   1          /* PWM信号滤波 */
-1057   1          if (mcPwmInput.MotorOnFilter > 0)
-1058   1          {
-1059   2              mcPwmInput.MotorOnFilter--;
-1060   2          }
-1061   1          if (mcPwmInput.MotorOffFilter > 0)
-1062   1          {
-1063   2              mcPwmInput.MotorOffFilter--;
-1064   2          }
-1065   1          /* LIN信号延时发送 */
-1066   1          if (EOP.TxCnt)
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/20/2026 17:28:30 PAGE 19  
+1026   1      
+1027   1          /* 启动ATO控制，环路响应，如速度环、转矩环、功率环等 */
+1028   1          Speed_response();
+1029   1          /* 电机启动ATO爬坡函数处理  */
+1030   1          ATORamp();
+1031   1          /* 电机状态机的时序处理 */
+1032   1          if (mcFocCtrl.State_Count > 0)
+1033   1          {
+1034   2              mcFocCtrl.State_Count--;
+1035   2          }
+1036   1          /* PWM信号滤波 */
+1037   1          if (mcPwmInput.MotorOnFilter > 0)
+1038   1          {
+1039   2              mcPwmInput.MotorOnFilter--;
+1040   2          }
+1041   1          if (mcPwmInput.MotorOffFilter > 0)
+1042   1          {
+1043   2              mcPwmInput.MotorOffFilter--;
+1044   2          }
+1045   1          /* LIN信号延时发送 */
+1046   1          if (EOP.TxCnt)
+1047   1              EOP.TxCnt--;
+1048   1      
+1049   1      /* 预定位控制 */
+1050   1      #if (ALIGN_MOME != ALIGN_DSIABLE)
+1051   1          if (mcState == mcAlign)
+1052   1          {
+1053   2              Motor_Align_Angle();
+1054   2          }
+1055   1      #endif
+1056   1      
+1057   1          /* LIN状态检查 */
+1058   1          if (LS.State == 1)
+1059   1          {
+1060   2              LS.OverTimeCnt++;
+1061   2          }
+1062   1          else
+1063   1          {
+1064   2              LS.BusLostCnt++;
+1065   2          }
+1066   1          if (LS.OverTimeCnt >= LIN_Message_OverTime)
+1067   1          {
+1068   2              ClrBit(LIN_CSR, LINEN);
+1069   2              SetBit(LIN_CSR, LINEN); // 重启更新LIN波特率
+1070   2              LS.State = 0;
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/27/2026 17:50:52 PAGE 19  
 
-1067   1              EOP.TxCnt--;
-1068   1      
-1069   1      /* 预定位控制 */
-1070   1      #if (ALIGN_MOME != ALIGN_DSIABLE)
-1071   1          if (mcState == mcAlign)
-1072   1          {
-1073   2              Motor_Align_Angle();
-1074   2          }
-1075   1      #endif
-1076   1      
-1077   1          /* LIN状态检查 */
-1078   1          if (LS.State == 1)
-1079   1          {
-1080   2              LS.OverTimeCnt++;
+1071   2              LS.OverTimeCnt = 0;
+1072   2              LS.BusLostCnt = 0;
+1073   2          }
+1074   1          if (LS.BusLostCnt >= LIN_Bus_OverTime)
+1075   1          {
+1076   2              ClrBit(LIN_CSR, LINEN);
+1077   2              SetBit(LIN_CSR, LINEN); // 重启更新LIN波特率
+1078   2              LS.State = 0;
+1079   2              LS.OverTimeCnt = 0;
+1080   2              LS.BusLostCnt = 0;
 1081   2          }
-1082   1          else
-1083   1          {
-1084   2              LS.BusLostCnt++;
-1085   2          }
-1086   1          if (LS.OverTimeCnt >= LIN_Message_OverTime)
-1087   1          {
-1088   2              ClrBit(LIN_CSR, LINEN);
-1089   2              SetBit(LIN_CSR, LINEN); // 重启更新LIN波特率
-1090   2              LS.State = 0;
-1091   2              LS.OverTimeCnt = 0;
-1092   2              LS.BusLostCnt = 0;
-1093   2          }
-1094   1          if (LS.BusLostCnt >= LIN_Bus_OverTime)
-1095   1          {
-1096   2              ClrBit(LIN_CSR, LINEN);
-1097   2              SetBit(LIN_CSR, LINEN); // 重启更新LIN波特率
-1098   2              LS.State = 0;
-1099   2              LS.OverTimeCnt = 0;
-1100   2              LS.BusLostCnt = 0;
-1101   2          }
-1102   1          /*-------------*/
-1103   1      
-1104   1          /*  新增：CAN 任务，必须放在 1ms 任务的最末尾（顺序与初版一致）
-1105   1           *   CAN_MsgParse()            : 接收环形缓冲 → ext_slave_process_rx()，解析主机指令
-1106   1           *   ext_slave_periodic_send() : 发送队列限流(每1ms弹1帧) + 心跳/状态/日志周期上报
-1107   1           *                               + 多帧组装超时 + 运行时间统计 */
-1108   1          CAN_MsgParse();
-1109   1          ext_slave_periodic_send();
-1110   1      
-1111   1      #if (DEBUG_UART_OR_CAN == 2)
+1082   1          /*-------------*/
+1083   1      
+1084   1          /*  新增：CAN 任务，必须放在 1ms 任务的最末尾（顺序与初版一致）
+1085   1           *   CAN_MsgParse()            : 接收环形缓冲 → ext_slave_process_rx()，解析主机指令
+1086   1           *   ext_slave_periodic_send() : 发送队列限流(每1ms弹1帧) + 心跳/状态/日志周期上报
+1087   1           *                               + 多帧组装超时 + 运行时间统计 */
+1088   1          CAN_MsgParse();
+1089   1          ext_slave_periodic_send();
+1090   1      
+1091   1      #if (DEBUG_UART_OR_CAN == 2)
                   can_dbg_task();          /* 计时 */
                   can_dbg_poll();          /* 发一帧 */
               #endif
-1115   1          AlarmMonitor_Process();       // 告警检测 → 故障码（与初版顺序一致
-1116   1      }
-1117          
-1118          uint16 SqrtUDQ(int16 sqrtUd, int16 sqrtUq)
-1119          {
-1120   1          SCAT2_COS = sqrtUd;
-1121   1          SCAT2_SIN = sqrtUq;
-1122   1          SMDU_RunBlock(2, ATAN);
-1123   1          return SCAT2_RES1;
-1124   1      }
-1125          
-1126          void SinCal(int16 Ref, int16 Theta, int16 *Sin, int16 *Cos)
-1127          {
-1128   1          SCAT3_COS = Ref;
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       10/20/2026 17:28:30 PAGE 20  
-
-1129   1          SCAT3_SIN = 0;
-1130   1          SCAT3_THE = Theta;
-1131   1          SMDU_RunBlock(3, SIN_COS);
-1132   1          *Cos = SCAT3_RES1;
-1133   1          *Sin = SCAT3_RES2;
-1134   1      }
+1095   1          AlarmMonitor_Process();       // 告警检测 → 故障码（与初版顺序一致
+1096   1      }
+1097          
+1098          uint16 SqrtUDQ(int16 sqrtUd, int16 sqrtUq)
+1099          {
+1100   1          SCAT2_COS = sqrtUd;
+1101   1          SCAT2_SIN = sqrtUq;
+1102   1          SMDU_RunBlock(2, ATAN);
+1103   1          return SCAT2_RES1;
+1104   1      }
+1105          
+1106          void SinCal(int16 Ref, int16 Theta, int16 *Sin, int16 *Cos)
+1107          {
+1108   1          SCAT3_COS = Ref;
+1109   1          SCAT3_SIN = 0;
+1110   1          SCAT3_THE = Theta;
+1111   1          SMDU_RunBlock(3, SIN_COS);
+1112   1          *Cos = SCAT3_RES1;
+1113   1          *Sin = SCAT3_RES2;
+1114   1      }
 
 
 MODULE INFORMATION:   STATIC OVERLAYABLE
-   CODE SIZE        =   3633    ----
+   CODE SIZE        =   3336    ----
    CONSTANT SIZE    =   ----    ----
-   XDATA SIZE       =    137      17
+   XDATA SIZE       =    145      16
    PDATA SIZE       =   ----    ----
    DATA SIZE        =   ----    ----
    IDATA SIZE       =   ----    ----

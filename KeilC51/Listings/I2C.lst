@@ -1,4 +1,4 @@
-C51 COMPILER V9.60.7.0   I2C                                                               10/20/2026 17:28:34 PAGE 1   
+C51 COMPILER V9.60.7.0   I2C                                                               10/27/2026 17:50:56 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE I2C
@@ -62,7 +62,7 @@ line level    source
   51   1          I2C_SCL_H();
   52   1          I2C_DELAY();
   53   1      
-C51 COMPILER V9.60.7.0   I2C                                                               10/20/2026 17:28:34 PAGE 2   
+C51 COMPILER V9.60.7.0   I2C                                                               10/27/2026 17:50:56 PAGE 2   
 
   54   1          I2C_SDA_H();
   55   1          I2C_DELAY();
@@ -126,7 +126,7 @@ line level    source
  113   1          I2C_DELAY();
  114   1          I2C_SCL_L();
  115   1          I2C_DELAY();
-C51 COMPILER V9.60.7.0   I2C                                                               10/20/2026 17:28:34 PAGE 3   
+C51 COMPILER V9.60.7.0   I2C                                                               10/27/2026 17:50:56 PAGE 3   
 
  116   1      
  117   1          I2C_SDA_H();
@@ -190,7 +190,7 @@ line level    source
  175              SetBit(I2C_ID , GC);  //广播呼叫使能  0-->Disable 1-->Enable
  176              SetBit(I2C_CR , I2CEN); //I2C使能   0-->Disable 1-->Enable
  177          }
-C51 COMPILER V9.60.7.0   I2C                                                               10/20/2026 17:28:34 PAGE 4   
+C51 COMPILER V9.60.7.0   I2C                                                               10/27/2026 17:50:56 PAGE 4   
 
  178          
  179          void I2C_ID_Start(bool rw)
