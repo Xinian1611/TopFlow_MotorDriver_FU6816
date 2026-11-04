@@ -95,12 +95,19 @@ void MotorCtrl_Init(void)
     MotorCtrl_InitParams();
 
     // 初始化运行状态
+    // memset(&g_run_state, 0, sizeof(g_run_state));
+    // g_run_state.work_mode = EXT_WORK_MODE_SPEED;
+    // g_run_state.is_started = 1;
+    // g_run_state.is_estop = 0;
+    // g_run_state.ref = 100;
+    // g_run_state.direction = CCW;
+
     memset(&g_run_state, 0, sizeof(g_run_state));
     g_run_state.work_mode = EXT_WORK_MODE_SPEED;
-    g_run_state.is_started = 1;
-    g_run_state.is_estop = 0;
-    g_run_state.ref = 100;
-    g_run_state.direction = CCW;
+    g_run_state.is_started = 0;          /* 上电不自动起机，等 CAN 的"起机" */
+    g_run_state.is_estop   = 0;
+    g_run_state.ref        = 0.0f;
+    g_run_state.direction  = CCW;
 }
 
 /// @brief 设置电机急停状态
@@ -129,6 +136,9 @@ void MotorCtrl_SetRun(uint8_t state)
     if (g_run_state.is_started == 0)
     {
         g_run_state.run_time = 0;
+
+        g_run_state.ref              = 0.0f;   /* 停机撤给定，再起机必须重新下发速度 */
+        g_run_state.reversal_braking = 0;
     }
 }
 
@@ -156,53 +166,136 @@ void MotorCtrl_SetMode(uint8_t mode)
 }
 
 /// @brief 设置电机目标值(正数正转, 负数反转)
-/// @param current 目标电流(0.01A)
-/// @param speed 目标转速(0.01%)
+/// @param current 段字节13-14：0.01A，32767 = 0A
+/// @param speed   段字节11-12：0.01%，32767 = 0%，±10000 = ±100%
+/// @note  ① 必须按无符号收：正数 raw 一定 >32767，用 int16 会变成大负数；
+///        ② 0% 只表示"目标 0"，停机由启停字段负责 —— 这里不再自动置 is_started=0，
+///           否则"起机+0% → 再给 20%"这种时序会让后面的速度全部不生效。
 /// @retval None
-void MotorCtrl_SetTarget(int16_t current, int16_t speed)
+void MotorCtrl_SetTarget(uint16_t current, uint16_t speed)
 {
-    // 根据工作模式和控制状态设置电机参数
-    if (g_run_state.is_started && !g_run_state.is_estop)
+    int32 v;
+    float mag;
+    float base;
+    float idle;
+
+    if (g_run_state.is_estop)
     {
-        if (g_run_state.work_mode == EXT_WORK_MODE_SPEED)
+        return;                                 /* 急停中不接受目标 */
+    }
+
+    if (g_run_state.work_mode == EXT_WORK_MODE_CURRENT)
+    {
+        v   = (int32)current - 32767;           /* 0.01A */
+        mag = (v >= 0) ? (float)v : (float)(-v);
+        g_run_state.direction = (v >= 0) ? CW : CCW;
+        g_run_state.ref       = mag / 100.0f;   /* 0.01A → A */
+
+    }
+    else                                        /* 转速模式 */
+    {
+        v   = (int32)speed - 32767;             /* 0.01% */
+        mag = (v >= 0) ? (float)v : (float)(-v);
+        if (mag > 10000.0f) mag = 10000.0f;     /* 钳到 ±100% */
+
+        g_run_state.direction = (v >= 0) ? CW : CCW;
+
+        if (mag <= 0.0f)
         {
-            // float ref_val = (speed - 32767) * 1.0f;
-            float ref_val = (float)(speed-32767)/10000.0f * MOTOR_SPEED_BASE;
-            if (ref_val >= 0)
-            {
-                g_run_state.direction = CW;       // 正数正转
-                g_run_state.ref = ref_val;
-            }
-            else
-            {
-                g_run_state.direction = CCW;      // 负数反转
-                g_run_state.ref = -ref_val;       // 存储绝对值
-            }
-            if (speed == 32767)
-            {
-                g_run_state.is_started = 0;
-            }
+            g_run_state.ref = 0.0f;             /* 0% = 停机 */
         }
-        else if (g_run_state.work_mode == EXT_WORK_MODE_CURRENT)
+        else
         {
-            float ref_val = (current - 32767) / 100.0f;
-            if (ref_val >= 0)
-            {
-                g_run_state.direction = CW;       // 正数正转
-                g_run_state.ref = ref_val;
-            }
-            else
-            {
-                g_run_state.direction = CCW;      // 负数反转
-                g_run_state.ref = -ref_val;       // 存储绝对值
-            }
-            if (current == 32767)
-            {
-                g_run_state.is_started = 0;
-            }
+            /* 100% = 配置里的 max_speed */
+            base = (g_motor_cfg->max_speed != 0) ? (float)g_motor_cfg->max_speed
+                                                 : MOTOR_SPEED_BASE;
+            /* 非零给定时的下限 = 配置里的 idle_speed(rpm) */
+            idle = (float)g_motor_cfg->idle_speed;
+            if (idle > base) idle = base;
+
+            /* 1%~100% → idle_speed ~ max_speed */
+            g_run_state.ref = idle + (base - idle) * (mag / 10000.0f);
         }
     }
 }
+// void MotorCtrl_SetTarget(uint16_t current, uint16_t speed)
+// {
+//     int32 v;
+//     float mag;
+//     float base;
+
+//     if (g_run_state.is_estop)
+//     {
+//         return;                                 /* 急停中不接受目标 */
+//     }
+
+//     if (g_run_state.work_mode == EXT_WORK_MODE_CURRENT)
+//     {
+//         v   = (int32)current - 32767;           /* 0.01A */
+//         mag = (v >= 0) ? (float)v : (float)(-v);
+//         g_run_state.direction = (v >= 0) ? CW : CCW;
+//         g_run_state.ref       = mag / 100.0f;   /* 0.01A → A */
+//     }
+//     else                                        /* 转速模式 */
+//     {
+//         v   = (int32)speed - 32767;             /* 0.01% */
+//         mag = (v >= 0) ? (float)v : (float)(-v);
+//         g_run_state.direction = (v >= 0) ? CW : CCW;
+
+//         /* 协议 100% = 主机约定的最大转速(配置里 max_speed)，不是 FOC 基准 4096 */
+//         base = (g_motor_cfg->max_speed != 0) ? (float)g_motor_cfg->max_speed
+//                                              : MOTOR_SPEED_BASE;
+//         g_run_state.ref = mag / 10000.0f * base;
+//     }
+// }
+// /// @brief 设置电机目标值(正数正转, 负数反转)
+// /// @param current 目标电流(0.01A)
+// /// @param speed 目标转速(0.01%)
+// /// @retval None
+// void MotorCtrl_SetTarget(uint16_t current, uint16_t speed)
+// {
+//     // 根据工作模式和控制状态设置电机参数
+//     if (g_run_state.is_started && !g_run_state.is_estop)
+//     {
+//         if (g_run_state.work_mode == EXT_WORK_MODE_SPEED)
+//         {
+//             // float ref_val = (speed - 32767) * 1.0f;
+//             float ref_val = (float)(speed-32767)/10000.0f * MOTOR_SPEED_BASE;
+//             if (ref_val >= 0)
+//             {
+//                 g_run_state.direction = CW;       // 正数正转
+//                 g_run_state.ref = ref_val;
+//             }
+//             else
+//             {
+//                 g_run_state.direction = CCW;      // 负数反转
+//                 g_run_state.ref = -ref_val;       // 存储绝对值
+//             }
+//             if (speed == 32767)
+//             {
+//                 g_run_state.is_started = 0;
+//             }
+//         }
+//         else if (g_run_state.work_mode == EXT_WORK_MODE_CURRENT)
+//         {
+//             float ref_val = (current - 32767) / 100.0f;
+//             if (ref_val >= 0)
+//             {
+//                 g_run_state.direction = CW;       // 正数正转
+//                 g_run_state.ref = ref_val;
+//             }
+//             else
+//             {
+//                 g_run_state.direction = CCW;      // 负数反转
+//                 g_run_state.ref = -ref_val;       // 存储绝对值
+//             }
+//             if (current == 32767)
+//             {
+//                 g_run_state.is_started = 0;
+//             }
+//         }
+//     }
+// }
 
 /// @brief 更新电机状态
 /// @param None

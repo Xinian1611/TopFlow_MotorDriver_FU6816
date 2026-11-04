@@ -30,8 +30,8 @@
 
 #define MOTOR_SELECT                            MOTOR_36V_2400W
 #define SPEED_PRECISION                         (1)
-#define MAX_SPEED                               (2300)
-#define IDLE_SPEED                              (250)
+#define MAX_SPEED                               (1800)
+#define IDLE_SPEED                              (150)
 
 // 12V电机参数
 #define MOTOR_12V_POLE_PAIRS                     (7.0)
@@ -52,8 +52,8 @@
 // 36V电机参数
 #define MOTOR_36V_POLE_PAIRS                     (7.0)
 #define MOTOR_36V_RS                             (0.019)
-#define MOTOR_36V_LD                             (0.138 / 1000.0 * 0.99)
-#define MOTOR_36V_LQ                             (MOTOR_36V_LD)
+#define MOTOR_36V_LD                             (0.000143)
+#define MOTOR_36V_LQ                             (0.000151)
 #define MOTOR_36V_SPEED_BASE                     (4096.0)
 #define MOTOR_36V_KeVpp                          (7.6832)
 #define MOTOR_36V_KeT                            (100.4)
@@ -99,7 +99,7 @@ extern void MotorCtrl_Init(void);
 extern void MotorCtrl_SetRun(uint8_t state);
 extern void MotorCtrl_SetEstop(uint8_t state);
 extern void MotorCtrl_SetMode(uint8_t mode);
-extern void MotorCtrl_SetTarget(int16_t current, int16_t speed);
+extern void MotorCtrl_SetTarget(uint16_t current, uint16_t speed);
 extern void MotorCtrl_Update(void);
 
 

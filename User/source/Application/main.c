@@ -112,7 +112,7 @@ void SoftwareInit(void)
         EXT_SYS_MAIN,              // 系统编号: 主系统
         EXT_CAT_POWER_ENGINE,      // 设备主类别: 动力驱动引擎
         EXT_POWER_TROLL_MOTOR,     // 设备副类别: 拖钓电机
-        1                          // 设备编号: 1号电机
+        1                          // 设备编号: 1号电机/ 新协议0：驱动电机  
     };
 
     // 初始化电机控制模块

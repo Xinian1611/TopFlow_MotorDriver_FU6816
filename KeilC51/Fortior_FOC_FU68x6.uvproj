@@ -324,7 +324,7 @@
               <MiscControls></MiscControls>
               <Define></Define>
               <Undefine></Undefine>
-              <IncludePath>..\User\include;..\FU68xx_Hardware_Driver\Include</IncludePath>
+              <IncludePath>..\User\include;..\FU68xx_Hardware_Driver\Include;..\User\source\RingBuffer</IncludePath>
             </VariousControls>
           </C51>
           <Ax51>
@@ -410,6 +410,26 @@
               <FileName>SquStart.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\User\include\SquStart.h</FilePath>
+            </File>
+            <File>
+              <FileName>CanSlave.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\User\source\Application\CanSlave.c</FilePath>
+            </File>
+            <File>
+              <FileName>DevConfig.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\User\source\Application\DevConfig.c</FilePath>
+            </File>
+            <File>
+              <FileName>MotorUserControl.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\User\source\Application\MotorUserControl.c</FilePath>
+            </File>
+            <File>
+              <FileName>AlarmMonitor.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\User\source\Application\AlarmMonitor.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -541,6 +561,11 @@
               <FileType>1</FileType>
               <FilePath>..\User\source\Hardware\WDT.c</FilePath>
             </File>
+            <File>
+              <FileName>24cxx.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\User\source\Hardware\24cxx.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -560,6 +585,16 @@
               <FileName>README.md</FileName>
               <FileType>5</FileType>
               <FilePath>..\README.md</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>RingBuffer</GroupName>
+          <Files>
+            <File>
+              <FileName>RingBuffer.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\User\source\RingBuffer\RingBuffer.c</FilePath>
             </File>
           </Files>
         </Group>

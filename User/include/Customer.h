@@ -79,7 +79,7 @@
  * @param (AMP16x)      内部PGA放大16倍
  * @param (xxxxxx)      外部放大模式填写相应倍数
  */
-#define HW_AMPGAIN                      (AMP8x)         ///< 放大倍数设置                       
+#define HW_AMPGAIN                      (AMP16x)         ///< 放大倍数设置                       
 
 /**
  * 参考电压设置
@@ -337,23 +337,23 @@
 
 #define LOOP_TIME                       (1)                 ///< (ms) 外环环调节周期,默认为 1m
 
-#define MOTOR_SPEED_MIN_RPM            S_Value(100.0)        ///< (RPM) 运行最小转速
-#define MOTOR_SPEED_MAX_RPM            S_Value(2000.0)       ///< (RPM) 运行最大转速
+#define MOTOR_SPEED_MIN_RPM            S_Value(150.0)        ///< (RPM) 运行最小转速
+#define MOTOR_SPEED_MAX_RPM            S_Value(1800.0)       ///< (RPM) 运行最大转速
 #define MOTOR_SPEED_STOP_RPM           S_Value(100.0)       ///< (RPM) 运行最小转速  
 
-#define SKP                            _Q12(0.6)            ///< 外环KP     
-#define SKI                            _Q15(0.004)           ///< 外环KI
+#define SKP                            _Q12(1.2)//0.6            ///< 外环KP     
+#define SKI                            _Q15(0.008)//0.004           ///< 外环KI
 #define SKD                            _Q12(0.0)            ///< 外环KD
 
-#define SOUTMAX                        I_Value(75.0)        ///< (A) 外环电流最大限幅值
+#define SOUTMAX                        I_Value(125.0)        ///< (A) 外环电流最大限幅值
 #define SOUTMIN                        I_Value(1.5)        ///< (A) 外环电流最小限幅值
 
 /* -----环路爬坡增量----- */
 // 编译期二选一改为运行时二选一（初版 AddFunction.c 的 Speed_response() 会按 MOTOR_CTRL_MODE 取值）
-#define CURRENT_RAMP_INC               I_Value(0.1)      ///< (A) 电流环增量
-#define CURRENT_RAMP_DEC               I_Value(0.1)      ///< (A) 电流环减量
-#define SPEED_RAMP_INC                 SAcc_Value(200)   ///< (RPS) 功率环/速度环每秒爬坡递增量
-#define SPEED_RAMP_DEC                 SAcc_Value(200)   ///< (RPS) 功率环/速度环每秒爬坡递减量
+#define CURRENT_RAMP_INC               I_Value(0.5)//0.1      ///< (A) 电流环增量
+#define CURRENT_RAMP_DEC               I_Value(0.5)//0.1      ///< (A) 电流环减量
+#define SPEED_RAMP_INC                 SAcc_Value(1800)//200   ///< (RPS) 功率环/速度环每秒爬坡递增量
+#define SPEED_RAMP_DEC                 SAcc_Value(1800)//200   ///< (RPS) 功率环/速度环每秒爬坡递减量
 
 /* ----------------------------------------------------------------------------------------------------------------------------
                                             8.  限流功能参数                                                  
@@ -383,9 +383,9 @@
 #define AKI                            _Q15(0.01)            // 弱磁KI
 #define AKD                            _Q12(0.00)            // 弱磁KD
 #define AMAX                           (0.00)                // (°)角度
-#define AMIN                           (-10.0)               // (°)角度
+#define AMIN                           (-25.0)               // (°)角度
 
-#define Weak_Mag_UDQ_Ref               _Q15(0.75)           ///< |U|超过该幅值开始弱磁（Q15，对应占空比）
+#define Weak_Mag_UDQ_Ref               _Q15(0.9)           ///< |U|超过该幅值开始弱磁（Q15，对应占空比）
 
 /* ----------------------------------------------------------------------------------------------------------------------------
                                             10.  其他功能参数                                                  
@@ -438,7 +438,7 @@
 ---------------------------------------------------------------------------------------------------------------------------- */
 
 /* -----启停测试参数配置----- */
-#define ONOFFTEST_REF                  S_Value(2000)        ///< (RPM)速度环测试给定，注意闭环方式不同给定值需要更改
+#define ONOFFTEST_REF                  S_Value(200)        ///< (RPM)速度环测试给定，注意闭环方式不同给定值需要更改
 #define ONOFFTEST_CurrentREF           I_Value(10.0)        ///< (A)电流环测试给定，注意闭环方式不同给定值需要更改
 #define ONOFFTEST_PowerREF             (2000)              ///< (W)功率环测试给定，注意闭环方式不同给定值需要更改
 #define ONOFFTEST_ON_TIME              (6000)               ///< (ms) 启动运行时间
@@ -446,7 +446,7 @@
 
 /* -----停机刹车选择----- */
 #define StopBrakeFlag                  (1)
-#define StopWaitTime                   (4000)                ///< (ms) 刹车等待时间
+#define StopWaitTime                   (300)//4000                ///< (ms) 刹车等待时间
 #define Stop_MOTOR_SPEED_RPM           S_Value(3000)        ///< (RPM) 小于该转速刹车
 
 /* ----------------------------------------------------------------------------------------------------------------------------

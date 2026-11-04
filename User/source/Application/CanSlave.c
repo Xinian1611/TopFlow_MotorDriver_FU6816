@@ -10,6 +10,8 @@ extern uint8 can_hw_send(uint32_t can_id, const uint8_t *dat, uint8_t len);
 /************************ 扩展帧协议实现 ************************/
 static ExtSlaveConfig_t xdata g_ext_config;
 
+CanStatusDbg_t xdata g_canStatusDbg;      /* 调试：最后一次发送的状态报文 */
+
 // 多帧组装状态
 typedef struct
 {
@@ -113,81 +115,123 @@ static void ext_process_cmd_message(const uint8_t *buf)
     uint8_t work_mode = EXT_GET_WORKMODE(ctrl);
     uint8_t startstop = EXT_GET_STARTSTOP(ctrl);
     uint8_t estop = EXT_GET_ESTOP(ctrl);
-    uint8_t dbg_cmd = msg->reserved[0];
-    int16_t dbg_param = EXT_GET_I16(msg->reserved[1], msg->reserved[2]);
+    uint16_t cur_raw   = EXT_GET_U16(msg->target_current_hi, msg->target_current_lo);
+    uint16_t speed_raw = EXT_GET_U16(msg->target_speed_hi,   msg->target_speed_lo);
+    // uint8_t dbg_cmd = msg->reserved[0];
+    // int16_t dbg_param = EXT_GET_I16(msg->reserved[1], msg->reserved[2]);
 
     // 调试指令处理(最高优先级, 不依赖启停状态)
     //if (dbg_cmd != EXT_DBG_CMD_NONE)
-    if (dbg_cmd >= EXT_DBG_CMD_SET_KP && dbg_cmd <= EXT_DBG_CMD_SAVE)
-    {
-        switch (dbg_cmd)
-        {
-        case EXT_DBG_CMD_SET_KP:
-            if (g_run_state.work_mode == EXT_WORK_MODE_SPEED)
-            {
-                g_motor_cfg->speed_kp = (uint16_t)dbg_param;
-                PI1_KP = g_motor_cfg->speed_kp;
-            }
-            else
-            {
-                FOC_QKP = dbg_param;
-            }
-            break;
+    // if (dbg_cmd >= EXT_DBG_CMD_SET_KP && dbg_cmd <= EXT_DBG_CMD_SAVE)
+    // {
+    //     switch (dbg_cmd)
+    //     {
+    //     case EXT_DBG_CMD_SET_KP:
+    //         if (g_run_state.work_mode == EXT_WORK_MODE_SPEED)
+    //         {
+    //             g_motor_cfg->speed_kp = (uint16_t)dbg_param;
+    //             PI1_KP = g_motor_cfg->speed_kp;
+    //         }
+    //         else
+    //         {
+    //             FOC_QKP = dbg_param;
+    //         }
+    //         break;
 
-        case EXT_DBG_CMD_SET_KI:
-            if (g_run_state.work_mode == EXT_WORK_MODE_SPEED)
-            {
-                g_motor_cfg->speed_ki = (uint16_t)dbg_param;
-                PI1_KI = g_motor_cfg->speed_ki;
-            }
-            else
-            {
-                FOC_QKI = dbg_param;
-            }
-            break;
+    //     case EXT_DBG_CMD_SET_KI:
+    //         if (g_run_state.work_mode == EXT_WORK_MODE_SPEED)
+    //         {
+    //             g_motor_cfg->speed_ki = (uint16_t)dbg_param;
+    //             PI1_KI = g_motor_cfg->speed_ki;
+    //         }
+    //         else
+    //         {
+    //             FOC_QKI = dbg_param;
+    //         }
+    //         break;
 
-        case EXT_DBG_CMD_SET_KD:
-            g_motor_cfg->speed_kd = (uint16_t)dbg_param;
-            break;
+    //     case EXT_DBG_CMD_SET_KD:
+    //         g_motor_cfg->speed_kd = (uint16_t)dbg_param;
+    //         break;
 
-        case EXT_DBG_CMD_SET_ALL:
-            g_motor_cfg->speed_kp = (uint16_t)((uint16_t)msg->reserved[1] << 8);
-            g_motor_cfg->speed_ki = (uint16_t)((uint16_t)msg->reserved[2] << 8);
-            PI1_KP = g_motor_cfg->speed_kp;
-            PI1_KI = g_motor_cfg->speed_ki;
-            break;
+    //     case EXT_DBG_CMD_SET_ALL:
+    //         g_motor_cfg->speed_kp = (uint16_t)((uint16_t)msg->reserved[1] << 8);
+    //         g_motor_cfg->speed_ki = (uint16_t)((uint16_t)msg->reserved[2] << 8);
+    //         PI1_KP = g_motor_cfg->speed_kp;
+    //         PI1_KI = g_motor_cfg->speed_ki;
+    //         break;
 
-        case EXT_DBG_CMD_SAVE:
-            DevConfig_WriteParam(g_motor_cfg);
-            break;
+    //     case EXT_DBG_CMD_SAVE:
+    //         DevConfig_WriteParam(g_motor_cfg);
+    //         break;
 
-        default:
-            break;
-        }
-        return;
-    }
+    //     default:
+    //         break;
+    //     }
+    //     return;
+    // }
 
-    // 急停处理(最高优先级)
-    MotorCtrl_SetEstop(estop == EXT_ESTOP_ACTIVE);
+    // // 急停处理(最高优先级)
+    // MotorCtrl_SetEstop(estop == EXT_ESTOP_ACTIVE);
+    // if (estop == EXT_ESTOP_ACTIVE)
+    // {
+    //     return;
+    // }
+
+    // // 启停处理
+    // if (startstop >= EXT_STARTSTOP_START && startstop <= EXT_STARTSTOP_STOP)
+    // {
+    //     MotorCtrl_SetRun(startstop == EXT_STARTSTOP_START);
+    // }
+
+    // // 工作模式
+    // MotorCtrl_SetMode(work_mode);
+
+    // // 设置目标值
+    // MotorCtrl_SetTarget(EXT_GET_I16(msg->target_current_hi, msg->target_current_lo),
+    //                     EXT_GET_I16(msg->target_speed_hi, msg->target_speed_lo));
+
+    /* ---- 急停：1=急停 2=非急停；0=无操作、3=无效值 → 保持原状态 ---- */
     if (estop == EXT_ESTOP_ACTIVE)
     {
-        return;
+        MotorCtrl_SetEstop(1);
+        return;                     /* 急停帧不再往下处理启停/给定 */
     }
-
-    // 启停处理
-    if (startstop >= EXT_STARTSTOP_START && startstop <= EXT_STARTSTOP_STOP)
+    if (estop == EXT_ESTOP_RELEASE)
     {
-        MotorCtrl_SetRun(startstop == EXT_STARTSTOP_START);
+        MotorCtrl_SetEstop(0);
     }
 
-    // 工作模式
-    MotorCtrl_SetMode(work_mode);
+        /* ---- 转速模式 + 0%(raw == 32767)：直接按停机处理 ----
+     * 必须放在"起机"之前：否则每个 0% 帧都会先 SetRun(1) 再 SetRun(0)，
+     * 状态机每次都会抖一下（预充电/预定位跑一半又被拉回停止）。 */
+    if ((g_run_state.work_mode == EXT_WORK_MODE_SPEED) && (speed_raw == 32767))
+    {
+        MotorCtrl_SetRun(0);                        /* 撤给定 + 进 mcStop */
+        MotorCtrl_SetTarget(cur_raw, speed_raw);    /* 内部把 ref 置 0 */
+        return;                                     /* 不再走起机流程 */
+    }
 
-    // 设置目标值
-    MotorCtrl_SetTarget(EXT_GET_I16(msg->target_current_hi, msg->target_current_lo),
-                        EXT_GET_I16(msg->target_speed_hi, msg->target_speed_lo));
+    /* ---- 启停：1=起机 2=停机；0=无操作、3=无效值 → 保持原状态 ---- */
+    if (startstop == EXT_STARTSTOP_START)
+    {
+        MotorCtrl_SetRun(1);
+    }
+    else if (startstop == EXT_STARTSTOP_STOP)
+    {
+        MotorCtrl_SetRun(0);
+    }
 
+    /* ---- 工作模式：只认 2=转速控制 ---- */
+    if (work_mode == EXT_WORK_MODE_SPEED)
+    {
+        MotorCtrl_SetMode(EXT_WORK_MODE_SPEED);
+    }
+
+    /* ---- 目标值：零点 32767，正数 raw 一定 >32767，必须按无符号读 ---- */
+    MotorCtrl_SetTarget(cur_raw, speed_raw);
 }
+
 #define S_Value2F(x) ((float)(x) / 32767.0f * MOTOR_SPEED_BASE)
 #define I_Value2F(x) ((float)(x) / 32767.0f * (float)HW_ADC_REF / ((float)HW_RSHUNT * (float)HW_AMPGAIN))
 #define UDC_Value2F(x) ((float)(x) / 32767.0f * (float)HW_BOARD_VOLT_MAX)
@@ -314,6 +358,8 @@ void ext_slave_init(const ExtSlaveConfig_t *config)
     g_ext_log_cnt = 0;
     g_ext_cmd_timeout = 0;
     g_ext_runtime_cnt = 0;
+
+    memset(&g_canStatusDbg, 0, sizeof(g_canStatusDbg));
 }
 
 /// @brief 处理配置报文
@@ -374,7 +420,7 @@ void ext_slave_process_rx(uint32_t ext_id, const uint8_t *dat, uint8_t len)
     // 过滤：只处理与本机匹配的帧
     if (main_cat != g_ext_config.main_cat ||
         sub_cat != g_ext_config.sub_cat ||
-        (dev_num != g_ext_config.dev_num && dev_num != 0))
+        (dev_num != g_ext_config.dev_num))     //&& dev_num != 0
     {
         return;
     }
@@ -444,6 +490,24 @@ void ext_slave_periodic_send(void)
         if (tx_queue_pop(&can_id, tx_dat))
         {
             can_hw_send(can_id, tx_dat, CAN_FRAME_DATA_LEN);
+
+            /* ---- 调试快照：真正写进 CAN 发送寄存器的状态帧 ---- */
+            if (EXTID_GET_PRIORITY(can_id) == EXT_PRI_STATUS)
+            {
+                g_canStatusDbg.CanID     = can_id;
+                g_canStatusDbg.Ctrl      = tx_dat[0];
+                g_canStatusDbg.WorkMode  = EXT_GET_WORKMODE(tx_dat[0]);
+                g_canStatusDbg.StartStop = EXT_GET_STARTSTOP(tx_dat[0]);
+                g_canStatusDbg.EStop     = EXT_GET_ESTOP(tx_dat[0]);
+
+                g_canStatusDbg.SpeedRaw     = EXT_GET_U16(tx_dat[1], tx_dat[2]);
+                g_canStatusDbg.SpeedRpm     = (int16_t)((long)g_canStatusDbg.SpeedRaw - 32767);
+                g_canStatusDbg.CurrentRaw   = EXT_GET_U16(tx_dat[3], tx_dat[4]);
+                g_canStatusDbg.Current_001A = (int16_t)((long)g_canStatusDbg.CurrentRaw - 32767);
+                g_canStatusDbg.PowerRaw     = EXT_GET_U16(tx_dat[5], tx_dat[6]);
+                g_canStatusDbg.Power_W      = (int16_t)((long)g_canStatusDbg.PowerRaw - 32767);
+                g_canStatusDbg.FaultCode    = tx_dat[7];
+            }
         }
     }
 
@@ -468,6 +532,20 @@ void ext_slave_periodic_send(void)
     //         g_run_state.ref = 0;
     //     }
     // }
+        /* 指令通信超时：已起机但 EXT_CMD_TIMEOUT_MS 内没收到有效指令帧 → 立即停机 */
+    if (g_run_state.is_started && !g_run_state.is_estop)
+    {
+        if (++g_ext_cmd_timeout >= EXT_CMD_TIMEOUT_MS)
+        {
+            g_ext_cmd_timeout = EXT_CMD_TIMEOUT_MS;
+            MotorCtrl_SetRun(0);        /* is_started=0, ref=0, run_time=0, 清换向标志 */
+            ext_set_fault(FAULT_LEVEL_3, FAULT3_COMM_STOP);
+        }
+    }
+    else
+    {
+        g_ext_cmd_timeout = 0;
+    }
 
     // 运行时间统计(每1000ms累加1s)
 
@@ -483,32 +561,32 @@ void ext_slave_periodic_send(void)
         g_run_state.total_time++;
     }
 
-    // 心跳报文: 每500ms发送(0字节载荷, 仅CAN ID标识, 数据填充0xFF)
-    g_ext_heartbeat_cnt++;
-    if (g_ext_heartbeat_cnt >= 500)
-    {
-        uint8_t dummy[CAN_FRAME_DATA_LEN] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-        g_ext_heartbeat_cnt = 0;
-        ext_send_single(EXT_PRI_HEARTBEAT, dummy);
-    }
+    // // 心跳报文: 每500ms发送(0字节载荷, 仅CAN ID标识, 数据填充0xFF)
+    // g_ext_heartbeat_cnt++;
+    // if (g_ext_heartbeat_cnt >= 500)
+    // {
+    //     uint8_t dummy[CAN_FRAME_DATA_LEN] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    //     g_ext_heartbeat_cnt = 0;
+    //     ext_send_single(EXT_PRI_HEARTBEAT, dummy);
+    // }
 
     // 状态报文: 每100ms发送(单帧)
     g_ext_status_cnt++;
-    if (g_ext_status_cnt >= (100 + 50))
+    if (g_ext_status_cnt >= (100))
     {
         g_ext_status_cnt = 0;
         ext_build_status(buf);
         ext_send_single(EXT_PRI_STATUS, buf);
     }
 
-    // 日志报文: 每1000ms发送(4帧)
-    g_ext_log_cnt++;
-    if (g_ext_log_cnt >= (1000 + 100))
-    {
-        g_ext_log_cnt = 0;
-        ext_build_log(buf);
-        ext_send_frames(EXT_PRI_LOG, buf, EXT_MSG_LEN_LOG);
-    }
+    // // 日志报文: 每1000ms发送(4帧)
+    // g_ext_log_cnt++;
+    // if (g_ext_log_cnt >= (1000 + 100))
+    // {
+    //     g_ext_log_cnt = 0;
+    //     ext_build_log(buf);
+    //     ext_send_frames(EXT_PRI_LOG, buf, EXT_MSG_LEN_LOG);
+    // }
 
     // // 感知报文: 每100ms发送
     // g_ext_perception_cnt++;

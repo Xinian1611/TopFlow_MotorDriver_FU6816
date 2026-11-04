@@ -59,7 +59,32 @@ typedef struct {
 } ExtSlaveConfig_t;
 
 /************************ 通信超时定义 ************************/
-#define EXT_CMD_TIMEOUT_MS      1000   // 指令报文通信超时(ms)
+#define EXT_CMD_TIMEOUT_MS      5000   // 指令报文通信超时(ms)
+
+/************************ 调试用：最后一次发送的状态报文 ************************/
+/* Keil Watch 展开 g_canStatusDbg 即可看到最近一次真正发上总线的状态帧。
+ * g_canMsTick - SendTickMs = 这帧距今多少 ms，可判断状态帧是否还在发。 */
+typedef struct
+{
+    uint32_t CanID;           ///< 29 位扩展 ID（当前配置下应为 0x062C0F81）
+
+    uint8_t  Ctrl;            ///< Data[0]
+    uint8_t  WorkMode;        ///< Ctrl[2:0]  0=无 1=电流 2=转速 7=无效
+    uint8_t  StartStop;       ///< Ctrl[4:3]  1=起机 2=停机
+    uint8_t  EStop;           ///< Ctrl[6:5]  1=急停 2=非急停
+
+    uint16_t SpeedRaw;        ///< Data[1..2]，32767 = 0rpm
+    int16_t  SpeedRpm;        ///< 转速（负 = 反转）
+    uint16_t CurrentRaw;      ///< Data[3..4]，32767 = 0A
+    int16_t  Current_001A;    ///< 电流，单位 0.01A
+    uint16_t PowerRaw;        ///< Data[5..6]，32767 = 0W
+    int16_t  Power_W;         ///< 功率，单位 W
+    uint8_t  FaultCode;       ///< Data[7]
+} CanStatusDbg_t;
+
+extern CanStatusDbg_t xdata g_canStatusDbg;
+extern uint32_t xdata g_canMsTick;
+
 
 /************************ 扩展帧运行状态 ************************/
 
