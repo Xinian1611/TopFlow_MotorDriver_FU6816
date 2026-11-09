@@ -1,1 +1,0 @@
-"..\User\source\Hardware\I2C.c" LARGE OMF2 OPTIMIZE (8,SPEED) BROWSE INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include;..\User\source\RingBuffer) DEBUG PRINT(.\Listings\I2C.lst) TABS (2) OBJECT(.\Output\I2C.obj)

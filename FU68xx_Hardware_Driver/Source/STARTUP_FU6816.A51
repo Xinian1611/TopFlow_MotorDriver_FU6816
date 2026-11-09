@@ -27,7 +27,7 @@ DPH     DATA    83H
                 EXTRN CODE (?C_START)
                 PUBLIC  ?C_STARTUP
 
-                CSEG    AT     0000H
+                CSEG    AT     0x0000 
 ?C_STARTUP:     LJMP    STARTUP1
 
                 RSEG    ?C_C51STARTUP

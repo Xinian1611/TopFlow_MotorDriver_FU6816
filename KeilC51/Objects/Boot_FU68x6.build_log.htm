@@ -1,0 +1,40 @@
+<html>
+<body>
+<pre>
+<h1>µVision Build Log</h1>
+<h2>Tool Versions:</h2>
+IDE-Version: ¦ÌVision V5.43.1.0
+Copyright (C) 2025 ARM Ltd and ARM Germany GmbH. All rights reserved.
+License Information: 1 1, 1, LIC=CZVNB-2TPFB-D8FFM-XT1J3-XBRKE-GLEHB
+ 
+Tool Versions:
+Toolchain:       PK51 Prof. Developers Kit  Version: 9.60.7.0
+Toolchain Path:  D:\Software\keil\C51\BIN
+C Compiler:      C51.exe V9.60.7.0
+Assembler:       A51.exe V8.2.7.0
+Linker/Locator:  LX51.exe V4.66.100.0
+Library Manager: LIBX51.exe V4.30.1.0
+Hex Converter:   OHX51.exe V1.47.0.0
+CPU DLL:         S8051.DLL V3.125.1.0
+Dialog DLL:      DCYG.DLL V2.75.1.0
+Target DLL:      Fice.dll V1.00
+Dialog DLL:      TCYG.DLL V2.72.1.0
+ 
+<h2>Project:</h2>
+D:\Code\brushless_electric_machine\TopFlow_UpDownDriverBoard_Boot\KeilC51\Boot_FU68x6.uvproj
+Project File Date:  11/04/2026
+
+<h2>Output:</h2>
+Build target 'Boot_FU68x6'
+linking...
+*** WARNING L57: UNCALLED FUNCTION, IGNORED FOR OVERLAY PROCESS
+    NAME:    _FLASH_BYTE_WRITE/BOOT_FLASH
+Program Size: data=17.1 xdata=1130 const=20 code=5282
+creating hex file from ".\Objects\Boot_FU68x6"...
+User command #1: powershell -ExecutionPolicy Bypass -NoProfile -File ".\hex2bin.ps1"
+  [hex2bin] Boot_FU68x6.hex -> Boot_0x0000.bin  size=5376 (0x1500)  first=0x02  from_hex=5302
+".\Objects\Boot_FU68x6" - 0 Error(s), 1 Warning(s).
+Build Time Elapsed:  00:00:01
+</pre>
+</body>
+</html>

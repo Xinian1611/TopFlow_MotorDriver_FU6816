@@ -1,0 +1,153 @@
+A51 MACRO ASSEMBLER  STARTUP                                                              11/09/2026 13:00:53 PAGE     1
+
+
+MACRO ASSEMBLER A51 V8.2.7.0
+OBJECT MODULE PLACED IN .\Objects\STARTUP.obj
+ASSEMBLER INVOKED BY: D:\Software\keil\C51\BIN\A51.EXE ..\Boot\STARTUP.A51 SET(LARGE) DEBUG PRINT(.\Listings\STARTUP.lst
+                      ) OBJECT(.\Objects\STARTUP.obj) EP
+
+LOC  OBJ            LINE     SOURCE
+
+                       1     $nomod51 
+                       2     
+  0100                 3     IDATALEN        EQU     256
+                       4     
+  0000                 5     XDATASTART      EQU     0
+  0F00                 6     XDATALEN        EQU     3840
+                       7     
+  0000                 8     IBPSTACK        EQU     0
+  0100                 9     IBPSTACKTOP     EQU     IDATALEN
+                      10     
+  0000                11     XBPSTACK        EQU     0
+  0F00                12     XBPSTACKTOP     EQU     XDATALEN
+                      13      
+  1800                14     PADDR       EQU    1800H
+                      15     
+  00E0                16     ACC     DATA    0E0H
+  00F0                17     B       DATA    0F0H
+  0081                18     SP      DATA    81H
+  0082                19     DPL     DATA    82H
+  0083                20     DPH     DATA    83H
+                      21     
+                      22                     NAME    ?C_STARTUP
+                      23     ?C_C51STARTUP   SEGMENT   CODE
+                      24     ?STACK          SEGMENT   IDATA
+                      25     
+----                  26                     RSEG    ?STACK
+0000                  27                     DS      1
+                      28     
+                      29                     EXTRN CODE (?C_START)
+                      30                     PUBLIC  ?C_STARTUP
+----                  31      CSEG AT  0003H
+0003 021803           32          LJMP PADDR + 00003H
+----                  33      CSEG AT  000BH
+000B 02180B           34          LJMP PADDR + 0000BH
+----                  35      CSEG AT  0013H
+0013 021813           36          LJMP PADDR + 00013H
+----                  37      CSEG AT  001BH
+001B 02181B           38          LJMP PADDR + 0001BH
+----                  39      CSEG AT  0023H
+0023 021823           40          LJMP PADDR + 00023H
+----                  41      CSEG AT  002BH
+002B 02182B           42          LJMP PADDR + 0002BH
+----                  43      CSEG AT  0033H
+0033 021833           44          LJMP PADDR + 00033H
+----                  45      CSEG AT  003BH
+003B 02183B           46          LJMP PADDR + 0003BH
+----                  47      CSEG AT  0043H
+0043 021843           48          LJMP PADDR + 00043H
+----                  49      CSEG AT  004BH
+004B 02184B           50          LJMP PADDR + 0004BH
+----                  51      CSEG AT  0053H
+0053 021853           52          LJMP PADDR + 00053H
+----                  53      CSEG AT  005BH
+005B 02185B           54          LJMP PADDR + 0005BH
+----                  55      CSEG AT  0063H
+0063 021863           56          LJMP PADDR + 00063H
+----                  57      CSEG AT  006BH
+A51 MACRO ASSEMBLER  STARTUP                                                              11/09/2026 13:00:53 PAGE     2
+
+006B 02186B           58          LJMP PADDR + 0006BH
+----                  59      CSEG AT  0073H
+0073 021873           60          LJMP PADDR + 00073H
+----                  61      CSEG AT  007BH
+007B 02187B           62          LJMP PADDR + 0007BH
+                      63         
+----                  64                     CSEG    AT      0
+0000 020000   F       65     ?C_STARTUP:     LJMP    STARTUP1
+                      66     
+----                  67                     RSEG    ?C_C51STARTUP
+0000                  68     STARTUP1:
+                      69     ; ���� idata
+                      70     IF IDATALEN <> 0
+0000 78FF             71                     MOV     R0,#IDATALEN - 1
+0002 E4               72                     CLR     A
+0003 F6               73     IDATALOOP:      MOV     @R0,A
+0004 D8FD             74                     DJNZ    R0,IDATALOOP
+                      75     ENDIF
+                      76     ; ���� Xdata ע��xdata�ĺ�32λ��оƬid�������оƬid�в�
+                             ���� ���ﲻ����������32λ
+                      77     IF XDATALEN <> 0
+0006 900000           78                     MOV     DPTR,#XDATASTART
+0009 7F00             79                     MOV     R7,#LOW(XDATALEN)
+                      80       IF (LOW (XDATALEN)) <> 0
+                                             MOV     R6,#HIGH(XDATALEN) +1
+                               ELSE
+000B 7E0F             83                     MOV     R6,#HIGH(XDATALEN)
+                      84       ENDIF
+000D E4               85                     CLR     A
+000E F0               86     XDATALOOP:      MOVX    @DPTR,A
+000F A3               87                     INC     DPTR
+0010 DFFC             88                     DJNZ    R7,XDATALOOP
+0012 DEFA             89                     DJNZ    R6,XDATALOOP
+                      90     ENDIF
+                      91     
+                      92     IF IBPSTACK <> 0
+                             EXTRN DATA (?C_IBP)
+                                             MOV     ?C_IBP,#LOW IBPSTACKTOP
+                             ENDIF
+                      96     
+                      97     IF XBPSTACK <> 0
+                             EXTRN DATA (?C_XBP)
+                                             MOV     ?C_XBP,#HIGH XBPSTACKTOP
+                                             MOV     ?C_XBP+1,#LOW XBPSTACKTOP
+                             ENDIF
+                     102     
+0014 758100   F      103                     MOV     SP,#?STACK-1      ; Keil 标准启动都有，厂商那份漏了
+0017 020000   F      104                     LJMP    ?C_START
+                     105     
+                     106                     END
+A51 MACRO ASSEMBLER  STARTUP                                                              11/09/2026 13:00:53 PAGE     3
+
+SYMBOL TABLE LISTING
+------ ----- -------
+
+
+N A M E             T Y P E  V A L U E   ATTRIBUTES
+
+?C_C51STARTUP. . .  C SEG    001AH       REL=UNIT
+?C_START . . . . .  C ADDR   -----       EXT
+?C_STARTUP . . . .  C ADDR   0000H   A   
+?STACK . . . . . .  I SEG    0001H       REL=UNIT
+ACC. . . . . . . .  D ADDR   00E0H   A   
+B. . . . . . . . .  D ADDR   00F0H   A   
+DPH. . . . . . . .  D ADDR   0083H   A   
+DPL. . . . . . . .  D ADDR   0082H   A   
+IBPSTACK . . . . .  N NUMB   0000H   A   
+IBPSTACKTOP. . . .  N NUMB   0100H   A   
+IDATALEN . . . . .  N NUMB   0100H   A   
+IDATALOOP. . . . .  C ADDR   0003H   R   SEG=?C_C51STARTUP
+PADDR. . . . . . .  N NUMB   1800H   A   
+SP . . . . . . . .  D ADDR   0081H   A   
+STARTUP1 . . . . .  C ADDR   0000H   R   SEG=?C_C51STARTUP
+XBPSTACK . . . . .  N NUMB   0000H   A   
+XBPSTACKTOP. . . .  N NUMB   0F00H   A   
+XDATALEN . . . . .  N NUMB   0F00H   A   
+XDATALOOP. . . . .  C ADDR   000EH   R   SEG=?C_C51STARTUP
+XDATASTART . . . .  N NUMB   0000H   A   
+
+
+REGISTER BANK(S) USED: 0 
+
+
+ASSEMBLY COMPLETE.  0 WARNING(S), 0 ERROR(S)

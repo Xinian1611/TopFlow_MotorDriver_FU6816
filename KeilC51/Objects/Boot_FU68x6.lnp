@@ -1,0 +1,10 @@
+".\Objects\boot_can.obj",
+".\Objects\boot_flash.obj",
+".\Objects\can_bootloader.obj",
+".\Objects\crc16.obj",
+".\Objects\main.obj",
+".\Objects\Robert_EEPROM.obj",
+".\Objects\STARTUP.obj" 
+TO ".\Objects\Boot_FU68x6" 
+
+PRINT(".\Listings\Boot_FU68x6.map")

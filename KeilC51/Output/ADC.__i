@@ -1,1 +1,0 @@
-"..\User\source\Hardware\ADC.c" LARGE OMF2 OPTIMIZE (8,SPEED) BROWSE INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include;..\User\source\RingBuffer) DEBUG PRINT(.\Listings\ADC.lst) TABS (2) OBJECT(.\Output\ADC.obj)

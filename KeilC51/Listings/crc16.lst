@@ -1,0 +1,45 @@
+C51 COMPILER V9.60.7.0   CRC16                                                             11/09/2026 13:00:53 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE CRC16
+OBJECT MODULE PLACED IN .\Objects\crc16.obj
+COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\Boot\crc16.c LARGE OMF2 OPTIMIZE(8,SPEED) BROWSE INCDIR(..\User
+                    -\include;..\User\source\Boot;..\User\source\Boot_Common;..\FU68xx_Hardware_Driver\Include) DEBUG PRINT(.\Listings\crc16.
+                    -lst) TABS(2) OBJECT(.\Objects\crc16.obj)
+
+line level    source
+
+   1          #include "crc16.h"
+   2          
+   3          unsigned short crc16_ccitt(const unsigned char *buf, unsigned int len)   /* 名字沿用 f105 */
+   4          {
+   5   1        unsigned short crc = 0;
+   6   1        unsigned int counter;
+   7   1        for (counter = 0; counter < len; counter++) {
+   8   2          crc ^= (unsigned short)(*buf++) << 8;
+   9   2          {
+  10   3            unsigned char i;
+  11   3            for (i = 0; i < 8; i++)
+  12   3              crc = (crc & 0x8000) ? (unsigned short)((crc << 1) ^ 0x1021) : (unsigned short)(crc << 1);
+  13   3          }
+  14   2        }
+  15   1        return crc;
+  16   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    165    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----      10
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
