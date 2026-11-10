@@ -1,11 +1,10 @@
-C51 COMPILER V9.60.7.0   BOOT_CAN                                                          11/09/2026 13:00:53 PAGE 1   
+C51 COMPILER V9.60.7.0   BOOT_CAN                                                          11/10/2026 10:59:15 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE BOOT_CAN
 OBJECT MODULE PLACED IN .\Objects\boot_can.obj
-COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\Boot\boot_can.c LARGE OMF2 OPTIMIZE(8,SPEED) BROWSE INCDIR(..\U
-                    -ser\include;..\User\source\Boot;..\User\source\Boot_Common;..\FU68xx_Hardware_Driver\Include) DEBUG PRINT(.\Listings\boo
-                    -t_can.lst) TABS(2) OBJECT(.\Objects\boot_can.obj)
+COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\Boot\boot_can.c LARGE OMF2 OPTIMIZE(8,SPEED) BROWSE INCDIR(..\B
+                    -oot;..\FU68xx_Hardware_Driver\Include) DEBUG PRINT(.\Listings\boot_can.lst) TABS(2) OBJECT(.\Objects\boot_can.obj)
 
 line level    source
 
@@ -62,9 +61,9 @@ line level    source
   51   2        case (0 | 0):                                   /* 邮箱 0 */
   52   2          if((CAN_RX0CR & 0x80) == 0) break;                          /* 只收扩展帧 */
   53   2          if(CAN_RX0ID0 || CAN_RX0ID1 || (CAN_RX0ID2 & 0xC0)) break;  /* 只认 ID<=0x7FF(addr<=0x7F) */
-C51 COMPILER V9.60.7.0   BOOT_CAN                                                          11/09/2026 13:00:53 PAGE 2   
-
   54   2          RxMessage[0].DLC   = (uint8)(CAN_RX0CR & 0x0F);
+C51 COMPILER V9.60.7.0   BOOT_CAN                                                          11/10/2026 10:59:15 PAGE 2   
+
   55   2          RxMessage[0].ExtId = ((uint16_t)CAN_RX0ID2 << 5) | ((uint16_t)CAN_RX0ID3 >> 3);
   56   2          RxMessage[0].Data[0]=CAN_RX0DR0; RxMessage[0].Data[1]=CAN_RX0DR1;
   57   2          RxMessage[0].Data[2]=CAN_RX0DR2; RxMessage[0].Data[3]=CAN_RX0DR3;
@@ -126,9 +125,9 @@ line level    source
  113          函数功能：发一帧 11 位标准帧（替代领导 CPDD CAN.c 的同名函数）
  114          输入参数：index/Length 忽略；Data 只用 IdentifyID.all 和 Buff[0..7]
  115          返回参数：无
-C51 COMPILER V9.60.7.0   BOOT_CAN                                                          11/09/2026 13:00:53 PAGE 3   
-
  116          特别说明：MsgFlag/MsgConfig/MsgBoxNum 是 STM32 驱动参数，这里直接忽略
+C51 COMPILER V9.60.7.0   BOOT_CAN                                                          11/10/2026 10:59:15 PAGE 3   
+
  117          ------------------------------------------------------------------------------------*/
  118          void CANSendMsgCheck(uint8_t index,struct CANTxStc *Data,uint16_t Length)
  119          {

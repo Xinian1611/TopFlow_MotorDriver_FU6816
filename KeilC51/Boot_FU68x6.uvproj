@@ -324,7 +324,7 @@
               <MiscControls></MiscControls>
               <Define></Define>
               <Undefine></Undefine>
-              <IncludePath>..\User\include;..\User\source\Boot;..\User\source\Boot_Common;..\FU68xx_Hardware_Driver\Include</IncludePath>
+              <IncludePath>..\Boot;..\FU68xx_Hardware_Driver\Include</IncludePath>
             </VariousControls>
           </C51>
           <Ax51>

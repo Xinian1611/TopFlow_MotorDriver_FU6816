@@ -1,11 +1,11 @@
-C51 COMPILER V9.60.7.0   CAN_BOOTLOADER                                                    11/09/2026 13:00:53 PAGE 1   
+C51 COMPILER V9.60.7.0   CAN_BOOTLOADER                                                    11/10/2026 10:59:15 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE CAN_BOOTLOADER
 OBJECT MODULE PLACED IN .\Objects\can_bootloader.obj
 COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\Boot\can_bootloader.c LARGE OMF2 OPTIMIZE(8,SPEED) BROWSE INCDI
-                    -R(..\User\include;..\User\source\Boot;..\User\source\Boot_Common;..\FU68xx_Hardware_Driver\Include) DEBUG PRINT(.\Listin
-                    -gs\can_bootloader.lst) TABS(2) OBJECT(.\Objects\can_bootloader.obj)
+                    -R(..\Boot;..\FU68xx_Hardware_Driver\Include) DEBUG PRINT(.\Listings\can_bootloader.lst) TABS(2) OBJECT(.\Objects\can_boo
+                    -tloader.obj)
 
 line level    source
 
@@ -57,386 +57,374 @@ line level    source
   46          static uint16_t data_index = 0;
   47          static uint8_t  writeInfoDone = 0;   /* 0：还没收到合法的 WriteInfo */
   48          
-  49          volatile uint8_t dbg_excute_cnt  = 0;
-  50          volatile uint8_t dbg_extid_l = 0, dbg_extid_h = 0;
-  51          volatile uint8_t dbg_dlc = 0;
-  52          volatile uint8_t dbg_d[4] = {0,0,0,0};
-  53          
-C51 COMPILER V9.60.7.0   CAN_BOOTLOADER                                                    11/09/2026 13:00:53 PAGE 2   
+  49          /**
+  50            * @brief  将数据烧写到指定地址的Flash中 。
+  51            * @param  Address Flash起始地址。
+  52            * @param  Data 数据存储区起始地址。
+  53            * @param  DataNum 数据字节数。
+C51 COMPILER V9.60.7.0   CAN_BOOTLOADER                                                    11/10/2026 10:59:15 PAGE 2   
 
-  54          /**
-  55            * @brief  将数据烧写到指定地址的Flash中 。
-  56            * @param  Address Flash起始地址。
-  57            * @param  Data 数据存储区起始地址。
-  58            * @param  DataNum 数据字节数。
-  59            * @retval 数据烧写状态。
-  60            */
-  61          FLASH_Status CAN_BOOT_ProgramDatatoFlash(uint16_t StartAddress,uint8_t *pData,uint16_t DataNum)
-  62          {
-  63   1        FLASH_Status FLASHStatus = FLASH_COMPLETE;
-  64   1        uint16_t i=0,len=0;
-  65   1      
-  66   1        /* 地址校验以APP地址参考 */
-  67   1        if(StartAddress < APP_EXE_FLAG_START_ADDR)
-  68   1          return FLASH_ERROR_PG;
-  69   1      
-  70   1        /* 块固定 1024 字节（4 的倍数），按 4 字节写即可，与公司方案一致 */
-  71   1        len = (uint16_t)(DataNum >> 2);
-  72   1        FLASH_Unlock();
-  73   1        SetBit(WDT_CR, WDTRF);
-  74   1        for(i=0;i<len;i++)
-  75   1        {
-  76   2          FLASHStatus = FLASH_ProgramWord(StartAddress, *((uint32_t*)pData));
-  77   2          SetBit(WDT_CR, WDTRF);
-  78   2          if (FLASHStatus == FLASH_COMPLETE)
+  54            * @retval 数据烧写状态。
+  55            */
+  56          FLASH_Status CAN_BOOT_ProgramDatatoFlash(uint16_t StartAddress,uint8_t *pData,uint16_t DataNum)
+  57          {
+  58   1        FLASH_Status FLASHStatus = FLASH_COMPLETE;
+  59   1        uint16_t i=0,len=0;
+  60   1      
+  61   1        /* 地址校验以APP地址参考 */
+  62   1        if(StartAddress < APP_EXE_FLAG_START_ADDR)
+  63   1          return FLASH_ERROR_PG;
+  64   1      
+  65   1        /* 块固定 1024 字节（4 的倍数），按 4 字节写即可，与公司方案一致 */
+  66   1        len = (uint16_t)(DataNum >> 2);
+  67   1        FLASH_Unlock();
+  68   1        SetBit(WDT_CR, WDTRF);
+  69   1        for(i=0;i<len;i++)
+  70   1        {
+  71   2          FLASHStatus = FLASH_ProgramWord(StartAddress, *((uint32_t*)pData));
+  72   2          SetBit(WDT_CR, WDTRF);
+  73   2          if (FLASHStatus == FLASH_COMPLETE)
+  74   2          {
+  75   3            StartAddress += 4;
+  76   3            pData += 4;
+  77   3          }
+  78   2          else
   79   2          {
-  80   3            StartAddress += 4;
-  81   3            pData += 4;
+  80   3            FLASH_Lock();
+  81   3            return FLASHStatus;
   82   3          }
-  83   2          else
-  84   2          {
-  85   3            FLASH_Lock();
-  86   3            return FLASHStatus;
-  87   3          }
-  88   2        }
-  89   1        FLASH_Lock();
-  90   1        return FLASHStatus;
-  91   1      }
-  92          
-  93          /**
-  94            * @brief  擦出指定扇区区间的Flash数据 。
-  95            * @param  StartPage 起始扇区地址
-  96            * @param  EndPage 结束扇区地址
-  97            * @retval 扇区擦出状态  
-  98            */
-  99          FLASH_Status CAN_BOOT_ErasePage(uint16_t StartPageAddr,uint16_t EndPageAddr)
- 100          {
- 101   1        uint16_t NbPages;
- 102   1        uint16_t i=0,j=0;
- 103   1        FLASH_Status FLASHStatus=FLASH_COMPLETE;
- 104   1      
- 105   1        /* ---- ① 参数扇区 0x0F00（不满 1 页，领导原文的页循环覆盖不到）---- */
- 106   1        for(j = StartPageAddr; (j < EndPageAddr) && (j < APP_START_ADDR); j += 0x0100)
- 107   1        {
- 108   2          SetBit(WDT_CR, WDTRF);
- 109   2          FLASHStatus = FLASH_EraseSector(j);
- 110   2        }
- 111   1      
- 112   1        /* ---- ② APP 主体按 2KB 页擦（0x1000 ~ 0x77FF）---- */
- 113   1        {
- 114   2          uint16_t pageEnd = (EndPageAddr > 0x7800) ? 0x7800 : EndPageAddr;
- 115   2          NbPages = (pageEnd - APP_START_ADDR) / 0x800;
-C51 COMPILER V9.60.7.0   CAN_BOOTLOADER                                                    11/09/2026 13:00:53 PAGE 3   
+  83   2        }
+  84   1        FLASH_Lock();
+  85   1        return FLASHStatus;
+  86   1      }
+  87          
+  88          /**
+  89            * @brief  擦出指定扇区区间的Flash数据 。
+  90            * @param  StartPage 起始扇区地址
+  91            * @param  EndPage 结束扇区地址
+  92            * @retval 扇区擦出状态  
+  93            */
+  94          FLASH_Status CAN_BOOT_ErasePage(uint16_t StartPageAddr,uint16_t EndPageAddr)
+  95          {
+  96   1        uint16_t NbPages;
+  97   1        uint16_t i=0,j=0;
+  98   1        FLASH_Status FLASHStatus=FLASH_COMPLETE;
+  99   1      
+ 100   1        /* ---- ① 参数扇区 0x0F00（不满 1 页，领导原文的页循环覆盖不到）---- */
+ 101   1        for(j = StartPageAddr; (j < EndPageAddr) && (j < APP_START_ADDR); j += 0x0100)
+ 102   1        {
+ 103   2          SetBit(WDT_CR, WDTRF);
+ 104   2          FLASHStatus = FLASH_EraseSector(j);
+ 105   2        }
+ 106   1      
+ 107   1        /* ---- ② APP 主体按 2KB 页擦（0x1000 ~ 0x77FF）---- */
+ 108   1        {
+ 109   2          uint16_t pageEnd = (EndPageAddr > 0x7800) ? 0x7800 : EndPageAddr;
+ 110   2          NbPages = (pageEnd - APP_START_ADDR) / 0x800;
+ 111   2      
+ 112   2          FLASH_Unlock();
+ 113   2          for(i = 0;i < NbPages;i++)
+ 114   2          {
+ 115   3            SetBit(WDT_CR, WDTRF);                       /* 原 delayus(100) */
+C51 COMPILER V9.60.7.0   CAN_BOOTLOADER                                                    11/10/2026 10:59:15 PAGE 3   
 
- 116   2      
- 117   2          FLASH_Unlock();
- 118   2          for(i = 0;i < NbPages;i++)
- 119   2          {
- 120   3            SetBit(WDT_CR, WDTRF);                       /* 原 delayus(100) */
- 121   3            j = (APP_START_ADDR + (0x800 * i));
- 122   3            FLASHStatus = FLASH_ErasePage(j);
- 123   3          }
- 124   2          FLASH_Lock();
- 125   2        }
- 126   1      
- 127   1        /* ---- ③ 尾部 0x7800~0x7EFF（不满 1 页）---- */
- 128   1        if(EndPageAddr > 0x7800)
- 129   1        {
- 130   2          for(j = 0x7800; j < EndPageAddr; j += 0x0100)
- 131   2          {
- 132   3            SetBit(WDT_CR, WDTRF);
- 133   3            FLASHStatus = FLASH_EraseSector(j);
- 134   3          }
- 135   2        }
- 136   1      
- 137   1        return FLASHStatus;
- 138   1      }
- 139          
- 140          /**
- 141            * @brief  获取节点地址信息
- 142            * @param  None
- 143            * @retval 节点地址。
- 144            */
- 145          uint16_t CAN_BOOT_GetAddrData(void)
- 146          {
- 147   1        return Station_ID;
- 148   1      }
- 149          /**
- 150            * @brief  控制程序跳转到指定位置开始执行 。
- 151            * @param  Addr 程序执行地址。
- 152            * @retval 程序跳转状态。
- 153            */
- 154          void CAN_BOOT_JumpToApplication(uint32_t Addr)
- 155          {
- 156   1        if(*(uint8_t code *)Addr != 0x02)      /* 0x02 = LJMP 操作码：APP 起点必须是 LJMP */
- 157   1          return;
- 158   1      
- 159   1        EA = 0;
- 160   1        (*(void (*)())Addr)();                 /* 与厂商 PADDR 跳法一致 */
- 161   1      }
- 162          
- 163          void CMD_Check(void)
- 164          {
- 165   1        struct CANTxStc Cantest;
- 166   1        Cantest.IdentifyID.all = (CAN_BOOT_GetAddrData()<<CMD_WIDTH)|CMD_List.Check;
- 167   1        Cantest.MsgFlag.bitf.SendReadyFlag = 0;
- 168   1        Cantest.MsgFlag.bitf.SendFinishFlag = 0;
- 169   1        Cantest.MsgFlag.bitf.SendEnableFlag = CAN_Enable;
- 170   1        Cantest.MsgBoxNum = CPDD_CANTxStatus_NoMailBox;
- 171   1        Cantest.MsgConfig.bitf.DataType = CPDD_CANDataType_FrameData;
- 172   1        Cantest.MsgConfig.bitf.IdentifyType = CPDD_CANType_Extended;
- 173   1        Cantest.Buff[0] = 0;
- 174   1        Cantest.Buff[1] = 1;
- 175   1        Cantest.Buff[2] = 0;
- 176   1        Cantest.Buff[3] = 0;
- 177   1        Cantest.Buff[4] = 0;
-C51 COMPILER V9.60.7.0   CAN_BOOTLOADER                                                    11/09/2026 13:00:53 PAGE 4   
+ 116   3            j = (APP_START_ADDR + (0x800 * i));
+ 117   3            FLASHStatus = FLASH_ErasePage(j);
+ 118   3          }
+ 119   2          FLASH_Lock();
+ 120   2        }
+ 121   1      
+ 122   1        /* ---- ③ 尾部 0x7800~0x7EFF（不满 1 页）---- */
+ 123   1        if(EndPageAddr > 0x7800)
+ 124   1        {
+ 125   2          for(j = 0x7800; j < EndPageAddr; j += 0x0100)
+ 126   2          {
+ 127   3            SetBit(WDT_CR, WDTRF);
+ 128   3            FLASHStatus = FLASH_EraseSector(j);
+ 129   3          }
+ 130   2        }
+ 131   1      
+ 132   1        return FLASHStatus;
+ 133   1      }
+ 134          
+ 135          /**
+ 136            * @brief  获取节点地址信息
+ 137            * @param  None
+ 138            * @retval 节点地址。
+ 139            */
+ 140          uint16_t CAN_BOOT_GetAddrData(void)
+ 141          {
+ 142   1        return Station_ID;
+ 143   1      }
+ 144          /**
+ 145            * @brief  控制程序跳转到指定位置开始执行 。
+ 146            * @param  Addr 程序执行地址。
+ 147            * @retval 程序跳转状态。
+ 148            */
+ 149          void CAN_BOOT_JumpToApplication(uint32_t Addr)
+ 150          {
+ 151   1        if(*(uint8_t code *)Addr != 0x02)      /* 0x02 = LJMP 操作码：APP 起点必须是 LJMP */
+ 152   1          return;
+ 153   1      
+ 154   1        EA = 0;
+ 155   1        (*(void (*)())Addr)();                 /* 与厂商 PADDR 跳法一致 */
+ 156   1      }
+ 157          
+ 158          void CMD_Check(void)
+ 159          {
+ 160   1        struct CANTxStc Cantest;
+ 161   1        Cantest.IdentifyID.all = (CAN_BOOT_GetAddrData()<<CMD_WIDTH)|CMD_List.Check;
+ 162   1        Cantest.MsgFlag.bitf.SendReadyFlag = 0;
+ 163   1        Cantest.MsgFlag.bitf.SendFinishFlag = 0;
+ 164   1        Cantest.MsgFlag.bitf.SendEnableFlag = CAN_Enable;
+ 165   1        Cantest.MsgBoxNum = CPDD_CANTxStatus_NoMailBox;
+ 166   1        Cantest.MsgConfig.bitf.DataType = CPDD_CANDataType_FrameData;
+ 167   1        Cantest.MsgConfig.bitf.IdentifyType = CPDD_CANType_Extended;
+ 168   1        Cantest.Buff[0] = 0;
+ 169   1        Cantest.Buff[1] = 1;
+ 170   1        Cantest.Buff[2] = 0;
+ 171   1        Cantest.Buff[3] = 0;
+ 172   1        Cantest.Buff[4] = 0;
+ 173   1        Cantest.Buff[5] = 0;
+ 174   1        Cantest.Buff[6] = 0;
+ 175   1        Cantest.Buff[7] = 0;
+ 176   1        
+ 177   1        CANSendMsgCheck(0,&Cantest,1);
+C51 COMPILER V9.60.7.0   CAN_BOOTLOADER                                                    11/10/2026 10:59:15 PAGE 4   
 
- 178   1        Cantest.Buff[5] = 0;
- 179   1        Cantest.Buff[6] = 0;
- 180   1        Cantest.Buff[7] = 0;
- 181   1        
- 182   1        CANSendMsgCheck(0,&Cantest,1);
- 183   1      }
- 184          
- 185          void CMD_Excute(void)
- 186          {
- 187   1        dbg_excute_cnt++;
- 188   1        dbg_extid_l = (uint8_t)(RxMessage[0].ExtId);
- 189   1        dbg_extid_h = (uint8_t)(RxMessage[0].ExtId >> 8);
- 190   1        dbg_dlc     = RxMessage[0].DLC;
- 191   1        dbg_d[0] = RxMessage[0].Data[0];  dbg_d[1] = RxMessage[0].Data[1];
- 192   1        dbg_d[2] = RxMessage[0].Data[2];  dbg_d[3] = RxMessage[0].Data[3];
- 193   1      
- 194   1        if((*(uint8_t code *)APP_START_ADDR) == 0x02)   /* ★ 必须是 LJMP 才算有效 APP */
- 195   1          {
- 196   2              if(ReadExcuteFlg() == 1) WriteExcuteFlg();
- 197   2              CAN_BOOT_JumpToApplication(APP_START_ADDR);
- 198   2          }
- 199   1      }
- 200          
- 201          void CMD_Erase(void)
- 202          {
- 203   1        struct CANTxStc TxMessage;
- 204   1        FLASH_Status ret;
- 205   1        uint32_t startAddr,EndAddr;
- 206   1        
- 207   1        TxMessage.MsgFlag.bitf.SendReadyFlag = 0;
- 208   1        TxMessage.MsgFlag.bitf.SendFinishFlag = 0;
- 209   1        TxMessage.MsgFlag.bitf.SendEnableFlag = CAN_Enable;
- 210   1        TxMessage.MsgBoxNum = CPDD_CANTxStatus_NoMailBox;
- 211   1        TxMessage.MsgConfig.bitf.DataType = CPDD_CANDataType_FrameData;
- 212   1        TxMessage.MsgConfig.bitf.IdentifyType = CPDD_CANType_Extended;
- 213   1        
- 214   1        startAddr = APP_START_ADDR;
- 215   1        EndAddr = APP_END_ADDR;
- 216   1        ret = CAN_BOOT_ErasePage(startAddr,EndAddr);
- 217   1        
- 218   1        start_addr = APP_START_ADDR;
- 219   1        if(ret==FLASH_COMPLETE)
- 220   1        {
- 221   2          TxMessage.IdentifyID.all = (CAN_BOOT_GetAddrData()<<CMD_WIDTH)|CMD_List.Erase;
- 222   2        }
- 223   1        else
- 224   1        {
- 225   2          TxMessage.IdentifyID.all = (CAN_BOOT_GetAddrData()<<CMD_WIDTH)|CMD_List.CmdFaild;
- 226   2        }
- 227   1        CANSendMsgCheck(0,&TxMessage,1);
- 228   1      }
- 229          
- 230          void CMD_WriteInfo(void)
- 231          {
- 232   1        uint16_t i=0;
- 233   1        uint8_t Data[8]={0,0,0,0,0,0,0,0};
- 234   1        struct CANTxStc TxMessage;
- 235   1        
- 236   1        TxMessage.MsgFlag.bitf.SendReadyFlag = 0;
- 237   1        TxMessage.MsgFlag.bitf.SendFinishFlag = 0;
- 238   1        TxMessage.MsgFlag.bitf.SendEnableFlag = CAN_Enable;
- 239   1        TxMessage.MsgBoxNum = CPDD_CANTxStatus_NoMailBox;
-C51 COMPILER V9.60.7.0   CAN_BOOTLOADER                                                    11/09/2026 13:00:53 PAGE 5   
+ 178   1      }
+ 179          
+ 180          void CMD_Excute(void)
+ 181          {
+ 182   1        if((*(uint8_t code *)APP_START_ADDR) == 0x02)   /* 必须是 LJMP 才算有效 APP */
+ 183   1          {
+ 184   2              if(ReadExcuteFlg() == 1) WriteExcuteFlg();
+ 185   2              CAN_BOOT_JumpToApplication(APP_START_ADDR);
+ 186   2          }
+ 187   1      }
+ 188          
+ 189          void CMD_Erase(void)
+ 190          {
+ 191   1        struct CANTxStc TxMessage;
+ 192   1        FLASH_Status ret;
+ 193   1        uint32_t startAddr,EndAddr;
+ 194   1        
+ 195   1        TxMessage.MsgFlag.bitf.SendReadyFlag = 0;
+ 196   1        TxMessage.MsgFlag.bitf.SendFinishFlag = 0;
+ 197   1        TxMessage.MsgFlag.bitf.SendEnableFlag = CAN_Enable;
+ 198   1        TxMessage.MsgBoxNum = CPDD_CANTxStatus_NoMailBox;
+ 199   1        TxMessage.MsgConfig.bitf.DataType = CPDD_CANDataType_FrameData;
+ 200   1        TxMessage.MsgConfig.bitf.IdentifyType = CPDD_CANType_Extended;
+ 201   1        
+ 202   1        startAddr = APP_START_ADDR;
+ 203   1        EndAddr = APP_END_ADDR;
+ 204   1        ret = CAN_BOOT_ErasePage(startAddr,EndAddr);
+ 205   1        
+ 206   1        start_addr = APP_START_ADDR;
+ 207   1        if(ret==FLASH_COMPLETE)
+ 208   1        {
+ 209   2          TxMessage.IdentifyID.all = (CAN_BOOT_GetAddrData()<<CMD_WIDTH)|CMD_List.Erase;
+ 210   2        }
+ 211   1        else
+ 212   1        {
+ 213   2          TxMessage.IdentifyID.all = (CAN_BOOT_GetAddrData()<<CMD_WIDTH)|CMD_List.CmdFaild;
+ 214   2        }
+ 215   1        CANSendMsgCheck(0,&TxMessage,1);
+ 216   1      }
+ 217          
+ 218          void CMD_WriteInfo(void)
+ 219          {
+ 220   1        uint16_t i=0;
+ 221   1        uint8_t Data[8]={0,0,0,0,0,0,0,0};
+ 222   1        struct CANTxStc TxMessage;
+ 223   1        
+ 224   1        TxMessage.MsgFlag.bitf.SendReadyFlag = 0;
+ 225   1        TxMessage.MsgFlag.bitf.SendFinishFlag = 0;
+ 226   1        TxMessage.MsgFlag.bitf.SendEnableFlag = CAN_Enable;
+ 227   1        TxMessage.MsgBoxNum = CPDD_CANTxStatus_NoMailBox;
+ 228   1        TxMessage.MsgConfig.bitf.DataType = CPDD_CANDataType_FrameData;
+ 229   1        TxMessage.MsgConfig.bitf.IdentifyType = CPDD_CANType_Extended;
+ 230   1        
+ 231   1        TxMessage.Buff[0] = 0;
+ 232   1        TxMessage.Buff[1] = 0;
+ 233   1        TxMessage.Buff[2] = 0;
+ 234   1        TxMessage.Buff[3] = 0;
+ 235   1        TxMessage.Buff[4] = 0;
+ 236   1        TxMessage.Buff[5] = 0;
+ 237   1        TxMessage.Buff[6] = 0;
+ 238   1        TxMessage.Buff[7] = 0;
+ 239   1        
+C51 COMPILER V9.60.7.0   CAN_BOOTLOADER                                                    11/10/2026 10:59:15 PAGE 5   
 
- 240   1        TxMessage.MsgConfig.bitf.DataType = CPDD_CANDataType_FrameData;
- 241   1        TxMessage.MsgConfig.bitf.IdentifyType = CPDD_CANType_Extended;
- 242   1        
- 243   1        TxMessage.Buff[0] = 0;
- 244   1        TxMessage.Buff[1] = 0;
- 245   1        TxMessage.Buff[2] = 0;
- 246   1        TxMessage.Buff[3] = 0;
- 247   1        TxMessage.Buff[4] = 0;
- 248   1        TxMessage.Buff[5] = 0;
- 249   1        TxMessage.Buff[6] = 0;
- 250   1        TxMessage.Buff[7] = 0;
- 251   1        
- 252   1        for(i=0;i<8;i++)
- 253   1        Data[i] = RxMessage[0].Data[i];
- 254   1      
- 255   1        /* 只取低 2 字节（16 位地址 + 32KB flash）*/
- 256   1        start_addr = ((uint16_t)Data[2] << 8) | (uint16_t)Data[3];
- 257   1        data_size  = ((uint16_t)Data[6] << 8) | (uint16_t)Data[7];
+ 240   1        for(i=0;i<8;i++)
+ 241   1        Data[i] = RxMessage[0].Data[i];
+ 242   1      
+ 243   1        /* 只取低 2 字节（16 位地址 + 32KB flash）*/
+ 244   1        start_addr = ((uint16_t)Data[2] << 8) | (uint16_t)Data[3];
+ 245   1        data_size  = ((uint16_t)Data[6] << 8) | (uint16_t)Data[7];
+ 246   1      
+ 247   1        /* 地址/长度合法性：非法直接回 CmdFaild，绝不置 writeInfoDone */
+ 248   1        if((data_size < 2) || (data_size > 1026) ||
+ 249   1           (start_addr < APP_START_ADDR) ||
+ 250   1           ((uint32_t)start_addr + (uint32_t)(data_size - 2) > APP_END_ADDR))   /* 用实际长度 */
+ 251   1        {
+ 252   2          writeInfoDone = 0;
+ 253   2          data_index    = 0;
+ 254   2          TxMessage.IdentifyID.all = (CAN_BOOT_GetAddrData()<<CMD_WIDTH)|CMD_List.CmdFaild;
+ 255   2          CANSendMsgCheck(0,&TxMessage,1);
+ 256   2          return;
+ 257   2        }
  258   1      
- 259   1        /* 地址/长度合法性：非法直接回 CmdFaild，绝不置 writeInfoDone */
- 260   1        if((data_size < 2) || (data_size > 1026) ||
- 261   1           (start_addr < APP_START_ADDR) ||
- 262   1           ((uint32_t)start_addr + (uint32_t)(data_size - 2) > APP_END_ADDR))   /* 用实际长度 */
- 263   1        {
- 264   2          writeInfoDone = 0;
- 265   2          data_index    = 0;
- 266   2          TxMessage.IdentifyID.all = (CAN_BOOT_GetAddrData()<<CMD_WIDTH)|CMD_List.CmdFaild;
- 267   2          CANSendMsgCheck(0,&TxMessage,1);
- 268   2          return;
- 269   2        }
- 270   1      
- 271   1        writeInfoDone = 1;
- 272   1        data_index = 0;
- 273   1        for(i=0;i<1026;i++)
- 274   1          Store_Temp[i] = 255;
- 275   1      
- 276   1        TxMessage.IdentifyID.all = (CAN_BOOT_GetAddrData()<<CMD_WIDTH)|CMD_List.WriteInfo;
- 277   1        CANSendMsgCheck(0,&TxMessage,1);
- 278   1      }
- 279          
- 280          void CMD_Write(void)
- 281          {
- 282   1        uint16_t i=0;
- 283   1        FLASH_Status ret = FLASH_COMPLETE;
- 284   1        uint16_t crc_data,crcexp=0;
- 285   1        struct CANTxStc TxMessage;
- 286   1        
- 287   1        TxMessage.MsgFlag.bitf.SendReadyFlag = 0;
- 288   1        TxMessage.MsgFlag.bitf.SendFinishFlag = 0;
- 289   1        TxMessage.MsgFlag.bitf.SendEnableFlag = CAN_Enable;
- 290   1        TxMessage.MsgBoxNum = CPDD_CANTxStatus_NoMailBox;
- 291   1        TxMessage.MsgConfig.bitf.DataType = CPDD_CANDataType_FrameData;
- 292   1        TxMessage.MsgConfig.bitf.IdentifyType = CPDD_CANType_Extended;
- 293   1        
- 294   1        if(RxMessage[0].DLC > 8)
- 295   1          RxMessage[0].DLC = 8;
- 296   1        for(i=0;i<RxMessage[0].DLC ;i++)
- 297   1        {
- 298   2          if(data_index >= 1026)
- 299   2            break ;
- 300   2          
- 301   2          Store_Temp[data_index++] = RxMessage[0].Data[i];
-C51 COMPILER V9.60.7.0   CAN_BOOTLOADER                                                    11/09/2026 13:00:53 PAGE 6   
-
- 302   2        }
- 303   1          
- 304   1        if(!writeInfoDone)                  /* 没收到合法 WriteInfo，直接拒绝，避免 data_size=0 越�
+ 259   1        writeInfoDone = 1;
+ 260   1        data_index = 0;
+ 261   1        for(i=0;i<1026;i++)
+ 262   1          Store_Temp[i] = 255;
+ 263   1      
+ 264   1        TxMessage.IdentifyID.all = (CAN_BOOT_GetAddrData()<<CMD_WIDTH)|CMD_List.WriteInfo;
+ 265   1        CANSendMsgCheck(0,&TxMessage,1);
+ 266   1      }
+ 267          
+ 268          void CMD_Write(void)
+ 269          {
+ 270   1        uint16_t i=0;
+ 271   1        FLASH_Status ret = FLASH_COMPLETE;
+ 272   1        uint16_t crc_data,crcexp=0;
+ 273   1        struct CANTxStc TxMessage;
+ 274   1        
+ 275   1        TxMessage.MsgFlag.bitf.SendReadyFlag = 0;
+ 276   1        TxMessage.MsgFlag.bitf.SendFinishFlag = 0;
+ 277   1        TxMessage.MsgFlag.bitf.SendEnableFlag = CAN_Enable;
+ 278   1        TxMessage.MsgBoxNum = CPDD_CANTxStatus_NoMailBox;
+ 279   1        TxMessage.MsgConfig.bitf.DataType = CPDD_CANDataType_FrameData;
+ 280   1        TxMessage.MsgConfig.bitf.IdentifyType = CPDD_CANType_Extended;
+ 281   1        
+ 282   1        if(RxMessage[0].DLC > 8)
+ 283   1          RxMessage[0].DLC = 8;
+ 284   1        for(i=0;i<RxMessage[0].DLC ;i++)
+ 285   1        {
+ 286   2          if(data_index >= 1026)
+ 287   2            break ;
+ 288   2          
+ 289   2          Store_Temp[data_index++] = RxMessage[0].Data[i];
+ 290   2        }
+ 291   1          
+ 292   1        if(!writeInfoDone)                  /* 没收到合法 WriteInfo，直接拒绝，避免 data_size=0 越�
              -�� */
- 305   1        {
- 306   2          TxMessage.IdentifyID.all = (CAN_BOOT_GetAddrData()<<CMD_WIDTH)|CMD_List.CmdFaild;
- 307   2          CANSendMsgCheck(0,&TxMessage,1);
- 308   2          return;
- 309   2        }
- 310   1      
- 311   1        if(data_index >= data_size)         /* 一块收齐（data_size 含 2 字节 CRC）*/
- 312   1        {
- 313   2          data_index    = 0;
- 314   2          writeInfoDone = 0;              /* 下一块必须重新 WriteInfo（本方案每块都带地址）*/
- 315   2      
- 316   2          crcexp   = ((uint16_t)Store_Temp[data_size-2] << 8) | Store_Temp[data_size-1];
- 317   2          crc_data = crc16_ccitt(Store_Temp, (uint16_t)(data_size-2));
- 318   2      
- 319   2          if(crc_data == crcexp)
- 320   2            ret = CAN_BOOT_ProgramDatatoFlash(start_addr, Store_Temp, (uint16_t)(data_size - 2));
- 321   2          else
- 322   2            ret = FLASH_ERROR_PG;       /* CRC 错 → 走失败应答，别让上位机干等超时 */
- 323   2      
- 324   2          TxMessage.IdentifyID.all = (CAN_BOOT_GetAddrData()<<CMD_WIDTH) |
- 325   2                                     (ret == FLASH_COMPLETE ? CMD_List.Write : CMD_List.CmdFaild);
- 326   2          CANSendMsgCheck(0,&TxMessage,1);
- 327   2        }
- 328   1      }
- 329          
- 330          /**
- 331            * @brief  执行主机下发的命令
- 332            * @param  pRxMessage CAN总线消息
- 333            * @retval 无
- 334            */
- 335          void CAN_BOOT_ExecutiveCommand(uint8_t can_cmd)
- 336          {
- 337   1        uint32_t jumpAddr = 0;
- 338   1      
- 339   1        //CMD_List.Erase，擦除Flash中的数据，需要擦除的Flash大小存储在Data[0]到Data[3]中
- 340   1        //该命令必须在Bootloader程序中实现，在APP程序中可以不用实现
- 341   1        if(can_cmd == CMD_List.Erase)
- 342   1        {
- 343   2          CMD_Erase();
- 344   2          return;
- 345   2        }
- 346   1      
- 347   1        //CMD_List.WriteInfo，设置写Flash数据的相关信息，比如数据起始地址，数据大小
- 348   1        //数据偏移地址存储在Data[0]到Data[3]中，数据大小存储在Data[4]到Data[7]中，该函�
-             -�必须在Bootloader程序中实现，APP程序可以不用实现
- 349   1        if(can_cmd == CMD_List.WriteInfo)
- 350   1        {
- 351   2          CMD_WriteInfo();
- 352   2        }
- 353   1        
- 354   1        //CMD_List.Write，先将数据存储在本地缓冲区中，然后计算数据的CRC，若校验正确�
-             -��写数据到Flash中
- 355   1        //每次执行该数据，数据缓冲区的数据字节数会增加pRxMessage->DLC字节，当数据量
-             -达到data_size（包含2字节CRC校验码）字节后
- 356   1        //对数据进行CRC校验，若数据校验无误，则将数据写入Flash中
- 357   1        //该函数在Bootloader程序中必须实现，APP程序可以不用实现
- 358   1        if(can_cmd == CMD_List.Write)
- 359   1        {
-C51 COMPILER V9.60.7.0   CAN_BOOTLOADER                                                    11/09/2026 13:00:53 PAGE 7   
+ 293   1        {
+ 294   2          TxMessage.IdentifyID.all = (CAN_BOOT_GetAddrData()<<CMD_WIDTH)|CMD_List.CmdFaild;
+ 295   2          CANSendMsgCheck(0,&TxMessage,1);
+ 296   2          return;
+ 297   2        }
+ 298   1      
+ 299   1        if(data_index >= data_size)         /* 一块收齐（data_size 含 2 字节 CRC）*/
+ 300   1        {
+C51 COMPILER V9.60.7.0   CAN_BOOTLOADER                                                    11/10/2026 10:59:15 PAGE 6   
 
- 360   2          CMD_Write();
- 361   2          return;
- 362   2        }
- 363   1        
- 364   1        //CMD_List.Check，节点在线检测
- 365   1        //节点收到该命令后返回固件版本信息和固件类型，该命令在Bootloader程序和APP�
+ 301   2          data_index    = 0;
+ 302   2          writeInfoDone = 0;              /* 下一块必须重新 WriteInfo（本方案每块都带地址）*/
+ 303   2      
+ 304   2          crcexp   = ((uint16_t)Store_Temp[data_size-2] << 8) | Store_Temp[data_size-1];
+ 305   2          crc_data = crc16_ccitt(Store_Temp, (uint16_t)(data_size-2));
+ 306   2      
+ 307   2          if(crc_data == crcexp)
+ 308   2            ret = CAN_BOOT_ProgramDatatoFlash(start_addr, Store_Temp, (uint16_t)(data_size - 2));
+ 309   2          else
+ 310   2            ret = FLASH_ERROR_PG;       /* CRC 错 → 走失败应答，别让上位机干等超时 */
+ 311   2      
+ 312   2          TxMessage.IdentifyID.all = (CAN_BOOT_GetAddrData()<<CMD_WIDTH) |
+ 313   2                                     (ret == FLASH_COMPLETE ? CMD_List.Write : CMD_List.CmdFaild);
+ 314   2          CANSendMsgCheck(0,&TxMessage,1);
+ 315   2        }
+ 316   1      }
+ 317          
+ 318          /**
+ 319            * @brief  执行主机下发的命令
+ 320            * @param  pRxMessage CAN总线消息
+ 321            * @retval 无
+ 322            */
+ 323          void CAN_BOOT_ExecutiveCommand(uint8_t can_cmd)
+ 324          {
+ 325   1        uint32_t jumpAddr = 0;
+ 326   1      
+ 327   1        //CMD_List.Erase，擦除Flash中的数据，需要擦除的Flash大小存储在Data[0]到Data[3]中
+ 328   1        //该命令必须在Bootloader程序中实现，在APP程序中可以不用实现
+ 329   1        if(can_cmd == CMD_List.Erase)
+ 330   1        {
+ 331   2          CMD_Erase();
+ 332   2          return;
+ 333   2        }
+ 334   1      
+ 335   1        //CMD_List.WriteInfo，设置写Flash数据的相关信息，比如数据起始地址，数据大小
+ 336   1        //数据偏移地址存储在Data[0]到Data[3]中，数据大小存储在Data[4]到Data[7]中，该函�
+             -�必须在Bootloader程序中实现，APP程序可以不用实现
+ 337   1        if(can_cmd == CMD_List.WriteInfo)
+ 338   1        {
+ 339   2          CMD_WriteInfo();
+ 340   2        }
+ 341   1        
+ 342   1        //CMD_List.Write，先将数据存储在本地缓冲区中，然后计算数据的CRC，若校验正确�
+             -��写数据到Flash中
+ 343   1        //每次执行该数据，数据缓冲区的数据字节数会增加pRxMessage->DLC字节，当数据量
+             -达到data_size（包含2字节CRC校验码）字节后
+ 344   1        //对数据进行CRC校验，若数据校验无误，则将数据写入Flash中
+ 345   1        //该函数在Bootloader程序中必须实现，APP程序可以不用实现
+ 346   1        if(can_cmd == CMD_List.Write)
+ 347   1        {
+ 348   2          CMD_Write();
+ 349   2          return;
+ 350   2        }
+ 351   1        
+ 352   1        //CMD_List.Check，节点在线检测
+ 353   1        //节点收到该命令后返回固件版本信息和固件类型，该命令在Bootloader程序和APP�
              -�序都必须实现
- 366   1        if(can_cmd == CMD_List.Check)
- 367   1        {
- 368   2          CMD_Check();
- 369   2          return;
- 370   2        }
- 371   1        
- 372   1        //CMD_List.Excute，控制程序跳转到指定地址执行
- 373   1        //该命令在Bootloader和APP程序中都必须实现
- 374   1          if(can_cmd == CMD_List.Excute)
- 375   1        {
- 376   2          jumpAddr = ((uint32_t)RxMessage[0].Data[0]<<24)|((uint32_t)RxMessage[0].Data[1]<<16)
- 377   2              | ((uint32_t)RxMessage[0].Data[2]<<8)| (uint32_t)RxMessage[0].Data[3];
- 378   2          if(jumpAddr == APP_START_ADDR)
- 379   2            CMD_Excute();
- 380   2          return;
- 381   2        }
- 382   1      }
- 383          
- 384          void CAN_BOOT_Command(void)
- 385          {
- 386   1        uint16_t can_addr=0;
- 387   1        uint8_t can_cmd=0;
- 388   1        
- 389   1        if(CAN1_CanRxMsgFlag && RxMessage[0].valid)
- 390   1        {
- 391   2          // EA = 0;
- 392   2          
- 393   2          can_addr = ((RxMessage[0].ExtId) >> CMD_WIDTH);  //ID的bit4~bit15位为节点地址
- 394   2          can_cmd = ((RxMessage[0].ExtId)&0x0f);//ID的bit0~bit3位为命令码
- 395   2          if((can_addr == CAN_BOOT_GetAddrData()) && (can_addr != 0))
- 396   2          {
- 397   3            CAN_BOOT_ExecutiveCommand(can_cmd);
- 398   3          }
- 399   2          CAN1_CanRxMsgFlag = 0;
- 400   2          
- 401   2          // EA = 1;
- 402   2        }
- 403   1      }
- 404          /*********************************END OF FILE**********************************/
- 405          
+ 354   1        if(can_cmd == CMD_List.Check)
+ 355   1        {
+ 356   2          CMD_Check();
+ 357   2          return;
+ 358   2        }
+C51 COMPILER V9.60.7.0   CAN_BOOTLOADER                                                    11/10/2026 10:59:15 PAGE 7   
+
+ 359   1        
+ 360   1        //CMD_List.Excute，控制程序跳转到指定地址执行
+ 361   1        //该命令在Bootloader和APP程序中都必须实现
+ 362   1          if(can_cmd == CMD_List.Excute)
+ 363   1        {
+ 364   2          jumpAddr = ((uint32_t)RxMessage[0].Data[0]<<24)|((uint32_t)RxMessage[0].Data[1]<<16)
+ 365   2              | ((uint32_t)RxMessage[0].Data[2]<<8)| (uint32_t)RxMessage[0].Data[3];
+ 366   2          if(jumpAddr == APP_START_ADDR)
+ 367   2            CMD_Excute();
+ 368   2          return;
+ 369   2        }
+ 370   1      }
+ 371          
+ 372          void CAN_BOOT_Command(void)
+ 373          {
+ 374   1        uint16_t can_addr=0;
+ 375   1        uint8_t can_cmd=0;
+ 376   1        
+ 377   1        if(CAN1_CanRxMsgFlag && RxMessage[0].valid)
+ 378   1        {
+ 379   2          // EA = 0;
+ 380   2          
+ 381   2          can_addr = ((RxMessage[0].ExtId) >> CMD_WIDTH);  //ID的bit4~bit15位为节点地址
+ 382   2          can_cmd = ((RxMessage[0].ExtId)&0x0f);//ID的bit0~bit3位为命令码
+ 383   2          if((can_addr == CAN_BOOT_GetAddrData()) && (can_addr != 0))
+ 384   2          {
+ 385   3            CAN_BOOT_ExecutiveCommand(can_cmd);
+ 386   3          }
+ 387   2          CAN1_CanRxMsgFlag = 0;
+ 388   2          
+ 389   2          // EA = 1;
+ 390   2        }
+ 391   1      }
+ 392          /*********************************END OF FILE**********************************/
+ 393          
 
 
 MODULE INFORMATION:   STATIC OVERLAYABLE
-   CODE SIZE        =   2193    ----
+   CODE SIZE        =   2112    ----
    CONSTANT SIZE    =      8    ----
-   XDATA SIZE       =   1052     121
+   XDATA SIZE       =   1044     121
    PDATA SIZE       =   ----    ----
    DATA SIZE        =   ----    ----
    IDATA SIZE       =   ----    ----
@@ -446,8 +434,6 @@ MODULE INFORMATION:   STATIC OVERLAYABLE
    XDATA CONST SIZE =   ----    ----
    FAR CONST SIZE   =   ----    ----
 END OF MODULE INFORMATION.
-
-C51 COMPILER V9.60.7.0   CAN_BOOTLOADER                                                    11/09/2026 13:00:53 PAGE 8   
 
 
 C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

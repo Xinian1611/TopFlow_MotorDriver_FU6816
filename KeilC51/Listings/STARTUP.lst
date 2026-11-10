@@ -1,4 +1,4 @@
-A51 MACRO ASSEMBLER  STARTUP                                                              11/09/2026 13:00:53 PAGE     1
+A51 MACRO ASSEMBLER  STARTUP                                                              11/10/2026 10:59:16 PAGE     1
 
 
 MACRO ASSEMBLER A51 V8.2.7.0
@@ -65,7 +65,7 @@ LOC  OBJ            LINE     SOURCE
 ----                  55      CSEG AT  0063H
 0063 021863           56          LJMP PADDR + 00063H
 ----                  57      CSEG AT  006BH
-A51 MACRO ASSEMBLER  STARTUP                                                              11/09/2026 13:00:53 PAGE     2
+A51 MACRO ASSEMBLER  STARTUP                                                              11/10/2026 10:59:16 PAGE     2
 
 006B 02186B           58          LJMP PADDR + 0006BH
 ----                  59      CSEG AT  0073H
@@ -117,7 +117,7 @@ LOC  OBJ            LINE     SOURCE
 0017 020000   F      104                     LJMP    ?C_START
                      105     
                      106                     END
-A51 MACRO ASSEMBLER  STARTUP                                                              11/09/2026 13:00:53 PAGE     3
+A51 MACRO ASSEMBLER  STARTUP                                                              11/10/2026 10:59:16 PAGE     3
 
 SYMBOL TABLE LISTING
 ------ ----- -------

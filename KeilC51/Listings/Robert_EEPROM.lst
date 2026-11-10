@@ -1,11 +1,11 @@
-C51 COMPILER V9.60.7.0   ROBERT_EEPROM                                                     11/09/2026 13:00:53 PAGE 1   
+C51 COMPILER V9.60.7.0   ROBERT_EEPROM                                                     11/10/2026 10:59:16 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE ROBERT_EEPROM
 OBJECT MODULE PLACED IN .\Objects\Robert_EEPROM.obj
 COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\Boot\Robert_EEPROM.c LARGE OMF2 OPTIMIZE(8,SPEED) BROWSE INCDIR
-                    -(..\User\include;..\User\source\Boot;..\User\source\Boot_Common;..\FU68xx_Hardware_Driver\Include) DEBUG PRINT(.\Listing
-                    -s\Robert_EEPROM.lst) TABS(2) OBJECT(.\Objects\Robert_EEPROM.obj)
+                    -(..\Boot;..\FU68xx_Hardware_Driver\Include) DEBUG PRINT(.\Listings\Robert_EEPROM.lst) TABS(2) OBJECT(.\Objects\Robert_EE
+                    -PROM.obj)
 
 line level    source
 
@@ -62,7 +62,7 @@ line level    source
   51          // return :  校验通过时返回CANID 
   52          //           校验未通过时返回0x10;
   53          uint32_t ReadCANID(void)
-C51 COMPILER V9.60.7.0   ROBERT_EEPROM                                                     11/09/2026 13:00:53 PAGE 2   
+C51 COMPILER V9.60.7.0   ROBERT_EEPROM                                                     11/10/2026 10:59:16 PAGE 2   
 
   54          {
   55   1        uint8_t readout[StationIDSize] = {0};
