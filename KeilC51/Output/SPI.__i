@@ -1,1 +1,1 @@
-"..\User\source\Hardware\SPI.c" LARGE OMF2 OPTIMIZE (8,SPEED) BROWSE INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include) DEBUG PRINT(.\Listings\SPI.lst) TABS (2) OBJECT(.\Output\SPI.obj)
+"..\User\source\Hardware\SPI.c" LARGE OMF2 OPTIMIZE (8,SPEED) BROWSE INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include;..\User\source\IAP;..\User\source\RingBuffer) NOINTVECTOR DEBUG PRINT(.\Listings\SPI.lst) TABS (2) OBJECT(.\Output\SPI.obj)

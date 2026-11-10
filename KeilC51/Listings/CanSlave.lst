@@ -1,0 +1,669 @@
+C51 COMPILER V9.60.7.0   CANSLAVE                                                          11/04/2026 11:32:03 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE CANSLAVE
+OBJECT MODULE PLACED IN .\Output\CanSlave.obj
+COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\User\source\Application\CanSlave.c LARGE OMF2 OPTIMIZE(8,SPEED)
+                    - BROWSE INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include;..\User\source\RingBuffer) DEBUG PRINT(.\Listings\CanSl
+                    -ave.lst) TABS(2) OBJECT(.\Output\CanSlave.obj)
+
+line level    source
+
+   1          #include "CanSlave.h"
+   2          #include <Myproject.h>
+   3          #include "DevConfig.h"
+   4          #include "AlarmMonitor.h"
+   5          
+   6          
+   7          /************************ 用户实现的外部函数 ************************/
+   8          extern uint8 can_hw_send(uint32_t can_id, const uint8_t *dat, uint8_t len);
+   9          
+  10          /************************ 扩展帧协议实现 ************************/
+  11          static ExtSlaveConfig_t xdata g_ext_config;
+  12          
+  13          CanStatusDbg_t xdata g_canStatusDbg;      /* 调试：最后一次发送的状态报文 */
+  14          
+  15          // 多帧组装状态
+  16          typedef struct
+  17          {
+  18              uint8_t buf[EXT_MSG_LEN_CONFIG]; // 组装缓冲区(最大96字节用于配置报文)
+  19              uint8_t total_frames;            // 总帧数
+  20              uint16_t received;               // 已收到的帧bitmap (bit0=frame1, bit1=frame2, ...)
+  21              uint8_t priority;                // 当前组装的报文优先级
+  22              uint16_t timeout_cnt;            // 组装超时计数(ms)
+  23          } ExtAssembly_t;
+  24          
+  25          static ExtAssembly_t xdata g_ext_asm;
+  26          
+  27          // 发送队列(每周期只发送1帧, 避免阻塞)
+  28          #define CAN_TX_QUEUE_SIZE  16
+  29          
+  30          typedef struct {
+  31              uint32_t can_id;
+  32              uint8_t dat[CAN_FRAME_DATA_LEN];
+  33          } CanTxItem_t;
+  34          
+  35          static CanTxItem_t xdata g_tx_queue[CAN_TX_QUEUE_SIZE];
+  36          static uint8_t xdata g_tx_head = 0;
+  37          static uint8_t xdata g_tx_tail = 0;
+  38          static uint8_t xdata g_tx_count = 0;
+  39          
+  40          // 周期发送计数器
+  41          static uint16_t xdata g_ext_heartbeat_cnt = 0;
+  42          static uint8_t xdata g_ext_status_cnt = 0;
+  43          static uint16_t xdata g_ext_log_cnt = 0;
+  44          // static uint16_t xdata g_ext_perception_cnt = 0;
+  45          static uint16_t xdata g_ext_cmd_timeout = 0; // 指令超时计数(ms)
+  46          static uint16_t xdata g_ext_runtime_cnt = 0; // 运行时间计数(ms)
+  47          
+  48          /************************ 内部辅助函数 ************************/
+  49          
+  50          static uint8_t tx_queue_push(uint32_t can_id, const uint8_t *dat)
+  51          {
+  52   1          if (g_tx_count >= CAN_TX_QUEUE_SIZE) return 0;
+  53   1          g_tx_queue[g_tx_tail].can_id = can_id;
+C51 COMPILER V9.60.7.0   CANSLAVE                                                          11/04/2026 11:32:03 PAGE 2   
+
+  54   1          memcpy(g_tx_queue[g_tx_tail].dat, dat, CAN_FRAME_DATA_LEN);
+  55   1          g_tx_tail = (g_tx_tail + 1) % CAN_TX_QUEUE_SIZE;
+  56   1          g_tx_count++;
+  57   1          return 1;
+  58   1      }
+  59          
+  60          static uint8_t tx_queue_pop(uint32_t *can_id, uint8_t *dat)
+  61          {
+  62   1          if (g_tx_count == 0) return 0;
+  63   1          *can_id = g_tx_queue[g_tx_head].can_id;
+  64   1          memcpy(dat, g_tx_queue[g_tx_head].dat, CAN_FRAME_DATA_LEN);
+  65   1          g_tx_head = (g_tx_head + 1) % CAN_TX_QUEUE_SIZE;
+  66   1          g_tx_count--;
+  67   1          return 1;
+  68   1      }
+  69          
+  70          static uint8_t tx_queue_available(uint8_t needed)
+  71          {
+  72   1          return (CAN_TX_QUEUE_SIZE - g_tx_count) >= needed;
+  73   1      }
+  74          
+  75          // 多帧入队: 将载荷拆分为多个CAN帧入队
+  76          static void ext_send_frames(uint8_t pri, const uint8_t *buf, uint16_t total_len)
+  77          {
+  78   1          uint8_t frame_cnt = (uint8_t)((total_len + CAN_FRAME_DATA_LEN - 1) / CAN_FRAME_DATA_LEN);
+  79   1          uint8_t i, j, len;
+  80   1          uint8_t dat[CAN_FRAME_DATA_LEN];
+  81   1          uint32_t ext_id;
+  82   1      
+  83   1          if (!tx_queue_available(frame_cnt)) return;
+  84   1      
+  85   1          for (i = 0; i < frame_cnt; i++)
+  86   1          {
+  87   2              uint16_t offset = (uint16_t)i * CAN_FRAME_DATA_LEN;
+  88   2              len = (total_len - offset >= CAN_FRAME_DATA_LEN) ? CAN_FRAME_DATA_LEN : (uint8_t)(total_len - offs
+             -et);
+  89   2      
+  90   2              memset(dat, 0xFF, CAN_FRAME_DATA_LEN);
+  91   2              for (j = 0; j < len; j++)
+  92   2              {
+  93   3                  dat[j] = buf[offset + j];
+  94   3              }
+  95   2      
+  96   2              ext_id = EXTID_BUILD(pri, g_ext_config.sys_num, g_ext_config.main_cat,
+  97   2                                   g_ext_config.sub_cat, g_ext_config.dev_num, i + 1);
+  98   2              tx_queue_push(ext_id, dat);
+  99   2          }
+ 100   1      }
+ 101          
+ 102          // 单帧发送辅助
+ 103          static void ext_send_single(uint8_t pri, const uint8_t *dat)
+ 104          {
+ 105   1          uint32_t ext_id = EXTID_BUILD(pri, g_ext_config.sys_num, g_ext_config.main_cat,
+ 106   1                                        g_ext_config.sub_cat, g_ext_config.dev_num, 1);
+ 107   1          tx_queue_push(ext_id, dat);
+ 108   1      }
+ 109          
+ 110          // 解析指令报文(8字节载荷, 单帧)
+ 111          static void ext_process_cmd_message(const uint8_t *buf)
+ 112          {
+ 113   1          ExtCmdMsg_t *msg = (ExtCmdMsg_t *)buf;
+ 114   1          uint8_t ctrl = msg->ctrl.value;
+C51 COMPILER V9.60.7.0   CANSLAVE                                                          11/04/2026 11:32:03 PAGE 3   
+
+ 115   1          uint8_t work_mode = EXT_GET_WORKMODE(ctrl);
+ 116   1          uint8_t startstop = EXT_GET_STARTSTOP(ctrl);
+ 117   1          uint8_t estop = EXT_GET_ESTOP(ctrl);
+ 118   1          uint16_t cur_raw   = EXT_GET_U16(msg->target_current_hi, msg->target_current_lo);
+ 119   1          uint16_t speed_raw = EXT_GET_U16(msg->target_speed_hi,   msg->target_speed_lo);
+ 120   1          // uint8_t dbg_cmd = msg->reserved[0];
+ 121   1          // int16_t dbg_param = EXT_GET_I16(msg->reserved[1], msg->reserved[2]);
+ 122   1      
+ 123   1          // 调试指令处理(最高优先级, 不依赖启停状态)
+ 124   1          //if (dbg_cmd != EXT_DBG_CMD_NONE)
+ 125   1          // if (dbg_cmd >= EXT_DBG_CMD_SET_KP && dbg_cmd <= EXT_DBG_CMD_SAVE)
+ 126   1          // {
+ 127   1          //     switch (dbg_cmd)
+ 128   1          //     {
+ 129   1          //     case EXT_DBG_CMD_SET_KP:
+ 130   1          //         if (g_run_state.work_mode == EXT_WORK_MODE_SPEED)
+ 131   1          //         {
+ 132   1          //             g_motor_cfg->speed_kp = (uint16_t)dbg_param;
+ 133   1          //             PI1_KP = g_motor_cfg->speed_kp;
+ 134   1          //         }
+ 135   1          //         else
+ 136   1          //         {
+ 137   1          //             FOC_QKP = dbg_param;
+ 138   1          //         }
+ 139   1          //         break;
+ 140   1      
+ 141   1          //     case EXT_DBG_CMD_SET_KI:
+ 142   1          //         if (g_run_state.work_mode == EXT_WORK_MODE_SPEED)
+ 143   1          //         {
+ 144   1          //             g_motor_cfg->speed_ki = (uint16_t)dbg_param;
+ 145   1          //             PI1_KI = g_motor_cfg->speed_ki;
+ 146   1          //         }
+ 147   1          //         else
+ 148   1          //         {
+ 149   1          //             FOC_QKI = dbg_param;
+ 150   1          //         }
+ 151   1          //         break;
+ 152   1      
+ 153   1          //     case EXT_DBG_CMD_SET_KD:
+ 154   1          //         g_motor_cfg->speed_kd = (uint16_t)dbg_param;
+ 155   1          //         break;
+ 156   1      
+ 157   1          //     case EXT_DBG_CMD_SET_ALL:
+ 158   1          //         g_motor_cfg->speed_kp = (uint16_t)((uint16_t)msg->reserved[1] << 8);
+ 159   1          //         g_motor_cfg->speed_ki = (uint16_t)((uint16_t)msg->reserved[2] << 8);
+ 160   1          //         PI1_KP = g_motor_cfg->speed_kp;
+ 161   1          //         PI1_KI = g_motor_cfg->speed_ki;
+ 162   1          //         break;
+ 163   1      
+ 164   1          //     case EXT_DBG_CMD_SAVE:
+ 165   1          //         DevConfig_WriteParam(g_motor_cfg);
+ 166   1          //         break;
+ 167   1      
+ 168   1          //     default:
+ 169   1          //         break;
+ 170   1          //     }
+ 171   1          //     return;
+ 172   1          // }
+ 173   1      
+ 174   1          // // 急停处理(最高优先级)
+ 175   1          // MotorCtrl_SetEstop(estop == EXT_ESTOP_ACTIVE);
+ 176   1          // if (estop == EXT_ESTOP_ACTIVE)
+C51 COMPILER V9.60.7.0   CANSLAVE                                                          11/04/2026 11:32:03 PAGE 4   
+
+ 177   1          // {
+ 178   1          //     return;
+ 179   1          // }
+ 180   1      
+ 181   1          // // 启停处理
+ 182   1          // if (startstop >= EXT_STARTSTOP_START && startstop <= EXT_STARTSTOP_STOP)
+ 183   1          // {
+ 184   1          //     MotorCtrl_SetRun(startstop == EXT_STARTSTOP_START);
+ 185   1          // }
+ 186   1      
+ 187   1          // // 工作模式
+ 188   1          // MotorCtrl_SetMode(work_mode);
+ 189   1      
+ 190   1          // // 设置目标值
+ 191   1          // MotorCtrl_SetTarget(EXT_GET_I16(msg->target_current_hi, msg->target_current_lo),
+ 192   1          //                     EXT_GET_I16(msg->target_speed_hi, msg->target_speed_lo));
+ 193   1      
+ 194   1          /* ---- 急停：1=急停 2=非急停；0=无操作、3=无效值 → 保持原状态 ---- */
+ 195   1          if (estop == EXT_ESTOP_ACTIVE)
+ 196   1          {
+ 197   2              MotorCtrl_SetEstop(1);
+ 198   2              return;                     /* 急停帧不再往下处理启停/给定 */
+ 199   2          }
+ 200   1          if (estop == EXT_ESTOP_RELEASE)
+ 201   1          {
+ 202   2              MotorCtrl_SetEstop(0);
+ 203   2          }
+ 204   1      
+ 205   1              /* ---- 转速模式 + 0%(raw == 32767)：直接按停机处理 ----
+ 206   1           * 必须放在"起机"之前：否则每个 0% 帧都会先 SetRun(1) 再 SetRun(0)，
+ 207   1           * 状态机每次都会抖一下（预充电/预定位跑一半又被拉回停止）。 */
+ 208   1          if ((g_run_state.work_mode == EXT_WORK_MODE_SPEED) && (speed_raw == 32767))
+ 209   1          {
+ 210   2              MotorCtrl_SetRun(0);                        /* 撤给定 + 进 mcStop */
+ 211   2              MotorCtrl_SetTarget(cur_raw, speed_raw);    /* 内部把 ref 置 0 */
+ 212   2              return;                                     /* 不再走起机流程 */
+ 213   2          }
+ 214   1      
+ 215   1          /* ---- 启停：1=起机 2=停机；0=无操作、3=无效值 → 保持原状态 ---- */
+ 216   1          if (startstop == EXT_STARTSTOP_START)
+ 217   1          {
+ 218   2              MotorCtrl_SetRun(1);
+ 219   2          }
+ 220   1          else if (startstop == EXT_STARTSTOP_STOP)
+ 221   1          {
+ 222   2              MotorCtrl_SetRun(0);
+ 223   2          }
+ 224   1      
+ 225   1          /* ---- 工作模式：只认 2=转速控制 ---- */
+ 226   1          if (work_mode == EXT_WORK_MODE_SPEED)
+ 227   1          {
+ 228   2              MotorCtrl_SetMode(EXT_WORK_MODE_SPEED);
+ 229   2          }
+ 230   1      
+ 231   1          /* ---- 目标值：零点 32767，正数 raw 一定 >32767，必须按无符号读 ---- */
+ 232   1          MotorCtrl_SetTarget(cur_raw, speed_raw);
+ 233   1      }
+ 234          
+ 235          #define S_Value2F(x) ((float)(x) / 32767.0f * MOTOR_SPEED_BASE)
+ 236          #define I_Value2F(x) ((float)(x) / 32767.0f * (float)HW_ADC_REF / ((float)HW_RSHUNT * (float)HW_AMPGAIN))
+ 237          #define UDC_Value2F(x) ((float)(x) / 32767.0f * (float)HW_BOARD_VOLT_MAX)
+ 238          // 构建状态报文(8字节载荷)
+C51 COMPILER V9.60.7.0   CANSLAVE                                                          11/04/2026 11:32:03 PAGE 5   
+
+ 239          static void ext_build_status(uint8_t *buf)
+ 240          {
+ 241   1          ExtStatusMsg_t *msg = (ExtStatusMsg_t *)buf;
+ 242   1          int16_t speed, current, power;
+ 243   1          uint8_t ctrl = 0;
+ 244   1      
+ 245   1          memset(msg, 0xFF, sizeof(ExtStatusMsg_t));
+ 246   1      
+ 247   1          EXT_SET_WORKMODE(ctrl, g_run_state.work_mode);
+ 248   1          EXT_SET_STARTSTOP(ctrl, g_run_state.is_started ? EXT_STARTSTOP_START : EXT_STARTSTOP_STOP);
+ 249   1          EXT_SET_ESTOP(ctrl, g_run_state.is_estop ? EXT_ESTOP_ACTIVE : EXT_ESTOP_RELEASE);
+ 250   1          msg->ctrl.value = ctrl;
+ 251   1      
+ 252   1          // speed = (int16_t)S_Value2F(mcFocCtrl.SpeedFlt);
+ 253   1          // EXT_SET_I16(msg->speed_hi, msg->speed_lo, speed + 32767);
+ 254   1          speed = (int16_t)S_Value2F(mcFocCtrl.SpeedFlt);
+ 255   1          if (mcFocCtrl.FR == CCW) speed = -speed;          /* 协议：负值=反转转速 */
+ 256   1          EXT_SET_I16(msg->speed_hi, msg->speed_lo, speed + 32767);
+ 257   1          // current = (int16_t)(I_Value2F(FOC__IQ) * 10.0f);
+ 258   1          current = (int16_t)(I_Value2F(FOC__IQ) * 100.0f);
+ 259   1          EXT_SET_I16(msg->current_hi, msg->current_lo, current + 32767);
+ 260   1      
+ 261   1          power = (int16_t)(mcFocCtrl.PowerFlt);
+ 262   1          EXT_SET_I16(msg->power_hi, msg->power_lo, power + 32767);
+ 263   1      
+ 264   1          // msg->fault_code = g_run_state.fault_code;
+ 265   1          msg->fault_code = AlarmMonitor_GetActiveFault();   /* 多故障轮询上报 */
+ 266   1      }
+ 267          
+ 268          // 构建日志报文(32字节载荷)
+ 269          static void ext_build_log(uint8_t *buf)
+ 270          {
+ 271   1          ExtLogMsg_t *msg = (ExtLogMsg_t *)buf;
+ 272   1          int16_t val;
+ 273   1      
+ 274   1          memset(msg, 0xFF, sizeof(ExtLogMsg_t));
+ 275   1      
+ 276   1          val = (int16_t)S_Value2F(mcFocCtrl.SpeedFlt);
+ 277   1          if (mcFocCtrl.FR == CCW) val = -val;              /* 协议：负值=反转转速 */
+ 278   1          EXT_SET_I16(msg->speed_hi, msg->speed_lo, val + 32767);
+ 279   1      
+ 280   1          val = (int16_t)(UDC_Value2F(mcFocCtrl.mcDcbusFlt) * 100.f);
+ 281   1          EXT_SET_I16(msg->voltage_hi, msg->voltage_lo, val + 32767);
+ 282   1      
+ 283   1          val = (int16_t)(I_Value2F(mcFocCtrl.mcADCCurrentbus) * 100.0f);
+ 284   1          EXT_SET_I16(msg->current_hi, msg->current_lo, val + 32767);
+ 285   1      
+ 286   1          val = (int16_t)(mcFocCtrl.PowerFlt);
+ 287   1          EXT_SET_I16(msg->power_hi, msg->power_lo, val + 32767);
+ 288   1      
+ 289   1          EXT_SET_I16(msg->mot_temp_hi, msg->mot_temp_lo, 32767);
+ 290   1      
+ 291   1          // val = (int16_t)(mcFocCtrl.MCU_TEMP);
+ 292   1          val = (int16_t)(mcFocCtrl.MCU_TEMP * 10);
+ 293   1          EXT_SET_I16(msg->drv_temp_hi, msg->drv_temp_lo, val + 32767);
+ 294   1      
+ 295   1          EXT_SET_I16(msg->torque_hi, msg->torque_lo, 32767);
+ 296   1      
+ 297   1          // val = mcFocCtrl.Max_ia;
+ 298   1          // EXT_SET_I16(msg->ia_hi, msg->ia_lo, val + 32767);
+ 299   1          // val = mcFocCtrl.Max_ib;
+ 300   1          // EXT_SET_I16(msg->ib_hi, msg->ib_lo, val + 32767);
+C51 COMPILER V9.60.7.0   CANSLAVE                                                          11/04/2026 11:32:03 PAGE 6   
+
+ 301   1          // val = mcFocCtrl.Max_ic;
+ 302   1          // EXT_SET_I16(msg->ic_hi, msg->ic_lo, val + 32767);
+ 303   1          val = (int16_t)(I_Value2F(FOC__IA) * 100.0f);
+ 304   1          EXT_SET_I16(msg->ia_hi, msg->ia_lo, val + 32767);
+ 305   1          val = (int16_t)(I_Value2F(FOC__IB) * 100.0f);
+ 306   1          EXT_SET_I16(msg->ib_hi, msg->ib_lo, val + 32767);
+ 307   1          val = (int16_t)(I_Value2F(FOC__IC) * 100.0f);
+ 308   1          EXT_SET_I16(msg->ic_hi, msg->ic_lo, val + 32767);
+ 309   1      
+ 310   1          EXT_SET_U32(msg->run_time[0], msg->run_time[1], msg->run_time[2], msg->run_time[3], g_run_state.run_ti
+             -me);
+ 311   1          EXT_SET_U32(msg->total_time[0], msg->total_time[1], msg->total_time[2], msg->total_time[3], g_run_stat
+             -e.total_time);
+ 312   1      }
+ 313          
+ 314          // static void ext_build_percep(uint8_t *buf)
+ 315          // {
+ 316          //     ExtPecerpMsg_t *msg = (ExtPecerpMsg_t *)buf;
+ 317          //     msg->speedKp = PI1_KP;
+ 318          //     msg->speedKi = PI1_KI;
+ 319          //     msg->targetSpeed = (uint16_t)((g_run_state.direction == 1) * -1 * g_run_state.ref);
+ 320          //     msg->realSpeed = (uint16_t)S_Value2F(mcFocCtrl.SpeedFlt);
+ 321          //     msg->currentA = FOC__IA;
+ 322          //     msg->currentB = FOC__IB;
+ 323          //     msg->currentC = FOC__IC;
+ 324          //     msg->currentBus = (uint16_t)(I_Value2F(mcFocCtrl.mcADCCurrentbus) * 100.f);
+ 325          //     msg->speedPiOutput = FOC_IQREF;
+ 326          //     msg->currentPiOutput = (uint16_t)(UDC_Value2F(FOC__UD) * 10.f);
+ 327          //     msg->focQFlag = 0;
+ 328          //     msg->focQSpeed = 0;
+ 329          //     msg->focQCurrent = FOC__IQ;
+ 330          // }
+ 331          
+ 332          /************************ 扩展帧公开接口 ************************/
+ 333          
+ 334          /// @brief 初始化扩展帧从站
+ 335          /// @param config 扩展帧从站配置指针
+ 336          /// @retval None
+ 337          void ext_slave_init(const ExtSlaveConfig_t *config)
+ 338          {
+ 339   1          memset(&g_ext_config, 0, sizeof(ExtSlaveConfig_t));
+ 340   1          if (config)
+ 341   1          {
+ 342   2              g_ext_config.sys_num = config->sys_num;
+ 343   2              g_ext_config.main_cat = config->main_cat;
+ 344   2              g_ext_config.sub_cat = config->sub_cat;
+ 345   2              g_ext_config.dev_num = config->dev_num;
+ 346   2          }
+ 347   1      
+ 348   1          memset(&g_run_state, 0, sizeof(MotorRunState_t));
+ 349   1          g_run_state.fault_code = FAULT_NONE;
+ 350   1          g_run_state.work_mode = EXT_WORK_MODE_SPEED;
+ 351   1      
+ 352   1          memset(&g_ext_asm, 0, sizeof(ExtAssembly_t));
+ 353   1          g_tx_head = 0;
+ 354   1          g_tx_tail = 0;
+ 355   1          g_tx_count = 0;
+ 356   1          g_ext_heartbeat_cnt = 0;
+ 357   1          g_ext_status_cnt = 0;
+ 358   1          g_ext_log_cnt = 0;
+ 359   1          g_ext_cmd_timeout = 0;
+ 360   1          g_ext_runtime_cnt = 0;
+C51 COMPILER V9.60.7.0   CANSLAVE                                                          11/04/2026 11:32:03 PAGE 7   
+
+ 361   1      
+ 362   1          memset(&g_canStatusDbg, 0, sizeof(g_canStatusDbg));
+ 363   1      }
+ 364          
+ 365          /// @brief 处理配置报文
+ 366          /// @param None
+ 367          /// @retval None
+ 368          void ext_process_cfg_message(void)
+ 369          {
+ 370   1          uint8_t resp_buf[EXT_MSG_LEN_CONFIG];
+ 371   1      
+ 372   1          if (g_ext_asm.total_frames == 1)
+ 373   1          {
+ 374   2              // 读取配置参数报文(单帧)
+ 375   2              ExtCfgMsg_t *msg = (ExtCfgMsg_t *)g_ext_asm.buf;
+ 376   2              if (msg->cfg_read == 1)
+ 377   2              {
+ 378   3                  // 读取配置参数请求
+ 379   3                  memset(resp_buf, 0xFF, sizeof(resp_buf));
+ 380   3                  memcpy(resp_buf, g_motor_cfg, EXT_MSG_LEN_CONFIG);
+ 381   3                  ext_send_frames(EXT_PRI_CONFIG, resp_buf, EXT_MSG_LEN_CONFIG);
+ 382   3              }
+ 383   2          }
+ 384   1          else
+ 385   1          {
+ 386   2              // 配置参数报文(多帧)
+ 387   2              if (g_ext_asm.total_frames == EXT_FRAME_COUNT(EXT_MSG_LEN_CONFIG))
+ 388   2              {
+ 389   3                  // 保存参数
+ 390   3                  DevConfig_WriteParam(g_ext_asm.buf);
+ 391   3      
+ 392   3                  // 发送配置参数确认
+ 393   3                  memset(resp_buf, 0xFF, sizeof(resp_buf));
+ 394   3                  resp_buf[1] = 1;
+ 395   3                  // 应答
+ 396   3                  ext_send_frames(EXT_PRI_CONFIG, resp_buf, EXT_MSG_LEN_CFG_RSP);
+ 397   3              }
+ 398   2          }
+ 399   1      }
+ 400          
+ 401          /// @brief 处理扩展帧接收数据
+ 402          /// @param ext_id 扩展帧仲裁ID
+ 403          /// @param dat 扩展帧数据指针
+ 404          /// @param len 扩展帧数据长度
+ 405          void ext_slave_process_rx(uint32_t ext_id, const uint8_t *dat, uint8_t len)
+ 406          {
+ 407   1          uint8_t pri, main_cat, sub_cat, dev_num, msg_num;
+ 408   1      
+ 409   1          if (len != CAN_FRAME_DATA_LEN || dat == NULL)
+ 410   1          {
+ 411   2              return;
+ 412   2          }
+ 413   1      
+ 414   1          pri = EXTID_GET_PRIORITY(ext_id);
+ 415   1          main_cat = EXTID_GET_MAINCAT(ext_id);
+ 416   1          sub_cat = EXTID_GET_SUBCAT(ext_id);
+ 417   1          dev_num = EXTID_GET_DEVNUM(ext_id);
+ 418   1          msg_num = EXTID_GET_MSGNUM(ext_id);
+ 419   1      
+ 420   1          // 过滤：只处理与本机匹配的帧
+ 421   1          if (main_cat != g_ext_config.main_cat ||
+ 422   1              sub_cat != g_ext_config.sub_cat ||
+C51 COMPILER V9.60.7.0   CANSLAVE                                                          11/04/2026 11:32:03 PAGE 8   
+
+ 423   1              (dev_num != g_ext_config.dev_num))     //&& dev_num != 0
+ 424   1          {
+ 425   2              return;
+ 426   2          }
+ 427   1      
+ 428   1          if (msg_num == 0)
+ 429   1              return;
+ 430   1      
+ 431   1          // 根据优先级分发处理
+ 432   1          if (pri == EXT_PRI_CMD)
+ 433   1          {
+ 434   2              // 指令报文: 单帧(8字节载荷), msg_num=1即完整消息
+ 435   2              if (msg_num == 1)
+ 436   2              {
+ 437   3                  ext_process_cmd_message(dat);
+ 438   3              }
+ 439   2          }
+ 440   1          else if (pri == EXT_PRI_CONFIG)
+ 441   1          {
+ 442   2              // 配置报文: 11帧(88字节载荷), 需要多帧组装\读取配置参数报文
+ 443   2              if (msg_num == 1)
+ 444   2              {
+ 445   3                  memset(&g_ext_asm, 0, sizeof(ExtAssembly_t));
+ 446   3                  g_ext_asm.priority = pri;
+ 447   3                  if (dat[2] == 0xFF)
+ 448   3                      g_ext_asm.total_frames = 1; // 读取配置参数报文, 1帧
+ 449   3                  else
+ 450   3                      g_ext_asm.total_frames = EXT_FRAME_COUNT(EXT_MSG_LEN_CONFIG); // 读取配置参数报文,
+             - 11帧
+ 451   3      
+ 452   3                  memcpy(g_ext_asm.buf, dat, CAN_FRAME_DATA_LEN);
+ 453   3                  g_ext_asm.received = 0x01;
+ 454   3                  g_ext_asm.timeout_cnt = 0;
+ 455   3              }
+ 456   2              else if (g_ext_asm.priority == pri && g_ext_asm.received != 0)
+ 457   2              {
+ 458   3                  uint16_t offset = (uint16_t)(msg_num - 1) * CAN_FRAME_DATA_LEN;
+ 459   3                  if (offset + CAN_FRAME_DATA_LEN <= sizeof(g_ext_asm.buf))
+ 460   3                  {
+ 461   4                      memcpy(&g_ext_asm.buf[offset], dat, CAN_FRAME_DATA_LEN);
+ 462   4                  }
+ 463   3                  g_ext_asm.received |= ((uint16_t)1 << (msg_num - 1));
+ 464   3              }
+ 465   2      
+ 466   2              if (g_ext_asm.received == ((uint16_t)1 << g_ext_asm.total_frames) - 1)
+ 467   2              {
+ 468   3                  ext_process_cfg_message();
+ 469   3      
+ 470   3                  g_ext_asm.received = 0;
+ 471   3              }
+ 472   2          }
+ 473   1      
+ 474   1          // 重置通信超时
+ 475   1          g_ext_cmd_timeout = 0;
+ 476   1      }
+ 477          
+ 478          /// @brief 定期发送扩展帧
+ 479          /// @param None
+ 480          /// @param None
+ 481          void ext_slave_periodic_send(void)
+ 482          {
+ 483   1          uint8_t buf[EXT_MSG_LEN_LOG];
+C51 COMPILER V9.60.7.0   CANSLAVE                                                          11/04/2026 11:32:03 PAGE 9   
+
+ 484   1          uint32_t can_id;
+ 485   1          uint8_t tx_dat[CAN_FRAME_DATA_LEN];
+ 486   1      
+ 487   1          // 发送队列处理: 每周期仅发送1帧, 避免阻塞
+ 488   1          if (g_tx_count > 0)
+ 489   1          {
+ 490   2              if (tx_queue_pop(&can_id, tx_dat))
+ 491   2              {
+ 492   3                  can_hw_send(can_id, tx_dat, CAN_FRAME_DATA_LEN);
+ 493   3      
+ 494   3                  /* ---- 调试快照：真正写进 CAN 发送寄存器的状态帧 ---- */
+ 495   3                  if (EXTID_GET_PRIORITY(can_id) == EXT_PRI_STATUS)
+ 496   3                  {
+ 497   4                      g_canStatusDbg.CanID     = can_id;
+ 498   4                      g_canStatusDbg.Ctrl      = tx_dat[0];
+ 499   4                      g_canStatusDbg.WorkMode  = EXT_GET_WORKMODE(tx_dat[0]);
+ 500   4                      g_canStatusDbg.StartStop = EXT_GET_STARTSTOP(tx_dat[0]);
+ 501   4                      g_canStatusDbg.EStop     = EXT_GET_ESTOP(tx_dat[0]);
+ 502   4      
+ 503   4                      g_canStatusDbg.SpeedRaw     = EXT_GET_U16(tx_dat[1], tx_dat[2]);
+ 504   4                      g_canStatusDbg.SpeedRpm     = (int16_t)((long)g_canStatusDbg.SpeedRaw - 32767);
+ 505   4                      g_canStatusDbg.CurrentRaw   = EXT_GET_U16(tx_dat[3], tx_dat[4]);
+ 506   4                      g_canStatusDbg.Current_001A = (int16_t)((long)g_canStatusDbg.CurrentRaw - 32767);
+ 507   4                      g_canStatusDbg.PowerRaw     = EXT_GET_U16(tx_dat[5], tx_dat[6]);
+ 508   4                      g_canStatusDbg.Power_W      = (int16_t)((long)g_canStatusDbg.PowerRaw - 32767);
+ 509   4                      g_canStatusDbg.FaultCode    = tx_dat[7];
+ 510   4                  }
+ 511   3              }
+ 512   2          }
+ 513   1      
+ 514   1          // 多帧组装超时检测(50ms未完成则丢弃)
+ 515   1          if (g_ext_asm.received != 0)
+ 516   1          {
+ 517   2              g_ext_asm.timeout_cnt++;
+ 518   2              if (g_ext_asm.timeout_cnt >= 500)
+ 519   2              {
+ 520   3                  memset(&g_ext_asm, 0, sizeof(ExtAssembly_t));
+ 521   3              }
+ 522   2          }
+ 523   1      
+ 524   1          // 指令报文通信超时检测
+ 525   1          // if (g_run_state.is_started)
+ 526   1          // {
+ 527   1          //     g_ext_cmd_timeout++;
+ 528   1          //     if (g_ext_cmd_timeout >= EXT_CMD_TIMEOUT_MS)
+ 529   1          //     {
+ 530   1          //         ext_set_fault(FAULT_LEVEL_3, FAULT3_COMM_STOP);
+ 531   1          //         g_run_state.is_started = 0;
+ 532   1          //         g_run_state.ref = 0;
+ 533   1          //     }
+ 534   1          // }
+ 535   1              /* 指令通信超时：已起机但 EXT_CMD_TIMEOUT_MS 内没收到有效指令帧 → 立即停�
+             -�� */
+ 536   1          if (g_run_state.is_started && !g_run_state.is_estop)
+ 537   1          {
+ 538   2              if (++g_ext_cmd_timeout >= EXT_CMD_TIMEOUT_MS)
+ 539   2              {
+ 540   3                  g_ext_cmd_timeout = EXT_CMD_TIMEOUT_MS;
+ 541   3                  MotorCtrl_SetRun(0);        /* is_started=0, ref=0, run_time=0, 清换向标志 */
+ 542   3                  ext_set_fault(FAULT_LEVEL_3, FAULT3_COMM_STOP);
+ 543   3              }
+ 544   2          }
+C51 COMPILER V9.60.7.0   CANSLAVE                                                          11/04/2026 11:32:03 PAGE 10  
+
+ 545   1          else
+ 546   1          {
+ 547   2              g_ext_cmd_timeout = 0;
+ 548   2          }
+ 549   1      
+ 550   1          // 运行时间统计(每1000ms累加1s)
+ 551   1      
+ 552   1          g_ext_runtime_cnt++;
+ 553   1          if (g_ext_runtime_cnt >= 1000)
+ 554   1          {
+ 555   2              g_ext_runtime_cnt = 0;
+ 556   2              if (g_run_state.is_started)
+ 557   2              {
+ 558   3                  g_run_state.run_time++;
+ 559   3              }
+ 560   2      
+ 561   2              g_run_state.total_time++;
+ 562   2          }
+ 563   1      
+ 564   1          // // 心跳报文: 每500ms发送(0字节载荷, 仅CAN ID标识, 数据填充0xFF)
+ 565   1          // g_ext_heartbeat_cnt++;
+ 566   1          // if (g_ext_heartbeat_cnt >= 500)
+ 567   1          // {
+ 568   1          //     uint8_t dummy[CAN_FRAME_DATA_LEN] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+ 569   1          //     g_ext_heartbeat_cnt = 0;
+ 570   1          //     ext_send_single(EXT_PRI_HEARTBEAT, dummy);
+ 571   1          // }
+ 572   1      
+ 573   1          // 状态报文: 每100ms发送(单帧)
+ 574   1          g_ext_status_cnt++;
+ 575   1          if (g_ext_status_cnt >= (100))
+ 576   1          {
+ 577   2              g_ext_status_cnt = 0;
+ 578   2              ext_build_status(buf);
+ 579   2              ext_send_single(EXT_PRI_STATUS, buf);
+ 580   2          }
+ 581   1      
+ 582   1          // // 日志报文: 每1000ms发送(4帧)
+ 583   1          // g_ext_log_cnt++;
+ 584   1          // if (g_ext_log_cnt >= (1000 + 100))
+ 585   1          // {
+ 586   1          //     g_ext_log_cnt = 0;
+ 587   1          //     ext_build_log(buf);
+ 588   1          //     ext_send_frames(EXT_PRI_LOG, buf, EXT_MSG_LEN_LOG);
+ 589   1          // }
+ 590   1      
+ 591   1          // // 感知报文: 每100ms发送
+ 592   1          // g_ext_perception_cnt++;
+ 593   1          // if (g_ext_perception_cnt >= (100 + 60))
+ 594   1          // {
+ 595   1          //     g_ext_perception_cnt = 0;
+ 596   1          //     ext_build_percep(buf);
+ 597   1          //     ext_send_frames(EXT_PRI_PERCEP, buf, EXT_MSG_LEN_LOG);
+ 598   1          // }
+ 599   1      }
+ 600          
+ 601          /// @brief 设置扩展帧故障码
+ 602          /// @param level 故障等级
+ 603          /// @param cod 故障代码
+ 604          void ext_set_fault(FaultLevel_e level, uint8_t cod)
+ 605          {
+ 606   1          g_run_state.fault_code = FAULT_BUILD(level, cod);
+C51 COMPILER V9.60.7.0   CANSLAVE                                                          11/04/2026 11:32:03 PAGE 11  
+
+ 607   1      }
+ 608          
+ 609          /// @brief 清除扩展帧故障码
+ 610          /// @param None
+ 611          /// @param None
+ 612          void ext_clear_fault(void)
+ 613          {
+ 614   1          g_run_state.fault_code = FAULT_NONE;
+ 615   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   3696    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =    323     205
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

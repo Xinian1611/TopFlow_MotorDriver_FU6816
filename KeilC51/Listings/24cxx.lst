@@ -1,0 +1,508 @@
+C51 COMPILER V9.60.7.0   24CXX                                                             11/04/2026 11:32:07 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE 24CXX
+OBJECT MODULE PLACED IN .\Output\24cxx.obj
+COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\User\source\Hardware\24cxx.c LARGE OMF2 OPTIMIZE(8,SPEED) BROWS
+                    -E INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include;..\User\source\RingBuffer) DEBUG PRINT(.\Listings\24cxx.lst) 
+                    -TABS(2) OBJECT(.\Output\24cxx.obj)
+
+line level    source
+
+   1          /**
+   2           * @file     24cxx.c
+   3           * @brief    AT24Cxx/BL24Cxx EEPROM驱动，使用IO模拟I2C方式驱动
+   4           * @note     移植自 MCU软件平台\00-Common\Project_XXX\BSP\BSP\24cxx
+   5           *           适配FU68xx系列MCU，改用GPIO bit-bang实现I2C协议
+   6           */
+   7          
+   8          #include <MyProject.h>
+   9          #include "24cxx.h"
+  10          
+  11          /* I2C时序延迟（调整此值可改变I2C时钟频率）-----------------------------------*/
+  12          #define AT24CXX_I2C_DELAY_CYCLES      250
+  13          
+  14          /* 写操作超时重试次数 --------------------------------------------------------*/
+  15          #define AT24CXX_WRITE_TIMEOUT         50000
+  16          
+  17          /* 内部函数声明 -------------------------------------------------------------*/
+  18          static void AT24Cxx_I2C_Delay(void);
+  19          static void AT24Cxx_I2C_Start(void);
+  20          static void AT24Cxx_I2C_Stop(void);
+  21          static uint8 AT24Cxx_I2C_WriteByte(uint8 dat);
+  22          static uint8 AT24Cxx_I2C_ReadByte(uint8 ack);
+  23          static uint8 AT24Cxx_I2C_WriteAddr(uint16 addr);
+  24          
+  25          /*----------------------------------------------------------------------------*/
+  26          /*  内部函数 - I2C位时序实现                                                   */
+  27          /*----------------------------------------------------------------------------*/
+  28          
+  29          /**
+  30           * @brief  I2C时序延迟函数
+  31           * @note   通过空循环产生约5us延迟，配合SCL高/低电平切换实现100kHz I2C时钟
+  32           */
+  33          static void AT24Cxx_I2C_Delay(void)
+  34          {
+  35   1          uint8 i = AT24CXX_I2C_DELAY_CYCLES;
+  36   1          while (i--);
+  37   1      }
+  38          
+  39          /**
+  40           * @brief  I2C起始条件：SCL高电平时，SDA由高变低
+  41           */
+  42          static void AT24Cxx_I2C_Start(void)
+  43          {
+  44   1          AT24CXX_SDA_H();
+  45   1          AT24CXX_SCL_H();
+  46   1          AT24Cxx_I2C_Delay();
+  47   1          AT24CXX_SDA_L();
+  48   1          AT24Cxx_I2C_Delay();
+  49   1          AT24CXX_SCL_L();
+  50   1      }
+  51          
+  52          /**
+  53           * @brief  I2C停止条件：SCL高电平时，SDA由低变高
+C51 COMPILER V9.60.7.0   24CXX                                                             11/04/2026 11:32:07 PAGE 2   
+
+  54           */
+  55          static void AT24Cxx_I2C_Stop(void)
+  56          {
+  57   1          AT24CXX_SDA_L();
+  58   1          AT24CXX_SCL_H();
+  59   1          AT24Cxx_I2C_Delay();
+  60   1          AT24CXX_SDA_H();
+  61   1          AT24Cxx_I2C_Delay();
+  62   1      }
+  63          
+  64          /**
+  65           * @brief  I2C发送一个字节（MSB优先）
+  66           * @param  dat 待发送的数据字节
+  67           * @retval 0=收到ACK，1=收到NACK
+  68           */
+  69          static uint8 AT24Cxx_I2C_WriteByte(uint8 dat)
+  70          {
+  71   1          uint8 i;
+  72   1      
+  73   1          for (i = 0; i < 8; i++)
+  74   1          {
+  75   2              if (dat & 0x80)
+  76   2                  AT24CXX_SDA_H();
+  77   2              else
+  78   2                  AT24CXX_SDA_L();
+  79   2      
+  80   2              dat <<= 1;
+  81   2              AT24Cxx_I2C_Delay();
+  82   2              AT24CXX_SCL_H();
+  83   2              AT24Cxx_I2C_Delay();
+  84   2              AT24CXX_SCL_L();
+  85   2          }
+  86   1      
+  87   1          /* 释放SDA，接收ACK */
+  88   1          AT24CXX_SDA_H();
+  89   1          AT24Cxx_I2C_Delay();
+  90   1          AT24CXX_SCL_H();
+  91   1      
+  92   1          /* 读取ACK */
+  93   1          if (AT24CXX_SDA_READ())
+  94   1          {
+  95   2              AT24CXX_SCL_L();
+  96   2              return 1;   /* NACK */
+  97   2          }
+  98   1          AT24CXX_SCL_L();
+  99   1          return 0;       /* ACK */
+ 100   1      }
+ 101          
+ 102          /**
+ 103           * @brief  I2C接收一个字节
+ 104           * @param  ack 1=发送ACK，0=发送NACK
+ 105           * @retval 接收到的数据字节
+ 106           */
+ 107          static uint8 AT24Cxx_I2C_ReadByte(uint8 ack)
+ 108          {
+ 109   1          uint8 i;
+ 110   1          uint8 dat = 0;
+ 111   1      
+ 112   1          /* SDA设为输入 */
+ 113   1          AT24CXX_SDA_H();
+ 114   1      
+ 115   1          for (i = 0; i < 8; i++)
+C51 COMPILER V9.60.7.0   24CXX                                                             11/04/2026 11:32:07 PAGE 3   
+
+ 116   1          {
+ 117   2              dat <<= 1;
+ 118   2              AT24CXX_SCL_H();
+ 119   2              AT24Cxx_I2C_Delay();
+ 120   2              if (AT24CXX_SDA_READ())
+ 121   2                  dat |= 0x01;
+ 122   2              AT24CXX_SCL_L();
+ 123   2              AT24Cxx_I2C_Delay();
+ 124   2          }
+ 125   1      
+ 126   1          /* 发送ACK/NACK */
+ 127   1          if (ack)
+ 128   1              AT24CXX_SDA_L();    /* ACK: SDA低 */
+ 129   1          else
+ 130   1              AT24CXX_SDA_H();    /* NACK: SDA高 */
+ 131   1      
+ 132   1          AT24Cxx_I2C_Delay();
+ 133   1          AT24CXX_SCL_H();
+ 134   1          AT24Cxx_I2C_Delay();
+ 135   1          AT24CXX_SCL_L();
+ 136   1          AT24CXX_SDA_H();        /* 释放SDA */
+ 137   1      
+ 138   1          return dat;
+ 139   1      }
+ 140          
+ 141          /**
+ 142           * @brief  向EEPROM发送16位地址（2字节，MSB先发）
+ 143           * @param  addr 16位地址
+ 144           * @retval 0=成功，1=失败
+ 145           */
+ 146          static uint8 AT24Cxx_I2C_WriteAddr(uint16 addr)
+ 147          {
+ 148   1          if (AT24Cxx_I2C_WriteByte((uint8)(addr >> 8)))
+ 149   1              return 1;
+ 150   1          if (AT24Cxx_I2C_WriteByte((uint8)(addr & 0xFF)))
+ 151   1              return 1;
+ 152   1          return 0;
+ 153   1      }
+ 154          
+ 155          /*----------------------------------------------------------------------------*/
+ 156          /*  擦除方法（移植自MCU软件平台\00-Common\Project_XXX\BSP\BSP\24cxx）          */
+ 157          /*----------------------------------------------------------------------------*/
+ 158          
+ 159          /**
+ 160           * @brief  用固定值填充一页
+ 161           * @param  page_index 页索引（0起始）
+ 162           * @param  val        填充值（擦除时传0xFF）
+ 163           * @retval 0=成功，1=失败
+ 164           */
+ 165          uint8 AT24Cxx_PageFill(uint16 page_index, uint8 val)
+ 166          {
+ 167   1          uint8 xdata buf[AT24CXX_PAGE_SIZE];
+ 168   1          uint16 i;
+ 169   1      
+ 170   1          for (i = 0; i < AT24CXX_PAGE_SIZE; i++)
+ 171   1              buf[i] = val;
+ 172   1      
+ 173   1          return AT24Cxx_WritePage(page_index * AT24CXX_PAGE_SIZE, buf, AT24CXX_PAGE_SIZE);
+ 174   1      }
+ 175          
+ 176          /**
+ 177           * @brief  擦除EEPROM数据（写0xFF）
+C51 COMPILER V9.60.7.0   24CXX                                                             11/04/2026 11:32:07 PAGE 4   
+
+ 178           * @param  page_start 起始页索引
+ 179           * @param  page_cnt   要擦除的页数
+ 180           * @param  mode       擦除模式：
+ 181           *                    - AT24CXX_ERASE_SECTOR：扇区擦除，从page_start擦除page_cnt页
+ 182           *                    - AT24CXX_ERASE_CHIP：整片擦除，忽略page_start/page_cnt
+ 183           * @note   EEPROM无独立擦除命令，擦除实质为写入0xFF
+ 184           */
+ 185          void AT24Cxx_Erase(uint16 page_start, uint16 page_cnt, uint8 mode)
+ 186          {
+ 187   1          uint16 cnt;
+ 188   1          uint16 max_pages;
+ 189   1      
+ 190   1          max_pages = (AT24CXX_MAX_ADDR + 1) / AT24CXX_PAGE_SIZE;
+ 191   1      
+ 192   1          if (mode == AT24CXX_ERASE_CHIP)
+ 193   1          {
+ 194   2              page_start = 0;
+ 195   2              cnt = max_pages;
+ 196   2          }
+ 197   1          else
+ 198   1          {
+ 199   2              cnt = page_cnt;
+ 200   2              if (page_start + cnt > max_pages)
+ 201   2                  cnt = max_pages - page_start;
+ 202   2          }
+ 203   1      
+ 204   1          AT24Cxx_WriteEnable();
+ 205   1      
+ 206   1          while (cnt--)
+ 207   1          {
+ 208   2              AT24Cxx_PageFill(page_start, 0xFF);
+ 209   2              page_start++;
+ 210   2          }
+ 211   1      }
+ 212          
+ 213          /*----------------------------------------------------------------------------*/
+ 214          /*  外部接口函数                                                               */
+ 215          /*----------------------------------------------------------------------------*/
+ 216          
+ 217          /**
+ 218           * @brief  初始化EEPROM驱动
+ 219           * @note   配置I2C引脚（SCL/SDA为开漏输出，WP为推挽输出），关闭硬件I2C外设
+ 220           */
+ 221          void AT24Cxx_Init(void)
+ 222          {
+ 223   1          /* 关闭硬件I2C外设，释放引脚控制权给GPIO */
+ 224   1          ClrBit(I2C_CR, I2CEN);
+ 225   1      
+ 226   1          /* 配置SCL(P06)为推挽输出 */
+ 227   1          SetBit(P0_OE, P06);
+ 228   1          GP06 = 1;
+ 229   1      
+ 230   1          /* 配置SDA(P05)：初始为输入（高阻）状态，靠上拉拉高 */
+ 231   1          ClrBit(P0_OE, P05);
+ 232   1      
+ 233   1          /* 使能内部上拉 */
+ 234   1          SetBit(P0_PU, P05);
+ 235   1          SetBit(P0_PU, P06);
+ 236   1      
+ 237   1          /* 配置WP(P04)为推挽输出，默认写保护（FU6816L：EEPROM_WP = 引脚21 = P0.4） */
+ 238   1          SetBit(P0_OE, P04);
+ 239   1          GP04 = 1;
+C51 COMPILER V9.60.7.0   24CXX                                                             11/04/2026 11:32:07 PAGE 5   
+
+ 240   1      
+ 241   1          AT24Cxx_WriteEnable();
+ 242   1      }
+ 243          
+ 244          /**
+ 245           * @brief  使能写入（取消写保护）
+ 246           */
+ 247          void AT24Cxx_WriteEnable(void)
+ 248          {
+ 249   1          AT24CXX_WP_CLR();
+ 250   1      }
+ 251          
+ 252          /**
+ 253           * @brief  禁止写入（使能写保护）
+ 254           */
+ 255          void AT24Cxx_WriteDisable(void)
+ 256          {
+ 257   1          AT24CXX_WP_SET();
+ 258   1      }
+ 259          
+ 260          /**
+ 261           * @brief  从指定地址读取一个字节
+ 262           * @param  addr 16位地址
+ 263           * @retval 读取到的数据，失败返回0xFF
+ 264           */
+ 265          uint8 AT24Cxx_ReadByte(uint16 addr)
+ 266          {
+ 267   1          uint8 dat;
+ 268   1      
+ 269   1          AT24Cxx_I2C_Start();
+ 270   1          if (AT24Cxx_I2C_WriteByte(AT24CXX_DEV_ADDR_W))
+ 271   1          {
+ 272   2              AT24Cxx_I2C_Stop();
+ 273   2              return 0xFF;
+ 274   2          }
+ 275   1          if (AT24Cxx_I2C_WriteAddr(addr))
+ 276   1          {
+ 277   2              AT24Cxx_I2C_Stop();
+ 278   2              return 0xFF;
+ 279   2          }
+ 280   1      
+ 281   1          /* 重复起始条件，切换为读操作 */
+ 282   1          AT24Cxx_I2C_Start();
+ 283   1          AT24Cxx_I2C_WriteByte(AT24CXX_DEV_ADDR_R);
+ 284   1      
+ 285   1          dat = AT24Cxx_I2C_ReadByte(0);  /* NACK，单字节读 */
+ 286   1          AT24Cxx_I2C_Stop();
+ 287   1      
+ 288   1          return dat;
+ 289   1      }
+ 290          
+ 291          /**
+ 292           * @brief  从指定地址读取多个字节
+ 293           * @param  addr 起始地址
+ 294           * @param  buf  数据缓冲区指针
+ 295           * @param  len  读取字节数
+ 296           * @retval 实际读取的字节数（失败返回0）
+ 297           */
+ 298          uint16 AT24Cxx_ReadBytes(uint16 addr, uint8 *buf, uint16 len)
+ 299          {
+ 300   1          uint16 i;
+ 301   1      
+C51 COMPILER V9.60.7.0   24CXX                                                             11/04/2026 11:32:07 PAGE 6   
+
+ 302   1          if (buf == NULL || len == 0)
+ 303   1              return 0;
+ 304   1      
+ 305   1          AT24Cxx_I2C_Start();
+ 306   1          if (AT24Cxx_I2C_WriteByte(AT24CXX_DEV_ADDR_W))
+ 307   1          {
+ 308   2              AT24Cxx_I2C_Stop();
+ 309   2              return 0;
+ 310   2          }
+ 311   1          if (AT24Cxx_I2C_WriteAddr(addr))
+ 312   1          {
+ 313   2              AT24Cxx_I2C_Stop();
+ 314   2              return 0;
+ 315   2          }
+ 316   1      
+ 317   1          AT24Cxx_I2C_Start();
+ 318   1          AT24Cxx_I2C_WriteByte(AT24CXX_DEV_ADDR_R);
+ 319   1      
+ 320   1          for (i = 0; i < len; i++)
+ 321   1          {
+ 322   2              buf[i] = AT24Cxx_I2C_ReadByte((i == len - 1) ? 0 : 1);
+ 323   2          }
+ 324   1          AT24Cxx_I2C_Stop();
+ 325   1      
+ 326   1          return len;
+ 327   1      }
+ 328          
+ 329          /**
+ 330           * @brief  向指定地址写入一个字节
+ 331           * @param  addr 地址
+ 332           * @param  dat  待写入数据
+ 333           * @retval 0=成功，1=失败
+ 334           */
+ 335          uint8 AT24Cxx_WriteByte(uint16 addr, uint8 dat)
+ 336          {
+ 337   1          AT24Cxx_WriteEnable();
+ 338   1      
+ 339   1          AT24Cxx_I2C_Start();
+ 340   1          if (AT24Cxx_I2C_WriteByte(AT24CXX_DEV_ADDR_W))
+ 341   1          {
+ 342   2              AT24Cxx_I2C_Stop();
+ 343   2              return 1;
+ 344   2          }
+ 345   1          if (AT24Cxx_I2C_WriteAddr(addr))
+ 346   1          {
+ 347   2              AT24Cxx_I2C_Stop();
+ 348   2              return 1;
+ 349   2          }
+ 350   1          if (AT24Cxx_I2C_WriteByte(dat))
+ 351   1          {
+ 352   2              AT24Cxx_I2C_Stop();
+ 353   2              return 1;
+ 354   2          }
+ 355   1          AT24Cxx_I2C_Stop();
+ 356   1      
+ 357   1          /* 等待EEPROM内部写入完成（轮询ACK） */
+ 358   1          {
+ 359   2              uint16 timeout = AT24CXX_WRITE_TIMEOUT;
+ 360   2              do
+ 361   2              {
+ 362   3                  AT24Cxx_I2C_Start();
+ 363   3                  if (AT24Cxx_I2C_WriteByte(AT24CXX_DEV_ADDR_W) == 0)
+C51 COMPILER V9.60.7.0   24CXX                                                             11/04/2026 11:32:07 PAGE 7   
+
+ 364   3                  {
+ 365   4                      AT24Cxx_I2C_Stop();
+ 366   4                      break;
+ 367   4                  }
+ 368   3                  AT24Cxx_I2C_Stop();
+ 369   3                  if (--timeout == 0)
+ 370   3                      return 1;
+ 371   3              } while (1);
+ 372   2          }
+ 373   1      
+ 374   1          return 0;
+ 375   1      }
+ 376          
+ 377          /**
+ 378           * @brief  向指定地址写入多个字节（自动跨页处理）
+ 379           * @param  addr 起始地址
+ 380           * @param  buf  数据缓冲区指针
+ 381           * @param  len  写入字节数
+ 382           * @retval 实际写入的字节数（失败返回0）
+ 383           */
+ 384          uint8 AT24Cxx_WriteBytes(uint16 addr, const uint8 *buf, uint16 len)
+ 385          {
+ 386   1          uint16 total = 0;
+ 387   1          uint16 cnt;
+ 388   1          uint16 offset;
+ 389   1      
+ 390   1          if (buf == NULL || len == 0)
+ 391   1              return 0;
+ 392   1      
+ 393   1          while (total < len)
+ 394   1          {
+ 395   2              offset = addr + total;
+ 396   2              /* 计算当前页剩余空间 */
+ 397   2              cnt = AT24CXX_PAGE_SIZE - (offset % AT24CXX_PAGE_SIZE);
+ 398   2              if (cnt > (len - total))
+ 399   2                  cnt = len - total;
+ 400   2              
+ 401   2              AT24Cxx_Erase(offset / AT24CXX_PAGE_SIZE, 1, AT24CXX_ERASE_SECTOR);
+ 402   2      
+ 403   2              if (AT24Cxx_WritePage(offset, buf + total, cnt))
+ 404   2                  return total;
+ 405   2      
+ 406   2              total += cnt;
+ 407   2          }
+ 408   1          return total;
+ 409   1      }
+ 410          
+ 411          /**
+ 412           * @brief  页写入（单页内写入，不做跨页处理）
+ 413           * @param  addr 起始地址（页内偏移）
+ 414           * @param  buf  数据缓冲区指针
+ 415           * @param  len  写入字节数（不超过AT24CXX_PAGE_SIZE）
+ 416           * @retval 0=成功，1=失败
+ 417           */
+ 418          uint8 AT24Cxx_WritePage(uint16 addr, const uint8 *buf, uint16 len)
+ 419          {
+ 420   1          uint16 i;
+ 421   1          uint16 timeout;
+ 422   1      
+ 423   1          if (buf == NULL || len == 0 || len > AT24CXX_PAGE_SIZE)
+ 424   1              return 1;
+ 425   1      
+C51 COMPILER V9.60.7.0   24CXX                                                             11/04/2026 11:32:07 PAGE 8   
+
+ 426   1          AT24Cxx_WriteEnable();
+ 427   1      
+ 428   1          AT24Cxx_I2C_Start();
+ 429   1          if (AT24Cxx_I2C_WriteByte(AT24CXX_DEV_ADDR_W))
+ 430   1          {
+ 431   2              AT24Cxx_I2C_Stop();
+ 432   2              return 1;
+ 433   2          }
+ 434   1          if (AT24Cxx_I2C_WriteAddr(addr))
+ 435   1          {
+ 436   2              AT24Cxx_I2C_Stop();
+ 437   2              return 1;
+ 438   2          }
+ 439   1          for (i = 0; i < len; i++)
+ 440   1          {
+ 441   2              if (AT24Cxx_I2C_WriteByte(buf[i]))
+ 442   2              {
+ 443   3                  AT24Cxx_I2C_Stop();
+ 444   3                  return 1;
+ 445   3              }
+ 446   2          }
+ 447   1          AT24Cxx_I2C_Stop();
+ 448   1      
+ 449   1          /* 等待EEPROM内部写入完成 */
+ 450   1          timeout = 0;
+ 451   1          do
+ 452   1          {
+ 453   2              AT24Cxx_I2C_Start();
+ 454   2              if (AT24Cxx_I2C_WriteByte(AT24CXX_DEV_ADDR_W) == 0)
+ 455   2              {
+ 456   3                  AT24Cxx_I2C_Stop();
+ 457   3                  break;
+ 458   3              }
+ 459   2              AT24Cxx_I2C_Stop();
+ 460   2              if (++timeout > AT24CXX_WRITE_TIMEOUT)
+ 461   2                  return 1;
+ 462   2          } while (1);
+ 463   1      
+ 464   1          return 0;
+ 465   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1223    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----     105
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

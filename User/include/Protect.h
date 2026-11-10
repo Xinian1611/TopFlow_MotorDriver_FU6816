@@ -7,10 +7,12 @@
  * @date      2022-07-14
  * @brief     This file contains protection parameter used for Motor Control. 
  */
+ 
 
 /* Define to prevent recursive inclusion -------------------------------------------------------- */
 #ifndef __PROTECT_H_
 #define __PROTECT_H_
+
 
 /*保护参数设置--------------------------------------------------------------------------------------------*/
 /* 硬件过流保护比较值来源 */

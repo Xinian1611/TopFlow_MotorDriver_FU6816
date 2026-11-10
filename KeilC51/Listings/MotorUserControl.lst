@@ -1,0 +1,347 @@
+C51 COMPILER V9.60.7.0   MOTORUSERCONTROL                                                  11/04/2026 11:32:03 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE MOTORUSERCONTROL
+OBJECT MODULE PLACED IN .\Output\MotorUserControl.obj
+COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\User\source\Application\MotorUserControl.c LARGE OMF2 OPTIMIZE(
+                    -8,SPEED) BROWSE INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include;..\User\source\RingBuffer) DEBUG PRINT(.\Listin
+                    -gs\MotorUserControl.lst) TABS(2) OBJECT(.\Output\MotorUserControl.obj)
+
+line level    source
+
+   1          /************************************************************************************
+   2           * @Author       : FengYu
+   3           * @Date         : 2026-07-08 15:03:49
+   4           * @LastEditors  : zhangbao zhb@wujiang.com
+   5           * @LastEditTime : 2026-07-08 15:03:59
+   6           * @Description  : 电机控制模块
+   7           * @
+   8           * @Copyright (c) 2026 by ${git_name_email}, All Rights Reserved.
+   9          *************************************************************************************/
+  10          
+  11          /******************************************************************************
+  12           * 头文件
+  13           ******************************************************************************/
+  14          #include <MyProject.h>
+  15          #include "CanSlave.h"
+  16          #include "DevConfig.h"
+  17          
+  18          
+  19          /******************************************************************************
+  20           * 全局变量
+  21           ******************************************************************************/
+  22          
+  23          //  电机参数
+  24          float xdata Pole_Pairs = 7.0;                               ///<      电机 极对数
+  25          float xdata RS = 0.0163;                                    ///< (Ω)  电机 相电阻
+  26          float xdata LD = 0.143/1000.0;                      ///< (H)  电机 相电感
+  27          float xdata LQ = 0.151/1000.0;                              ///< (H)  电机 相电感
+  28          float xdata MOTOR_SPEED_BASE = 2350.0 * 2.0;                ///< (RPM) 速度基准 = 额定速度 * 2
+  29          float xdata Ke = 17.9;                                      ///< (V/KRPM) 反电动势常数
+  30          
+  31          
+  32          //  电机控制模式
+  33          uint8_t xdata MOTOR_CTRL_MODE = SPEED_LOOP_CONTROL; ///< 闭环方式选择
+  34          
+  35          //  电机运行状态
+  36          MotorRunState_t xdata g_run_state;
+  37          
+  38          
+  39          /******************************************************************************
+  40           * 函数定义
+  41           ******************************************************************************/
+  42          
+  43          /// @brief 初始化电机参数
+  44          /// @param None
+  45          /// @retval None
+  46          static void MotorCtrl_InitParams(void)
+  47          {
+  48   1          // 载入电机参数
+  49   1          DevConfig_LoadParam();
+  50   1      
+  51   1          // 初始化电机参数
+  52   1          switch (g_motor_cfg->motor_type)
+  53   1          {
+C51 COMPILER V9.60.7.0   MOTORUSERCONTROL                                                  11/04/2026 11:32:03 PAGE 2   
+
+  54   2          case MOTOR_12V_600W:
+  55   2              Pole_Pairs = MOTOR_12V_POLE_PAIRS;
+  56   2              RS = MOTOR_12V_RS;
+  57   2              LD = MOTOR_12V_LD;
+  58   2              LQ = MOTOR_12V_LQ;
+  59   2              Ke = MOTOR_12V_KE;
+  60   2              MOTOR_SPEED_BASE = MOTOR_12V_SPEED_BASE;
+  61   2              break;
+  62   2      
+  63   2          case MOTOR_24V_1200W:
+  64   2              Pole_Pairs = MOTOR_24V_POLE_PAIRS;
+  65   2              RS = MOTOR_24V_RS;
+  66   2              LD = MOTOR_24V_LD;
+  67   2              LQ = MOTOR_24V_LQ;
+  68   2              Ke = MOTOR_24V_KE;
+  69   2              MOTOR_SPEED_BASE = MOTOR_24V_SPEED_BASE;
+  70   2              break;
+  71   2      
+  72   2          case MOTOR_36V_2400W:
+  73   2              Pole_Pairs = MOTOR_36V_POLE_PAIRS;
+  74   2              RS = MOTOR_36V_RS;
+  75   2              LD = MOTOR_36V_LD;
+  76   2              LQ = MOTOR_36V_LQ;
+  77   2              Ke = MOTOR_36V_KE;
+  78   2              MOTOR_SPEED_BASE = MOTOR_36V_SPEED_BASE;
+  79   2              break;
+  80   2      
+  81   2          default:
+  82   2              break;
+  83   2          }
+  84   1      
+  85   1          // 默认速度闭环
+  86   1          MOTOR_CTRL_MODE = SPEED_LOOP_CONTROL;
+  87   1      }
+  88          
+  89          /// @brief 初始化电机控制模块
+  90          /// @param None
+  91          /// @retval None
+  92          void MotorCtrl_Init(void)
+  93          {
+  94   1          // 初始化参数
+  95   1          MotorCtrl_InitParams();
+  96   1      
+  97   1          // 初始化运行状态
+  98   1          // memset(&g_run_state, 0, sizeof(g_run_state));
+  99   1          // g_run_state.work_mode = EXT_WORK_MODE_SPEED;
+ 100   1          // g_run_state.is_started = 1;
+ 101   1          // g_run_state.is_estop = 0;
+ 102   1          // g_run_state.ref = 100;
+ 103   1          // g_run_state.direction = CCW;
+ 104   1      
+ 105   1          memset(&g_run_state, 0, sizeof(g_run_state));
+ 106   1          g_run_state.work_mode = EXT_WORK_MODE_SPEED;
+ 107   1          g_run_state.is_started = 0;          /* 上电不自动起机，等 CAN 的"起机" */
+ 108   1          g_run_state.is_estop   = 0;
+ 109   1          g_run_state.ref        = 0.0f;
+ 110   1          g_run_state.direction  = CCW;
+ 111   1      }
+ 112          
+ 113          /// @brief 设置电机急停状态
+ 114          /// @param state 0: 未急停 1: 已急停
+ 115          /// @retval None
+C51 COMPILER V9.60.7.0   MOTORUSERCONTROL                                                  11/04/2026 11:32:03 PAGE 3   
+
+ 116          void MotorCtrl_SetEstop(uint8_t state)
+ 117          {
+ 118   1          g_run_state.is_estop = state;
+ 119   1          if (state)
+ 120   1          {
+ 121   2              g_run_state.ref = 0;
+ 122   2              g_run_state.run_time = 0;
+ 123   2          }
+ 124   1      }
+ 125          
+ 126          /// @brief 设置电机运行状态
+ 127          /// @param state 0: 停止 1: 运行
+ 128          /// @retval None
+ 129          void MotorCtrl_SetRun(uint8_t state)
+ 130          {
+ 131   1          if (state == g_run_state.is_started)
+ 132   1              return;
+ 133   1      
+ 134   1          g_run_state.is_started = state;
+ 135   1      
+ 136   1          if (g_run_state.is_started == 0)
+ 137   1          {
+ 138   2              g_run_state.run_time = 0;
+ 139   2      
+ 140   2              g_run_state.ref              = 0.0f;   /* 停机撤给定，再起机必须重新下发速度 */
+ 141   2              g_run_state.reversal_braking = 0;
+ 142   2          }
+ 143   1      }
+ 144          
+ 145          /// @brief 设置电机控制模式
+ 146          /// @param mode 闭环方式选择
+ 147          /// @retval None
+ 148          void MotorCtrl_SetMode(uint8_t mode)
+ 149          {
+ 150   1          // 检查模式是否有效
+ 151   1          if (mode < EXT_WORK_MODE_CURRENT || mode > EXT_WORK_MODE_SPEED)
+ 152   1              return;
+ 153   1      
+ 154   1          if (mode == g_run_state.work_mode)
+ 155   1              return;
+ 156   1      
+ 157   1          g_run_state.work_mode = mode;
+ 158   1          if (mode == EXT_WORK_MODE_SPEED)
+ 159   1          {
+ 160   2              MOTOR_CTRL_MODE = SPEED_LOOP_CONTROL;
+ 161   2          }
+ 162   1          else if (mode == EXT_WORK_MODE_CURRENT)
+ 163   1          {
+ 164   2              MOTOR_CTRL_MODE = CURRENT_LOOP_CONTROL;
+ 165   2          }
+ 166   1      }
+ 167          
+ 168          /// @brief 设置电机目标值(正数正转, 负数反转)
+ 169          /// @param current 段字节13-14：0.01A，32767 = 0A
+ 170          /// @param speed   段字节11-12：0.01%，32767 = 0%，±10000 = ±100%
+ 171          /// @note  ① 必须按无符号收：正数 raw 一定 >32767，用 int16 会变成大负数；
+ 172          ///        ② 0% 只表示"目标 0"，停机由启停字段负责 —— 这里不再自动置 is_starte
+             -d=0，
+ 173          ///           否则"起机+0% → 再给 20%"这种时序会让后面的速度全部不生效。
+ 174          /// @retval None
+ 175          void MotorCtrl_SetTarget(uint16_t current, uint16_t speed)
+ 176          {
+C51 COMPILER V9.60.7.0   MOTORUSERCONTROL                                                  11/04/2026 11:32:03 PAGE 4   
+
+ 177   1          int32 v;
+ 178   1          float mag;
+ 179   1          float base;
+ 180   1          float idle;
+ 181   1      
+ 182   1          if (g_run_state.is_estop)
+ 183   1          {
+ 184   2              return;                                 /* 急停中不接受目标 */
+ 185   2          }
+ 186   1      
+ 187   1          if (g_run_state.work_mode == EXT_WORK_MODE_CURRENT)
+ 188   1          {
+ 189   2              v   = (int32)current - 32767;           /* 0.01A */
+ 190   2              mag = (v >= 0) ? (float)v : (float)(-v);
+ 191   2              g_run_state.direction = (v >= 0) ? CW : CCW;
+ 192   2              g_run_state.ref       = mag / 100.0f;   /* 0.01A → A */
+ 193   2      
+ 194   2          }
+ 195   1          else                                        /* 转速模式 */
+ 196   1          {
+ 197   2              v   = (int32)speed - 32767;             /* 0.01% */
+ 198   2              mag = (v >= 0) ? (float)v : (float)(-v);
+ 199   2              if (mag > 10000.0f) mag = 10000.0f;     /* 钳到 ±100% */
+ 200   2      
+ 201   2              g_run_state.direction = (v >= 0) ? CW : CCW;
+ 202   2      
+ 203   2              if (mag <= 0.0f)
+ 204   2              {
+ 205   3                  g_run_state.ref = 0.0f;             /* 0% = 停机 */
+ 206   3              }
+ 207   2              else
+ 208   2              {
+ 209   3                  /* 100% = 配置里的 max_speed */
+ 210   3                  base = (g_motor_cfg->max_speed != 0) ? (float)g_motor_cfg->max_speed
+ 211   3                                                       : MOTOR_SPEED_BASE;
+ 212   3                  /* 非零给定时的下限 = 配置里的 idle_speed(rpm) */
+ 213   3                  idle = (float)g_motor_cfg->idle_speed;
+ 214   3                  if (idle > base) idle = base;
+ 215   3      
+ 216   3                  /* 1%~100% → idle_speed ~ max_speed */
+ 217   3                  g_run_state.ref = idle + (base - idle) * (mag / 10000.0f);
+ 218   3              }
+ 219   2          }
+ 220   1      }
+ 221          // void MotorCtrl_SetTarget(uint16_t current, uint16_t speed)
+ 222          // {
+ 223          //     int32 v;
+ 224          //     float mag;
+ 225          //     float base;
+ 226          
+ 227          //     if (g_run_state.is_estop)
+ 228          //     {
+ 229          //         return;                                 /* 急停中不接受目标 */
+ 230          //     }
+ 231          
+ 232          //     if (g_run_state.work_mode == EXT_WORK_MODE_CURRENT)
+ 233          //     {
+ 234          //         v   = (int32)current - 32767;           /* 0.01A */
+ 235          //         mag = (v >= 0) ? (float)v : (float)(-v);
+ 236          //         g_run_state.direction = (v >= 0) ? CW : CCW;
+ 237          //         g_run_state.ref       = mag / 100.0f;   /* 0.01A → A */
+ 238          //     }
+C51 COMPILER V9.60.7.0   MOTORUSERCONTROL                                                  11/04/2026 11:32:03 PAGE 5   
+
+ 239          //     else                                        /* 转速模式 */
+ 240          //     {
+ 241          //         v   = (int32)speed - 32767;             /* 0.01% */
+ 242          //         mag = (v >= 0) ? (float)v : (float)(-v);
+ 243          //         g_run_state.direction = (v >= 0) ? CW : CCW;
+ 244          
+ 245          //         /* 协议 100% = 主机约定的最大转速(配置里 max_speed)，不是 FOC 基准 4096 */
+ 246          //         base = (g_motor_cfg->max_speed != 0) ? (float)g_motor_cfg->max_speed
+ 247          //                                              : MOTOR_SPEED_BASE;
+ 248          //         g_run_state.ref = mag / 10000.0f * base;
+ 249          //     }
+ 250          // }
+ 251          // /// @brief 设置电机目标值(正数正转, 负数反转)
+ 252          // /// @param current 目标电流(0.01A)
+ 253          // /// @param speed 目标转速(0.01%)
+ 254          // /// @retval None
+ 255          // void MotorCtrl_SetTarget(uint16_t current, uint16_t speed)
+ 256          // {
+ 257          //     // 根据工作模式和控制状态设置电机参数
+ 258          //     if (g_run_state.is_started && !g_run_state.is_estop)
+ 259          //     {
+ 260          //         if (g_run_state.work_mode == EXT_WORK_MODE_SPEED)
+ 261          //         {
+ 262          //             // float ref_val = (speed - 32767) * 1.0f;
+ 263          //             float ref_val = (float)(speed-32767)/10000.0f * MOTOR_SPEED_BASE;
+ 264          //             if (ref_val >= 0)
+ 265          //             {
+ 266          //                 g_run_state.direction = CW;       // 正数正转
+ 267          //                 g_run_state.ref = ref_val;
+ 268          //             }
+ 269          //             else
+ 270          //             {
+ 271          //                 g_run_state.direction = CCW;      // 负数反转
+ 272          //                 g_run_state.ref = -ref_val;       // 存储绝对值
+ 273          //             }
+ 274          //             if (speed == 32767)
+ 275          //             {
+ 276          //                 g_run_state.is_started = 0;
+ 277          //             }
+ 278          //         }
+ 279          //         else if (g_run_state.work_mode == EXT_WORK_MODE_CURRENT)
+ 280          //         {
+ 281          //             float ref_val = (current - 32767) / 100.0f;
+ 282          //             if (ref_val >= 0)
+ 283          //             {
+ 284          //                 g_run_state.direction = CW;       // 正数正转
+ 285          //                 g_run_state.ref = ref_val;
+ 286          //             }
+ 287          //             else
+ 288          //             {
+ 289          //                 g_run_state.direction = CCW;      // 负数反转
+ 290          //                 g_run_state.ref = -ref_val;       // 存储绝对值
+ 291          //             }
+ 292          //             if (current == 32767)
+ 293          //             {
+ 294          //                 g_run_state.is_started = 0;
+ 295          //             }
+ 296          //         }
+ 297          //     }
+ 298          // }
+ 299          
+ 300          /// @brief 更新电机状态
+C51 COMPILER V9.60.7.0   MOTORUSERCONTROL                                                  11/04/2026 11:32:03 PAGE 6   
+
+ 301          /// @param None
+ 302          /// @retval None
+ 303          void MotorCtrl_Update(void)
+ 304          {
+ 305   1      
+ 306   1      }
+ 307          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    924    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =     43      18
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

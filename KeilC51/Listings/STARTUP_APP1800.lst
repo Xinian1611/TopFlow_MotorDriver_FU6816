@@ -1,0 +1,249 @@
+A51 MACRO ASSEMBLER  STARTUP_APP1800                                                      11/10/2026 14:41:19 PAGE     1
+
+
+MACRO ASSEMBLER A51 V8.2.7.0
+OBJECT MODULE PLACED IN .\Output\STARTUP_APP1800.obj
+ASSEMBLER INVOKED BY: D:\Software\keil\C51\BIN\A51.EXE ..\User\source\Application\STARTUP_APP1800.A51 INCDIR(..\User\inc
+                      lude;..\FU68xx_Hardware_Driver\Include) SET(LARGE) DEBUG PRINT(.\Listings\STARTUP_APP1800.lst) OBJ
+                      ECT(.\Output\STARTUP_APP1800.obj) EP
+
+LOC  OBJ            LINE     SOURCE
+
+                       1     ;=============================================================================
+                       2     ; 文件：STARTUP_APP1800.A51
+                       3     ; 作用：APP 运行在 0x1800 时的启动文件（复位入口 + 中断向量表）
+                       4     ;
+                       5     ; 背景（为什么要这个文件）：
+                       6     ;   8051 的复位/中断向量是硬件固定在 0x0000/0x0003/0x000B ... 的，不能改�
+                             ��
+                       7     ;   APP 搬到 0x1800 以后，0x0000~0x17FF 属于 Bootloader：
+                       8     ;     - 0x0000        -> Bootloader 的复位入口（LJMP 到 boot 代码）
+                       9     ;     - 0x0003~0x007B -> Bootloader 的向量表，内容是 LJMP 1800H+偏移
+                      10     ;   所以 APP 必须：
+                      11     ;     1) 把复位入口放在 0x1800（本文件 ?C_STARTUP，且必须 PUBLIC，
+                      12     ;        因为 main.obj 里对 ?C_STARTUP 有外部引用，不 PUBLIC 就报 L127）；
+                      13     ;     2) 把中断向量表放在 0x1803~0x187B，每个向量 LJMP 到本工程的 C ISR。
+                      14     ;   C51 编译器默认会把向量表生成在 0x0003，所以工程里必须加编译开�
+                             ��
+                      15     ;   NOINTVECTOR（Options for Target -> C51 -> Misc controls），由本文件负责向量�
+                             ��。
+                      16     ;
+                      17     ; 中断映射（与当前工程实测一致，来自 map + hex 反查）：
+                      18     ;   INT0  0x1803  LVW_TSD_INT
+                      19     ;   INT1  0x180B  ISR_DEFAULT（未使用）
+                      20     ;   INT2  0x1813  EXTERN1_INT
+                      21     ;   INT3  0x181B  DRV_ISR        (FOC/PWM 主中断)
+                      22     ;   INT4  0x1823  ISR_DEFAULT
+                      23     ;   INT5  0x182B  ISR_DEFAULT
+                      24     ;   INT6  0x1833  ISR_DEFAULT
+                      25     ;   INT7  0x183B  ISR_DEFAULT    (CMP012_INT 未参与编译)
+                      26     ;   INT8  0x1843  CAN_INT
+                      27     ;   INT9  0x184B  TIM3_INT
+                      28     ;   INT10 0x1853  SYSTICK_INT    (1ms 调度)
+                      29     ;   INT11 0x185B  ISR_DEFAULT
+                      30     ;   INT12 0x1863  CMP3_INT
+                      31     ;   INT13 0x186B  ISR_DEFAULT
+                      32     ;   INT14 0x1873  ISR_DEFAULT
+                      33     ;   INT15 0x187B  ISR_DEFAULT
+                      34     ;
+                      35     ; 【维护提醒】
+                      36     ;   以后新增/删除 interrupt 函数，必须同步改向量表：
+                      37     ;   - 新增：把对应槽位的 ISR_DEFAULT 换成 LJMP 你的ISR，并在 EXTRN 里补�
+                             �字；
+                      38     ;   - 删除：改回 LJMP ISR_DEFAULT，并去掉 EXTRN 里的名字；
+                      39     ;   否则该中断会被静默丢弃（进 ISR_DEFAULT 直接 RETI），现象是"时好�
+                             �坏"。
+                      40     ;
+                      41     ; 启动流程（清 IDATA / 清 XDATA / 设 SP / 跳 ?C_START）与原
+                      42     ;   FU68xx_Hardware_Driver\Source\STARTUP_FU6816.A51 完全一致，未做任何改动。
+                      43     ;=============================================================================
+                      44     $nomod51 
+                      45     
+                      46     ; ---- 内存清零长度（与原厂商启动文件保持一致，不要随意改）------
+                             -------------
+  0100                47     IDATALEN        EQU     256             ; 内部 RAM(idata) 清零字节数
+  0000                48     XDATASTART      EQU     0               ; 外部 RAM(xdata) 清零起始
+  1000                49     XDATALEN        EQU     4096            ; 外部 RAM 清零字节数（与原文件一致）
+                      50     
+A51 MACRO ASSEMBLER  STARTUP_APP1800                                                      11/10/2026 14:41:19 PAGE     2
+
+  0000                51     IBPSTACK        EQU     0
+  0100                52     IBPSTACKTOP     EQU     IDATALEN
+  0000                53     XBPSTACK        EQU     0
+  1000                54     XBPSTACKTOP     EQU     XDATALEN
+                      55     
+                      56     ; ---- 8051 特殊功能寄存器 ---------------------------------------------------
+  00E0                57     ACC     DATA    0E0H
+  00F0                58     B       DATA    0F0H
+  0081                59     SP      DATA    81H
+  0082                60     DPL     DATA    82H
+  0083                61     DPH     DATA    83H
+                      62     
+                      63                     NAME    ?C_STARTUP
+                      64     ?C_C51STARTUP   SEGMENT CODE
+                      65     ?STACK          SEGMENT IDATA
+                      66     
+----                  67                     RSEG    ?STACK
+0000                  68                     DS      1               ; 保留 1 字节，SP 初值 = ?STACK-1
+                      69     
+                      70                     EXTRN CODE (?C_START)
+                      71     
+                      72     ; 这一行必须有：?C_STARTUP 是链接器要用的全局符号（main.obj 有引用）
+                      73                     PUBLIC  ?C_STARTUP
+                      74     
+                      75     ; C 语言中断服务函数（名字必须与 C 源文件里的函数名一致，C51 默�
+                             �输出大写）
+                      76                     EXTRN CODE (LVW_TSD_INT, EXTERN1_INT, DRV_ISR, CAN_INT)
+                      77                     EXTRN CODE (TIM3_INT, SYSTICK_INT, CMP3_INT)
+                      78     
+                      79     ;=============================================================================
+                      80     ; 复位入口 + 中断向量表（整体重定位到 0x1800 起）
+                      81     ;   0x1800       : LJMP STARTUP1
+                      82     ;   0x1803 + 8*n : LJMP <INT n 的服务函数>
+                      83     ;   每条必须是 LJMP(0x02)：boot 跳转前会检查 0x1800 的首字节是不是 0x02
+                      84     ;=============================================================================
+----                  85                     CSEG    AT      1800H
+1800 020000   F       86     ?C_STARTUP:     LJMP    STARTUP1
+                      87     
+----                  88                     CSEG    AT      1803H   ; INT0  LVW / TSD 中断
+1803 020000   F       89                     LJMP    LVW_TSD_INT
+                      90     
+----                  91                     CSEG    AT      180BH   ; INT1  未使用
+180B 020000   F       92                     LJMP    ISR_DEFAULT
+                      93     
+----                  94                     CSEG    AT      1813H   ; INT2  外部中断1
+1813 020000   F       95                     LJMP    EXTERN1_INT
+                      96     
+----                  97                     CSEG    AT      181BH   ; INT3  DRV（FOC/PWM 主中断）
+181B 020000   F       98                     LJMP    DRV_ISR
+                      99     
+----                 100                     CSEG    AT      1823H   ; INT4  TIM2  未使用
+1823 020000   F      101                     LJMP    ISR_DEFAULT
+                     102     
+----                 103                     CSEG    AT      182BH   ; INT5  未使用
+182B 020000   F      104                     LJMP    ISR_DEFAULT
+                     105     
+----                 106                     CSEG    AT      1833H   ; INT6  未使用
+1833 020000   F      107                     LJMP    ISR_DEFAULT
+                     108     
+----                 109                     CSEG    AT      183BH   ; INT7  CMP012 未参与编译
+183B 020000   F      110                     LJMP    ISR_DEFAULT
+                     111     
+----                 112                     CSEG    AT      1843H   ; INT8  CAN
+1843 020000   F      113                     LJMP    CAN_INT
+                     114     
+----                 115                     CSEG    AT      184BH   ; INT9  TIM3
+A51 MACRO ASSEMBLER  STARTUP_APP1800                                                      11/10/2026 14:41:19 PAGE     3
+
+184B 020000   F      116                     LJMP    TIM3_INT
+                     117     
+----                 118                     CSEG    AT      1853H   ; INT10 SysTick（1ms 调度）
+1853 020000   F      119                     LJMP    SYSTICK_INT
+                     120     
+----                 121                     CSEG    AT      185BH   ; INT11 未使用
+185B 020000   F      122                     LJMP    ISR_DEFAULT
+                     123     
+----                 124                     CSEG    AT      1863H   ; INT12 CMP3
+1863 020000   F      125                     LJMP    CMP3_INT
+                     126     
+----                 127                     CSEG    AT      186BH   ; INT13 未使用
+186B 020000   F      128                     LJMP    ISR_DEFAULT
+                     129     
+----                 130                     CSEG    AT      1873H   ; INT14 未使用
+1873 020000   F      131                     LJMP    ISR_DEFAULT
+                     132     
+----                 133                     CSEG    AT      187BH   ; INT15 未使用
+187B 020000   F      134                     LJMP    ISR_DEFAULT
+                     135     
+                     136     ;=============================================================================
+                     137     ; 未使用中断的兜底处理：直接 RETI（防止误触发时跑飞）
+                     138     ;=============================================================================
+----                 139                     RSEG    ?C_C51STARTUP
+0000 32              140     ISR_DEFAULT:    RETI
+                     141     
+                     142     ;=============================================================================
+                     143     ; 标准启动流程：清 IDATA -> 清 XDATA -> 设栈顶 -> 跳 C 语言入口
+                     144     ;=============================================================================
+0001                 145     STARTUP1:
+                     146     
+                     147     IF IDATALEN <> 0
+0001 78FF            148                     MOV     R0,#IDATALEN - 1
+0003 E4              149                     CLR     A
+0004 F6              150     IDATALOOP:      MOV     @R0,A
+0005 D8FD            151                     DJNZ    R0,IDATALOOP
+                     152     ENDIF
+                     153     
+                     154     IF XDATALEN <> 0
+0007 900000          155                     MOV     DPTR,#XDATASTART
+000A 7F00            156                     MOV     R7,#LOW(XDATALEN)
+                     157       IF (LOW (XDATALEN)) <> 0
+                                             MOV     R6,#HIGH(XDATALEN) +1
+                               ELSE
+000C 7E10            160                     MOV     R6,#HIGH(XDATALEN)
+                     161       ENDIF
+000E E4              162                     CLR     A
+000F F0              163     XDATALOOP:      MOVX    @DPTR,A
+0010 A3              164                     INC     DPTR
+0011 DFFC            165                     DJNZ    R7,XDATALOOP
+0013 DEFA            166                     DJNZ    R6,XDATALOOP
+                     167     ENDIF
+                     168     
+                     169     IF IBPSTACK <> 0
+                                             EXTRN DATA (?C_IBP)
+                                             MOV     ?C_IBP,#LOW IBPSTACKTOP
+                             ENDIF
+                     173     
+                     174     IF XBPSTACK <> 0
+                                             EXTRN DATA (?C_XBP)
+                                             MOV     ?C_XBP,#HIGH XBPSTACKTOP
+                                             MOV     ?C_XBP+1,#LOW XBPSTACKTOP
+                             ENDIF
+                     179     
+0015 758100   F      180                     MOV     SP,#?STACK-1    ; 设栈顶（boot 是 LCALL 跳进来，这里会�
+                             ��返回地址丢掉，正常）
+A51 MACRO ASSEMBLER  STARTUP_APP1800                                                      11/10/2026 14:41:19 PAGE     4
+
+0018 020000   F      181                     LJMP    ?C_START
+                     182     
+                     183                     END
+A51 MACRO ASSEMBLER  STARTUP_APP1800                                                      11/10/2026 14:41:19 PAGE     5
+
+SYMBOL TABLE LISTING
+------ ----- -------
+
+
+N A M E             T Y P E  V A L U E   ATTRIBUTES
+
+?C_C51STARTUP. . .  C SEG    001BH       REL=UNIT
+?C_START . . . . .  C ADDR   -----       EXT
+?C_STARTUP . . . .  C ADDR   1800H   A   
+?STACK . . . . . .  I SEG    0001H       REL=UNIT
+ACC. . . . . . . .  D ADDR   00E0H   A   
+B. . . . . . . . .  D ADDR   00F0H   A   
+CAN_INT. . . . . .  C ADDR   -----       EXT
+CMP3_INT . . . . .  C ADDR   -----       EXT
+DPH. . . . . . . .  D ADDR   0083H   A   
+DPL. . . . . . . .  D ADDR   0082H   A   
+DRV_ISR. . . . . .  C ADDR   -----       EXT
+EXTERN1_INT. . . .  C ADDR   -----       EXT
+IBPSTACK . . . . .  N NUMB   0000H   A   
+IBPSTACKTOP. . . .  N NUMB   0100H   A   
+IDATALEN . . . . .  N NUMB   0100H   A   
+IDATALOOP. . . . .  C ADDR   0004H   R   SEG=?C_C51STARTUP
+ISR_DEFAULT. . . .  C ADDR   0000H   R   SEG=?C_C51STARTUP
+LVW_TSD_INT. . . .  C ADDR   -----       EXT
+SP . . . . . . . .  D ADDR   0081H   A   
+STARTUP1 . . . . .  C ADDR   0001H   R   SEG=?C_C51STARTUP
+SYSTICK_INT. . . .  C ADDR   -----       EXT
+TIM3_INT . . . . .  C ADDR   -----       EXT
+XBPSTACK . . . . .  N NUMB   0000H   A   
+XBPSTACKTOP. . . .  N NUMB   1000H   A   
+XDATALEN . . . . .  N NUMB   1000H   A   
+XDATALOOP. . . . .  C ADDR   000FH   R   SEG=?C_C51STARTUP
+XDATASTART . . . .  N NUMB   0000H   A   
+
+
+REGISTER BANK(S) USED: 0 
+
+
+ASSEMBLY COMPLETE.  0 WARNING(S), 0 ERROR(S)

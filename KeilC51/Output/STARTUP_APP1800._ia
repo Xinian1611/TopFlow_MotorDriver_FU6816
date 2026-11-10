@@ -1,0 +1,1 @@
+"..\User\source\Application\STARTUP_APP1800.A51" INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include) SET (LARGE) DEBUG PRINT(.\Listings\STARTUP_APP1800.lst) OBJECT(.\Output\STARTUP_APP1800.obj) EP

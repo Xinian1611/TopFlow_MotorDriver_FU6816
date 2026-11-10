@@ -1,11 +1,11 @@
-C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      09/21/2026 17:11:30 PAGE 1   
+C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      11/10/2026 14:41:16 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE MOTORCONTROL
 OBJECT MODULE PLACED IN .\Output\MotorControl.obj
 COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\User\source\Function\MotorControl.c LARGE OMF2 OPTIMIZE(8,SPEED
-                    -) BROWSE INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include) DEBUG PRINT(.\Listings\MotorControl.lst) TABS(2) OBJE
-                    -CT(.\Output\MotorControl.obj)
+                    -) BROWSE INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include;..\User\source\IAP;..\User\source\RingBuffer) NOINTVEC
+                    -TOR DEBUG PRINT(.\Listings\MotorControl.lst) TABS(2) OBJECT(.\Output\MotorControl.obj)
 
 line level    source
 
@@ -62,7 +62,7 @@ line level    source
   48   2                  {
   49   3                      mcState = mcStop;
   50   3                  }
-C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      09/21/2026 17:11:30 PAGE 2   
+C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      11/10/2026 14:41:16 PAGE 2   
 
   51   2                  else if (mcCurOffset.OffsetFlag == 1)
   52   2                  {
@@ -126,7 +126,7 @@ line level    source
  108   4                          #if (PosCheckEnable == Enable)
                                   mcState                             = mcPosiCheck;
                                   McStaSet.SetFlag.PosiCheckSetFlag   = 0;
-C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      09/21/2026 17:11:30 PAGE 3   
+C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      11/10/2026 14:41:16 PAGE 3   
 
                                   mcFocCtrl.mcPosCheckAngle           = 0xffff;                     // 角度赋初值
                                   #elif (ALIGN_MOME != ALIGN_DSIABLE)
@@ -190,7 +190,7 @@ line level    source
                           break;
               #endif
  171   2      #if (ALIGN_MOME != ALIGN_DSIABLE)           
-C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      09/21/2026 17:11:30 PAGE 4   
+C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      11/10/2026 14:41:16 PAGE 4   
 
  172   2              case mcAlign:
  173   2                  if (isCtrlPowOn == false)
@@ -254,7 +254,7 @@ line level    source
                                   SquStart.StartState         = 1;
                               }
                               #else
-C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      09/21/2026 17:11:30 PAGE 5   
+C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      11/10/2026 14:41:16 PAGE 5   
 
  234   3                      {
  235   4                          Motor_Static_Open();
@@ -318,7 +318,7 @@ line level    source
  292   3                  }
  293   2                  else
  294   2                  {
-C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      09/21/2026 17:11:30 PAGE 6   
+C51 COMPILER V9.60.7.0   MOTORCONTROL                                                      11/10/2026 14:41:16 PAGE 6   
 
  295   3                      ClrBit(DRV_CR, FOCEN);  //FOC 关闭
  296   3                      MOE     = 0;            // 六路桥臂主输出，关闭

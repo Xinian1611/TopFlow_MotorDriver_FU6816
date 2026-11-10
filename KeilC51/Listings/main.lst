@@ -1,11 +1,11 @@
-C51 COMPILER V9.60.7.0   MAIN                                                              09/21/2026 17:11:29 PAGE 1   
+C51 COMPILER V9.60.7.0   MAIN                                                              11/10/2026 14:41:15 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE MAIN
 OBJECT MODULE PLACED IN .\Output\main.obj
 COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\User\source\Application\main.c LARGE OMF2 OPTIMIZE(8,SPEED) BRO
-                    -WSE INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include) DEBUG PRINT(.\Listings\main.lst) TABS(2) OBJECT(.\Output\m
-                    -ain.obj)
+                    -WSE INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include;..\User\source\IAP;..\User\source\RingBuffer) NOINTVECTOR D
+                    -EBUG PRINT(.\Listings\main.lst) TABS(2) OBJECT(.\Output\main.obj)
 
 line level    source
 
@@ -25,27 +25,28 @@ line level    source
   14          ********************************************************************************/
   15          #include <MyProject.h>
   16          #include <SanityCheck.h>
-  17          
-  18          uint8 data g_1mTick = 0;  ///< 1ms滴答信号，每隔1ms在SYSTICK定时器被置1，需在大循环使�
+  17          #include "IapApp.h"
+  18          
+  19          uint8 data g_1mTick = 0;  ///< 1ms滴答信号，每隔1ms在SYSTICK定时器被置1，需在大循环使�
              -��处清零
-  19          
   20          
-  21          /**
-  22              @brief        Function Definition
-  23          */
-  24          void HardwareInit(void);
-  25          void SoftwareInit(void);
-  26          void VREFConfigInit(void);
-  27          static void DebugSet(void);
-  28          
+  21          
+  22          /**
+  23              @brief        Function Definition
+  24          */
+  25          void HardwareInit(void);
+  26          void SoftwareInit(void);
+  27          void VREFConfigInit(void);
+  28          static void DebugSet(void);
   29          
-  30          /**
-  31           * @brief        SPI Debug调试小工具
-  32           * @date         2022-07-14
-  33           */
-  34          static void DebugSet(void)
-  35          {
-  36   1          #if (DBG_MODE ==  DBG_SPI_HW)      // 硬件调试模式
+  30          
+  31          /**
+  32           * @brief        SPI Debug调试小工具
+  33           * @date         2022-07-14
+  34           */
+  35          static void DebugSet(void)
+  36          {
+  37   1          #if (DBG_MODE ==  DBG_SPI_HW)      // 硬件调试模式
                   SPI_Init();
                   Set_DBG_DMA(&HARD_SPIDATA);
                   #elif (DBG_MODE ==  DBG_SPI_SW)   // 软件调试模式
@@ -57,87 +58,88 @@ line level    source
                 #elif (DBG_MODE ==  DBG_UART)
                   _nop_;
                   #endif
-  48   1        
-  49   1            /*******************Observation signal Select*********************/
-  50   1          SetReg(CMP_CR3, DBGSEL0 | DBGSEL1, GP01_DBG_Conf);
-  51   1      }
-  52          
-C51 COMPILER V9.60.7.0   MAIN                                                              09/21/2026 17:11:29 PAGE 2   
+  49   1        
+  50   1            /*******************Observation signal Select*********************/
+  51   1          SetReg(CMP_CR3, DBGSEL0 | DBGSEL1, GP01_DBG_Conf);
+  52   1      }
+C51 COMPILER V9.60.7.0   MAIN                                                              11/10/2026 14:41:15 PAGE 2   
 
-  53          /**
-  54           * @brief     硬件初始化，初始化需要使用的硬件设备配置，FOC必须配置的是运放�
+  53          
+  54          /**
+  55           * @brief     硬件初始化，初始化需要使用的硬件设备配置，FOC必须配置的是运放�
              -�压、运放初始化、ADC初始化、Driver初始化
-  55           *            其他的可根据实际需求加。
-  56           * @date      2022-07-14
-  57           */
-  58          void HardwareInit(void)
-  59          {
-  60   1          // 为提高芯片的抗干扰能力，降低芯片功耗，请在具体项目时，将不需要用的
+  56           *            其他的可根据实际需求加。
+  57           * @date      2022-07-14
+  58           */
+  59          void HardwareInit(void)
+  60          {
+  61   1          // 为提高芯片的抗干扰能力，降低芯片功耗，请在具体项目时，将不需要用的
              -GPIO默认都配置为输入上拉。
-  61   1          //具体配置可在GPIO_Default_Init设置。
-  62   1          //GPIO_Default_Init();
-  63   1          /************************硬件外设初始化**************************/
-  64   1          /* ADC参考电压电压配置 */
-  65   1          VREFConfigInit();
-  66   1          /*  硬件过流，比较器初始化，用于硬件过流比较保护  */
-  67   1          CMP3_Init();
-  68   1          /*  看门狗初始化 */
-  69   1          WatchDogConfig(500);  
-  70   1          /*  GPIO初始化 */    
-  71   1          GPIO_Init();
-  72   1          /* 先ADC初始化，后Driver初始化 */  
-  73   1          ADC_Init();
-  74   1          Driver_Init();
-  75   1          /* 运放AMP初始化 */  
-  76   1          AMP_Init();
-  77   1          /* TIM3初始化，用于信号PWM捕获 */ 
-  78   1          #if (SPEED_MODE == PWMMODE)
+  62   1          //具体配置可在GPIO_Default_Init设置。
+  63   1          //GPIO_Default_Init();
+  64   1          /************************硬件外设初始化**************************/
+  65   1          /* ADC参考电压电压配置 */
+  66   1          VREFConfigInit();
+  67   1          /*  硬件过流，比较器初始化，用于硬件过流比较保护  */
+  68   1          CMP3_Init();
+  69   1          /*  看门狗初始化 */
+  70   1          WatchDogConfig(500);  
+  71   1          /*  GPIO初始化 */    
+  72   1          GPIO_Init();
+  73   1          /* 先ADC初始化，后Driver初始化 */  
+  74   1          ADC_Init();
+  75   1          Driver_Init();
+  76   1          /* 运放AMP初始化 */  
+  77   1          AMP_Init();
+  78   1          /* TIM3初始化，用于信号PWM捕获 */ 
+  79   1          #if (SPEED_MODE == PWMMODE)
                   Timer3_Init();
                   #endif
-  81   1          /* TSD温度传感器初始化 */
-  82   1          TSD_Init();
-  83   1          /*  比较器中断配置，与CMP3硬件配置间隔一段时间等待硬件稳定  */
-  84   1          CMP3_Interrupt_Init();
-  85   1          /* LIN初始化 */
-  86   1          #if (SPEED_MODE == LINMODE)
+  82   1          /* TSD温度传感器初始化 */
+  83   1          TSD_Init();
+  84   1          /*  比较器中断配置，与CMP3硬件配置间隔一段时间等待硬件稳定  */
+  85   1          CMP3_Interrupt_Init();
+  86   1          /* LIN初始化 */
+  87   1          #if (SPEED_MODE == LINMODE)
                   LIN_Init();
                   #endif
-  89   1      
-  90   1        
-  91   1        /*----- Can初始化 -----*/
-  92   1        //CAN_Init();
-  93   1          /*  SYSTICK定时器配置  */
-  94   1          ClrBit(IP2, PSYSTICK1);    //1ms定时中断优先级别为1
-  95   1          SetBit(IP2, PSYSTICK0);
-  96   1          SetBit(DRV_SR, SYSTIE);
-  97   1          EA = 1;
-  98   1      }
-  99          
- 100          
+  90   1      
+  91   1        
+  92   1        /*----- Can初始化 -----*/
+  93   1        //CAN_Init();
+  94   1          CanMin_Init();
+  95   1          /*  SYSTICK定时器配置  */
+  96   1          ClrBit(IP2, PSYSTICK1);    //1ms定时中断优先级别为1
+  97   1          SetBit(IP2, PSYSTICK0);
+  98   1          SetBit(DRV_SR, SYSTIE);
+  99   1          EA = 1;
+ 100   1      }
  101          
- 102          /**
- 103           * @brief        部分变量初始化，上电运行一次
- 104           * @date         2022-07-14
- 105           */
- 106          void SoftwareInit(void)
- 107          {
- 108   1          MotorcontrolInit();
- 109   1        VariablesPreInit();                           // 电机相关变量初始化
- 110   1          mcState         = mcReady;
- 111   1          mcFaultSource   = FaultNoSource;
- 112   1      }
-C51 COMPILER V9.60.7.0   MAIN                                                              09/21/2026 17:11:29 PAGE 3   
+ 102          
+ 103          
+ 104          /**
+ 105           * @brief        部分变量初始化，上电运行一次
+ 106           * @date         2022-07-14
+ 107           */
+ 108          void SoftwareInit(void)
+ 109          {
+ 110   1          MotorcontrolInit();
+ 111   1        VariablesPreInit();                           // 电机相关变量初始化
+ 112   1          mcState         = mcReady;
+C51 COMPILER V9.60.7.0   MAIN                                                              11/10/2026 14:41:15 PAGE 3   
 
- 113          
- 114          
- 115          /**
- 116           * @brief        参考电压，偏置电压配置
- 117           * @date         2022-07-14
- 118           */
- 119          void VREFConfigInit(void)
- 120          {
- 121   1          /************************VREF&VHALF Config************************/
- 122   1          #if (HW_ADC_VREF == VREF3_0)
+ 113   1          mcFaultSource   = FaultNoSource;
+ 114   1      }
+ 115          
+ 116          
+ 117          /**
+ 118           * @brief        参考电压，偏置电压配置
+ 119           * @date         2022-07-14
+ 120           */
+ 121          void VREFConfigInit(void)
+ 122          {
+ 123   1          /************************VREF&VHALF Config************************/
+ 124   1          #if (HW_ADC_VREF == VREF3_0)
                   {
                       SetBit(VREF_VHALF_CR, VRVSEL1);             //00-->4.5V   01-->VDD5
                       ClrBit(VREF_VHALF_CR, VRVSEL0);             //10-->3.0V   11-->4.0V
@@ -148,18 +150,18 @@ line level    source
                       SetBit(VREF_VHALF_CR, VRVSEL0);             //10-->3.0V   11-->4.0V
                   }
                   #elif (HW_ADC_VREF == VREF4_5)
- 133   1          {
- 134   2              ClrBit(VREF_VHALF_CR, VRVSEL1);             //00-->4.5V   01-->VDD5
- 135   2              ClrBit(VREF_VHALF_CR, VRVSEL0);             //10-->3.0V   11-->4.0V
- 136   2          }
- 137   1          #elif (HW_ADC_VREF == VREF5_0)
+ 135   1          {
+ 136   2              ClrBit(VREF_VHALF_CR, VRVSEL1);             //00-->4.5V   01-->VDD5
+ 137   2              ClrBit(VREF_VHALF_CR, VRVSEL0);             //10-->3.0V   11-->4.0V
+ 138   2          }
+ 139   1          #elif (HW_ADC_VREF == VREF5_0)
                   {
                       ClrBit(VREF_VHALF_CR, VRVSEL1);             //00-->4.5V   01-->VDD5
                       SetBit(VREF_VHALF_CR, VRVSEL0);             //10-->3.0V   11-->4.0V
                   }
                   #endif
- 143   1          // VHALF电压配置 00:1/8VREF  01:1/4VREF 10:25/64VREF 11:1/2VREF(default)
- 144   1          #if (HW_VHALF_SEL == VHALF1_8)
+ 145   1          // VHALF电压配置 00:1/8VREF  01:1/4VREF 10:25/64VREF 11:1/2VREF(default)
+ 146   1          #if (HW_VHALF_SEL == VHALF1_8)
                   ClrBit(VREF_VHALF_CR, VHALFSEL1);
                   ClrBit(VREF_VHALF_CR, VHALFSEL0);
                   #elif (HW_VHALF_SEL == VHALF1_4)
@@ -171,80 +173,89 @@ line level    source
                       ClrBit(VREF_VHALF_CR, VHALFSEL0);
                   }
                   #elif (HW_VHALF_SEL == VHALF1_2)
- 156   1          {
- 157   2              SetBit(VREF_VHALF_CR, VHALFSEL1);
- 158   2              SetBit(VREF_VHALF_CR, VHALFSEL0);
- 159   2          }
- 160   1          #else
+ 158   1          {
+ 159   2              SetBit(VREF_VHALF_CR, VHALFSEL1);
+ 160   2              SetBit(VREF_VHALF_CR, VHALFSEL0);
+ 161   2          }
+ 162   1          #else
                   {
               #error " VHALF MODE Err "
                   }
                   #endif
- 165   1          #if (VREF_OUT_EN)
- 166   1          SetBit(P3_AN, P35);                         //VREF Voltage -->P35 Output 是否输出到P35引脚，�
+ 167   1          #if (VREF_OUT_EN)
+ 168   1          SetBit(P3_AN, P35);                         //VREF Voltage -->P35 Output 是否输出到P35引脚，�
              -�同步配置输出
- 167   1          SetBit(P3_OE, P35);                         //VREF Voltage -->P35 Output 是否输出到P35引脚
- 168   1          #endif
- 169   1          #if (VHALF_OUT_EN)
- 170   1          SetBit(P3_AN, P32);
- 171   1          #endif
- 172   1          SetBit(VREF_VHALF_CR, VREFEN | VHALFEN);    //VREF_VHALF_CR = 0x11;
- 173   1          /* ---------------------------------------------------------------------- */
-C51 COMPILER V9.60.7.0   MAIN                                                              09/21/2026 17:11:29 PAGE 4   
+ 169   1          SetBit(P3_OE, P35);                         //VREF Voltage -->P35 Output 是否输出到P35引脚
+ 170   1          #endif
+ 171   1          #if (VHALF_OUT_EN)
+ 172   1          SetBit(P3_AN, P32);
+ 173   1          #endif
+C51 COMPILER V9.60.7.0   MAIN                                                              11/10/2026 14:41:15 PAGE 4   
 
- 174   1      }
- 175          
- 176          
+ 174   1          SetBit(VREF_VHALF_CR, VREFEN | VHALFEN);    //VREF_VHALF_CR = 0x11;
+ 175   1          /* ---------------------------------------------------------------------- */
+ 176   1      }
  177          
- 178          /**
- 179           * @brief        主函数，大循环运行偏置电流采集函数，电机状态机控制函数，以�
+ 178          
+ 179          
+ 180          /**
+ 181           * @brief        主函数，大循环运行偏置电流采集函数，电机状态机控制函数，以�
              -�环路响应函数
- 180           * @date         2022-07-14
- 181           */
- 182          void main(void)
- 183          {
- 184   1          uint16 PowerUpCnt = 0;
- 185   1          
- 186   1          /* ----- 上电空指令延时 等待系统稳定 ----- */
- 187   1          for (PowerUpCnt = 0; PowerUpCnt < SystemPowerUpTime; PowerUpCnt++);
- 188   1          
- 189   1          /* ----- 部分变量初始化 ----- */
- 190   1          SoftwareInit();
- 191   1        
- 192   1          /* ----- 硬件初始化，配置MCU外设 ----- */
- 193   1          HardwareInit();
- 194   1          /* ----- debug配置(SPI调试)，量产程序可以删除 ----- */
- 195   1          DebugSet();
- 196   1          
- 197   1          while (1)
- 198   1          {
- 199   2              /* -----获取电流采样偏置电压----- */
- 200   2              if (!mcCurOffset.OffsetFlag)
- 201   2              {
- 202   3                  GetCurrentOffset();
- 203   3              }
- 204   2              else
- 205   2              {
- 206   3                  /* -----电机控制状态机----- */
- 207   3                  MC_Control();
- 208   3              }
- 209   2              
- 210   2              /* -----1ms处理函数----- */
- 211   2              if (g_1mTick)
+ 182           * @date         2022-07-14
+ 183           */
+ 184          void main(void)
+ 185          {
+ 186   1          uint16 PowerUpCnt = 0;
+ 187   1          
+ 188   1          /* ----- 上电空指令延时 等待系统稳定 ----- */
+ 189   1          for (PowerUpCnt = 0; PowerUpCnt < SystemPowerUpTime; PowerUpCnt++);
+ 190   1          
+ 191   1          /* ----- 部分变量初始化 ----- */
+ 192   1          SoftwareInit();
+ 193   1        
+ 194   1          /* ----- 硬件初始化，配置MCU外设 ----- */
+ 195   1          HardwareInit();
+ 196   1          /* ----- debug配置(SPI调试)，量产程序可以删除 ----- */
+ 197   1          DebugSet();
+ 198   1          /* ----- OTA：读参数页地址 + 清 IAP 状态 ----- */
+ 199   1          IAPData_Init();
+ 200   1          
+ 201   1          while (1)
+ 202   1          {
+ 203   2              /* ----- OTA：Check 应答 / cmd9 停机后擦标志复位 ----- */
+ 204   2              IAPRequestCheck();
+ 205   2      
+ 206   2              /* -----获取电流采样偏置电压----- */
+ 207   2              if (!mcCurOffset.OffsetFlag)
+ 208   2              {
+ 209   3                  GetCurrentOffset();
+ 210   3              }
+ 211   2              else
  212   2              {
- 213   3                  GP12 = ~GP12;       //FICD,下载口复用为GPIO测试引脚 
- 214   3                  WatchDogRefresh();  //喂狗,若不喂狗则MCU复位
- 215   3                  TickCycle_1ms();
- 216   3                  g_1mTick = 0;
- 217   3              }
- 218   2          }
- 219   1      }
+ 213   3                  /* -----电机控制状态机----- */
+ 214   3                  MC_Control();
+ 215   3              }
+ 216   2              
+ 217   2              /* -----1ms处理函数----- */
+ 218   2              if (g_1mTick)
+ 219   2              {
+ 220   3                  GP12 = ~GP12;       //FICD,下载口复用为GPIO测试引脚 
+ 221   3                  WatchDogRefresh();  //喂狗,若不喂狗则MCU复位
+ 222   3                  TickCycle_1ms();
+ 223   3                  CanMin_Poll();          /* 最小 CAN：收指令 + 发日志 */
+ 224   3                  IAPTick1ms();           /* OTA 握手 3s + 停机等待 3s 倒计时 */
+ 225   3                  g_1mTick = 0;
+ 226   3              }
+ 227   2          }
+ 228   1      }
 
 
 MODULE INFORMATION:   STATIC OVERLAYABLE
-   CODE SIZE        =    158    ----
+   CODE SIZE        =    173    ----
    CONSTANT SIZE    =   ----    ----
    XDATA SIZE       =   ----    ----
+C51 COMPILER V9.60.7.0   MAIN                                                              11/10/2026 14:41:15 PAGE 5   
+
    PDATA SIZE       =   ----    ----
    DATA SIZE        =      1    ----
    IDATA SIZE       =   ----    ----
@@ -254,8 +265,6 @@ MODULE INFORMATION:   STATIC OVERLAYABLE
    XDATA CONST SIZE =   ----    ----
    FAR CONST SIZE   =   ----    ----
 END OF MODULE INFORMATION.
-
-C51 COMPILER V9.60.7.0   MAIN                                                              09/21/2026 17:11:29 PAGE 5   
 
 
 C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

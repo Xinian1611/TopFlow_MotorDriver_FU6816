@@ -1,11 +1,11 @@
-C51 COMPILER V9.60.7.0   TSD                                                               09/21/2026 11:30:58 PAGE 1   
+C51 COMPILER V9.60.7.0   TSD                                                               11/10/2026 14:41:18 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE TSD
 OBJECT MODULE PLACED IN .\Output\TSD.obj
 COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\User\source\Hardware\TSD.c LARGE OMF2 OPTIMIZE(8,SPEED) BROWSE 
-                    -INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include) DEBUG PRINT(.\Listings\TSD.lst) TABS(2) OBJECT(.\Output\TSD.ob
-                    -j)
+                    -INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include;..\User\source\IAP;..\User\source\RingBuffer) NOINTVECTOR DEBUG
+                    - PRINT(.\Listings\TSD.lst) TABS(2) OBJECT(.\Output\TSD.obj)
 
 line level    source
 
@@ -62,7 +62,7 @@ line level    source
   51   1      }
 
 
-C51 COMPILER V9.60.7.0   TSD                                                               09/21/2026 11:30:58 PAGE 2   
+C51 COMPILER V9.60.7.0   TSD                                                               11/10/2026 14:41:18 PAGE 2   
 
 MODULE INFORMATION:   STATIC OVERLAYABLE
    CODE SIZE        =     28    ----

@@ -37,17 +37,15 @@
                                              2.电机参数                                                 
 ---------------------------------------------------------------------------------------------------------------------------- */
 /*电机参数值*/
-// 以下参数由 MotorUserControl.c 以运行时变量提供（按配置报文的 motor_type 切换），
-// 故此处必须注释，否则与 float xdata Pole_Pairs/... 定义冲突
-// #define Pole_Pairs                     (7.0)                                    ///<      电机 极对数
-// #define RS                             (0.019)    //(0.025*0.4)                                    ///< (Ω)  电机 相电阻
-// #define LD                             (0.000138*0.99)//(0.000100*0.4)								    ///< (H)  电机 相电感
-// #define LQ                             LD                                     ///< (H)  电机 相电感
-// #define MOTOR_SPEED_BASE               (4096.0)                                ///< (RPM) 速度基准
+#define Pole_Pairs                     (7.0)                                    ///<      电机 极对数
+#define RS                             (0.0163)//0.019    //(0.025*0.4)                                    ///< (Ω)  电机 相电阻
+#define LD                             (0.000143)//(0.000100*0.4)								    ///< (H)  电机 相电感
+#define LQ                             (0.000151)                                     ///< (H)  电机 相电感
+#define MOTOR_SPEED_BASE               (4096.0)                                ///< (RPM) 速度基准
 // 若选择AO自适应观测器 则无需填写Ke
 #define KeVpp                           (7.6832)                                 ///< (V)      反电动势测量的峰峰值
 #define KeT                             (100.40)                                 ///< (ms)     反电动势测量的周期
-// #define Ke                              (Pole_Pairs * KeVpp * KeT / 207.84)     ///< (V/KRPM) 反电动势常数
+#define Ke                              (Pole_Pairs * KeVpp * KeT / 207.84)     ///< (V/KRPM) 反电动势常数
 
 /* ----------------------------------------------------------------------------------------------------------------------------
                                              3.电流采样参数                                                   
@@ -172,7 +170,7 @@
  * @param (ONOFFTEST)     启停测试工具
  * @param (LINMODE)       LIN通信调速
  */
-#define SPEED_MODE                     (CANMODE)           ///< 调速模式      
+#define SPEED_MODE                     (NONEMODE)           ///< 闭环方式选择      
  /* ----------------------------------------------------------------------------------------------------------------------------
                                             2.  转向设置                                               
 ---------------------------------------------------------------------------------------------------------------------------- */
@@ -181,7 +179,7 @@
  * @param (CW)        顺时针
  * @param (CCW)       逆时针
  */
-#define FR_MODE                        (CW)                 ///< 转向设置   
+#define FR_MODE                        (CCW)                 ///< 转向设置   
 /* ----------------------------------------------------------------------------------------------------------------------------
                                             3.  预充电参数与IPMtest                                                  
 ---------------------------------------------------------------------------------------------------------------------------- */
@@ -308,7 +306,7 @@
 
 #define MOTOR_SPEED_SMOMIN_RPM         (50.0)           ///< (RPM) SMO运行最小转速影响启动
 
-#define MOTOR_LOOP_RPM                 S_Value(180.0)    ///< (RPM) 启动后电流环切入外部环路转速阈值
+#define MOTOR_LOOP_RPM                 S_Value(140.0)    ///< (RPM) 启动后电流环切入外部环路转速阈值
 #define SPD_BW                         (5.0)           ///< 速度带宽的滤波值，经典值为5.0-40.0
 /* -----------电流环参数设置值-------------------------------------------------------------- */
 #define DKP                            _Q12(2.50)        ///< 运行DQ轴电流环KP
@@ -316,7 +314,7 @@
 #define QKP                            _Q12(2.50)        ///< 运行DQ轴电流环KP
 #define QKI                            _Q15(0.21)       ///< 运行DQ轴电流环KI
 /* D轴参数设置 */
-#define DOUTMAX                        _Q15(0.9)        ///< D轴电压最大限幅值，单位：输出占空比
+#define DOUTMAX                        _Q15(0.99)        ///< D轴电压最大限幅值，单位：输出占空比
 #define DOUTMIN                        _Q15(-0.9)       ///< D轴电压最小限幅值，单位：输出占空比
 /* Q轴参数设置 */
 #define QOUTMAX                        _Q15(0.99)       ///< Q轴电压最大限幅值，单位：输出占空比
@@ -332,8 +330,7 @@
  * @param (POWER_LOOP_CONTROL)         功率环
  * @param (UQ_LOOP_CONTROL)            UQ环
  */
-// 由 MotorUserControl.c 以运行时变量提供（CAN 电流/转速模式切换用），此处必须注释
-// #define MOTOR_CTRL_MODE                (SPEED_LOOP_CONTROL) ///< 闭环方式选择
+#define MOTOR_CTRL_MODE                (SPEED_LOOP_CONTROL) ///< 闭环方式选择
 
 #define LOOP_TIME                       (1)                 ///< (ms) 外环环调节周期,默认为 1m
 
@@ -341,19 +338,21 @@
 #define MOTOR_SPEED_MAX_RPM            S_Value(1800.0)       ///< (RPM) 运行最大转速
 #define MOTOR_SPEED_STOP_RPM           S_Value(100.0)       ///< (RPM) 运行最小转速  
 
-#define SKP                            _Q12(1.2)//0.6            ///< 外环KP     
-#define SKI                            _Q15(0.008)//0.004           ///< 外环KI
+#define SKP                            _Q12(0.6)            ///< 外环KP     
+#define SKI                            _Q15(0.004)           ///< 外环KI
 #define SKD                            _Q12(0.0)            ///< 外环KD
 
-#define SOUTMAX                        I_Value(125.0)        ///< (A) 外环电流最大限幅值
+#define SOUTMAX                        I_Value(90.0)        ///< (A) 外环电流最大限幅值
 #define SOUTMIN                        I_Value(1.5)        ///< (A) 外环电流最小限幅值
 
 /* -----环路爬坡增量----- */
-// 编译期二选一改为运行时二选一（初版 AddFunction.c 的 Speed_response() 会按 MOTOR_CTRL_MODE 取值）
-#define CURRENT_RAMP_INC               I_Value(0.5)//0.1      ///< (A) 电流环增量
-#define CURRENT_RAMP_DEC               I_Value(0.5)//0.1      ///< (A) 电流环减量
-#define SPEED_RAMP_INC                 SAcc_Value(1800)//200   ///< (RPS) 功率环/速度环每秒爬坡递增量
-#define SPEED_RAMP_DEC                 SAcc_Value(1800)//200   ///< (RPS) 功率环/速度环每秒爬坡递减量
+#if (MOTOR_CTRL_MODE == CURRENT_LOOP_CONTROL) 
+#define RAMP_INC                       I_Value(0.1)      ///< (A) 电流环增量
+#define RAMP_DEC                       I_Value(0.1)      ///< (A) 电流环减量
+#else 
+#define RAMP_INC                       SAcc_Value(1800)      ///< (RPS) 功率环/速度环每秒爬坡递增量
+#define RAMP_DEC                       SAcc_Value(1800)      ///< (RPS) 功率环/速度环每秒爬坡递减量
+#endif
 
 /* ----------------------------------------------------------------------------------------------------------------------------
                                             8.  限流功能参数                                                  
@@ -365,7 +364,7 @@
  */
 #define ADCCurrentbusLitmitEn         (Disable)               // 限流功能使能
 #define ADCCurrentbusPort              ADC11_DR              ///<(A) 母线电流采样端口，需使能相应ADC通道 
-#define Motor_Max_ADCCurrentbus        I_Bus_Value(50.0)     ///< (A) 母线电流限流值
+#define Motor_Max_ADCCurrentbus        I_Bus_Value(60.0)     ///< (A) 母线电流限流值
 #define I_LimitiBus_K                  (1.0)               ///< (A) 系数K，调整限流值
 #define LimitCurrent_KP                _Q12(2.0)             ///< 限流环KP     
 #define LimitCurrent_KI                _Q15(0.02)            ///< 限流环KI
@@ -379,8 +378,8 @@
  * @param (Enable)        使能
  */
 #define Weak_MagneticEn                (Enable)             // 弱磁功能使能
-#define AKP                            _Q12(1.0)             // 弱磁KP
-#define AKI                            _Q15(0.01)            // 弱磁KI
+#define AKP                            _Q12(0.05)//1.0    //0.05    //0.1     // 弱磁KP
+#define AKI                            _Q15(0.001)//0.01  //0.001  //0.001        // 弱磁KI
 #define AKD                            _Q12(0.00)            // 弱磁KD
 #define AMAX                           (0.00)                // (°)角度
 #define AMIN                           (-25.0)               // (°)角度
@@ -438,7 +437,7 @@
 ---------------------------------------------------------------------------------------------------------------------------- */
 
 /* -----启停测试参数配置----- */
-#define ONOFFTEST_REF                  S_Value(200)        ///< (RPM)速度环测试给定，注意闭环方式不同给定值需要更改
+#define ONOFFTEST_REF                  S_Value(0)        ///< (RPM)速度环测试给定，注意闭环方式不同给定值需要更改
 #define ONOFFTEST_CurrentREF           I_Value(10.0)        ///< (A)电流环测试给定，注意闭环方式不同给定值需要更改
 #define ONOFFTEST_PowerREF             (2000)              ///< (W)功率环测试给定，注意闭环方式不同给定值需要更改
 #define ONOFFTEST_ON_TIME              (6000)               ///< (ms) 启动运行时间
@@ -446,7 +445,7 @@
 
 /* -----停机刹车选择----- */
 #define StopBrakeFlag                  (1)
-#define StopWaitTime                   (300)//4000                ///< (ms) 刹车等待时间
+#define StopWaitTime                   (300)                ///< (ms) 刹车等待时间
 #define Stop_MOTOR_SPEED_RPM           S_Value(3000)        ///< (RPM) 小于该转速刹车
 
 /* ----------------------------------------------------------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 ".\Output\main.obj",
 ".\Output\AddFunction.obj",
 ".\Output\Interrupt.obj",
+".\Output\CanMin.obj",
 ".\Output\MotorControl.obj",
 ".\Output\MotorControlFunction.obj",
 ".\Output\MotorProtect.obj",
@@ -25,8 +26,10 @@
 ".\Output\CAN.obj",
 ".\Output\FU68xx_6_Flash.obj",
 ".\Output\WDT.obj",
-".\Output\STARTUP_FU6816.obj" 
+".\Output\STARTUP_APP1800.obj",
+".\Output\IapApp.obj" 
 TO ".\Output\Fortior_FOC_FU68x6" 
 
 PRINT(".\Listings\Fortior_FOC_FU68x6.map") REMOVEUNUSED 
-CLASSES (XDATA (X:0x0-X:0xEF6), HDATA (X:0x0-X:0xEF6)) 
+CLASSES (XDATA (X:0x0-X:0xEF6), HDATA (X:0x0-X:0xEF6), CODE (C:0x1800-C:0x7EFF), CONST (C:0x1800-C:0x7EFF), 
+ECODE (C:0x1800-C:0x7EFF), HCONST (C:0x1800-C:0x7EFF)) 

@@ -1,0 +1,1055 @@
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/10/2026 14:41:16 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE CANMIN
+OBJECT MODULE PLACED IN .\Output\CanMin.obj
+COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\User\source\Application\CanMin.c LARGE OMF2 OPTIMIZE(8,SPEED) B
+                    -ROWSE INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include;..\User\source\IAP;..\User\source\RingBuffer) NOINTVECTOR
+                    - DEBUG PRINT(.\Listings\CanMin.lst) TABS(2) OBJECT(.\Output\CanMin.obj)
+
+line level    source
+
+   1          /**
+   2           * @file      CanMin.c
+   3           * @brief     最小 CAN 功能验证模块（无中断、纯轮询）
+   4           *  设计要点
+   5           * ----------------------------------------------------------------------------
+   6           *   1. 不使用 CAN 中断：
+   7           *        20261030 是 SetBit(CAN_IER, ...RXIE|TXIE|...) + Interrupt.c 的
+   8           *        CAN_INT(interrupt 8) 中断收帧；本模块把 CAN_IER 全部写 0，
+   9           *        在 1ms 任务里轮询 CAN_SR.NOEMP 收帧。两条路径完全独立，
+  10           *        原 CAN.c / CAN.h / Interrupt.c 一行未改。
+  11           *
+  12           *   2. 只有两类报文：
+  13           *        指令 0x042CF081（8 字节，优先级 2，主机 -> 驱动板）
+  14           *        状态 0x062CF081（8 字节，优先级 3，驱动板 -> 主机，150ms）
+  15           *
+  16           *   3. 过滤器放行全部扩展帧，地址在软件层比对（和 20261030 的 CAN_Init 一样）。
+  17           *
+  18           *   4. 发送非阻塞：
+  19           *        20261030 的 CAN_Send() 是 while(!TXSUC) 死等（10000 次超时）；
+  20           *        本模块上一帧没发完就跳过本周期，另加 CAN_TX_TIMEOUT_MS 超时重发，
+  21           *        保证 1ms 任务绝不被 CAN 发送拖住。
+  22           *
+  23           *   5. 控制映射与 20261030 的 TargetRef_Process() CANMODE 分支一致：
+  24           *        急停 -> Ref=0、isCtrlPowOn=0；
+  25           *        起机/停机 -> isCtrlPowOn = g_run_state.is_started；
+  26           *        换向 -> 先减速到 50rpm 以下再切 mcFocCtrl.FR；
+  27           *        目标 -> mcFocCtrl.Ref = S_Value(g_run_state.ref)。
+  28           * ============================================================================
+  29           */
+  30          
+  31          #include <MyProject.h>
+  32          #include <string.h>
+  33          #include "IapApp.h"
+  34          
+  35          /* ==========================================================================
+  36           *  一、工程量换算（与 20261030 的 CanSlave.c 完全一致）
+  37           * ========================================================================== */
+  38          /* 速度：Q15 -> rpm。
+  39           * mcFocCtrl.SpeedFlt 是 Q15（32767 对应 MOTOR_SPEED_BASE = 4096rpm），
+  40           * 除以 32767 再乘基准，就是实际转速。 */
+  41          #define CANMIN_S2F(x)   ((float)(x) / 32767.0f * MOTOR_SPEED_BASE)
+  42          
+  43          /* 电流：Q15 -> A。
+  44           * 电流采样链路的满量程 = HW_ADC_REF / (HW_RSHUNT * HW_AMPGAIN)，
+  45           * 本板：4.5V / (0.001Ω * 16) = 281.25A（对应 32767）。 */
+  46          #define CANMIN_I2F(x)   ((float)(x) / 32767.0f * (float)HW_ADC_REF / ((float)HW_RSHUNT * (float)HW_AMPGAIN
+             -))
+  47          
+  48          /* 母线电压：Q15 -> V。满量程 = HW_BOARD_VOLT_MAX（由分压电阻决定）。 */
+  49          #define CANMIN_U2F(x)   ((float)(x) / 32767.0f * (float)HW_BOARD_VOLT_MAX)
+  50          
+  51          /* ==========================================================================
+  52           *  二、全局变量
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/10/2026 14:41:16 PAGE 2   
+
+  53           * ========================================================================== */
+  54          
+  55          /* 电机运行状态：CAN 指令解析后写这里，CanMin_ApplyCmd() 读这里。
+  56           * 字段与 20261030 的 MotorUserControl.h 完全一致，可以直接对照。 */
+  57          MotorRunState_t xdata g_run_state;
+  58          
+  59          /* 通信统计：Keil Watch 里展开 g_canmin_stat 就能看到通信是否正常。 */
+  60          CanMinStat_t xdata g_canmin_stat;
+  61          
+  62          /* 当前接收帧 / 待发送帧。
+  63           * 结构体 CAN_Data 来自 CAN.h，字段：
+  64           *   CAN_IDE(0x80=扩展帧) / CAN_RTR / CAN_DLC / EXTID / STDID / Data0~Data7
+  65           * 名字不能叫 Can/CanSend —— 原 CAN.c 里已经定义了，会重复定义。 */
+  66          CAN_Data xdata CanMin;          /* 接收帧 */
+  67          CAN_Data xdata CanMinSend;      /* 发送帧（对应 20261030 的 CanSend） */
+  68          
+  69          /* ==========================================================================
+  70           *  三、模块内部状态
+  71           * ========================================================================== */
+  72          
+  73          /* 状态帧周期计数：每 1ms +1，到 CAN_STATUS_PERIOD_MS 发一帧。
+  74           * 对应 20261030 CanSlave.c 里的 g_ext_status_cnt。 */
+  75          static uint16 xdata g_canmin_status_cnt;
+  76          
+  77          /* 发送就绪标志：1=可以写发送寄存器；0=上一帧还没发完。
+  78           * 20261030 用 while(!TXSUC) 等，这里用状态机，避免阻塞。 */
+  79          static uint8  xdata g_canmin_tx_ready;
+  80          
+  81          /* 发送等待计时（ms）：g_canmin_tx_ready=0 时累加，超过 CAN_TX_TIMEOUT_MS 强制重发 */
+  82          static uint16 xdata g_canmin_tx_wait;
+  83          
+  84          /* bus-off 边沿检测：只在“进入”bus-off 时计一次数 */
+  85          static uint8  xdata g_canmin_busoff_seen;
+  86          
+  87          /* bus-off 重试计时(ms)：恢复一次后若还没退出，间隔 10ms 再试 */
+  88          static uint16 xdata g_canmin_busoff_ms;
+  89          
+  90          #if (CAN_CMD_TIMEOUT_MS > 0)
+  91          /* 指令超时计数：超过 CAN_CMD_TIMEOUT_MS 没收到有效指令就自动停机 */
+  92          static uint16 xdata g_canmin_cmd_timeout;
+  93          #endif
+  94          
+  95          /* 前置声明：
+  96           * CanMin_MsgParse() 在下面第 229 行左右会调用 CanMin_ProcessCmd()，
+  97           * 而它的定义在后面。C51 看不到原型时会先把这次调用当成“隐式 int 函数”，
+  98           * 等后面真正定义时报 C231 redefinition。这里先声明一次即可。 */
+  99          static void CanMin_ProcessCmd(void);
+ 100          
+ 101          /* ==========================================================================
+ 102           *  四、接收：把当前 FIFO 里最老的一帧读进 CanMin
+ 103           * --------------------------------------------------------------------------
+ 104           *  这是 20261030 的 CAN_Read() 去掉环形缓冲后的版本，读法逐字节一致：
+ 105           *    - CAN_CR2[RDPTR1:RDPTR0] 指示当前该读哪个接收缓冲（RX0/RX1/RX2）
+ 106           *    - 每个缓冲有 控制寄存器(IDE/RTR/DLC) + 4 个 ID 字节 + 8 个数据字节
+ 107           *    - 扩展帧 ID 重组：ID0<<21 | ID1<<13 | ID2<<5 | ID3>>3
+ 108           *    - 标准帧 ID 重组：ID0<<3 | ID1>>5
+ 109           *  读完由调用者置 CAN_CR1.BUFRLS 释放该缓冲。
+ 110           * ========================================================================== */
+ 111          static void CanMin_ReadFrame(void)
+ 112          {
+ 113   1          uint8 rdptr;
+ 114   1      
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/10/2026 14:41:16 PAGE 3   
+
+ 115   1          /* 读指针：0x00=RX0, 0x40=RX1, 0x80=RX2 */
+ 116   1          rdptr = CAN_CR2 & (RDPTR1 | RDPTR0);
+ 117   1      
+ 118   1          switch (rdptr)
+ 119   1          {
+ 120   2              /* ---------------------------- 接收缓冲 0 ---------------------------- */
+ 121   2              case (0 | 0):
+ 122   2                  CanMin.CAN_IDE = (CAN_RX0CR & 0x80);      /* 0x80=扩展帧，0=标准帧 */
+ 123   2                  CanMin.CAN_RTR = (CAN_RX0CR & 0x40);      /* 0x40=远程帧 */
+ 124   2                  CanMin.CAN_DLC = (CAN_RX0CR & 0x0F);      /* 数据长度 0~8 */
+ 125   2      
+ 126   2                  if (CanMin.CAN_IDE)
+ 127   2                  {
+ 128   3                      CanMin.EXTID  = 0;
+ 129   3                      CanMin.EXTID |= ((uint32)CAN_RX0ID0 << 21);
+ 130   3                      CanMin.EXTID |= ((uint32)CAN_RX0ID1 << 13);
+ 131   3                      CanMin.EXTID |= ((uint32)CAN_RX0ID2 << 5);
+ 132   3                      CanMin.EXTID |= ((uint32)CAN_RX0ID3 >> 3);
+ 133   3                  }
+ 134   2                  else
+ 135   2                  {
+ 136   3                      CanMin.STDID  = 0;
+ 137   3                      CanMin.STDID |= ((uint32)CAN_RX0ID0 << 3);
+ 138   3                      CanMin.STDID |= (uint32)(CAN_RX0ID1 >> 5);
+ 139   3                  }
+ 140   2      
+ 141   2                  CanMin.Data0 = CAN_RX0DR0;
+ 142   2                  CanMin.Data1 = CAN_RX0DR1;
+ 143   2                  CanMin.Data2 = CAN_RX0DR2;
+ 144   2                  CanMin.Data3 = CAN_RX0DR3;
+ 145   2                  CanMin.Data4 = CAN_RX0DR4;
+ 146   2                  CanMin.Data5 = CAN_RX0DR5;
+ 147   2                  CanMin.Data6 = CAN_RX0DR6;
+ 148   2                  CanMin.Data7 = CAN_RX0DR7;
+ 149   2                  break;
+ 150   2      
+ 151   2              /* ---------------------------- 接收缓冲 1 ---------------------------- */
+ 152   2              case RDPTR0:
+ 153   2                  CanMin.CAN_IDE = (CAN_RX1CR & 0x80);
+ 154   2                  CanMin.CAN_RTR = (CAN_RX1CR & 0x40);
+ 155   2                  CanMin.CAN_DLC = (CAN_RX1CR & 0x0F);
+ 156   2      
+ 157   2                  if (CanMin.CAN_IDE)
+ 158   2                  {
+ 159   3                      CanMin.EXTID  = 0;
+ 160   3                      CanMin.EXTID |= ((uint32)CAN_RX1ID0 << 21);
+ 161   3                      CanMin.EXTID |= ((uint32)CAN_RX1ID1 << 13);
+ 162   3                      CanMin.EXTID |= ((uint32)CAN_RX1ID2 << 5);
+ 163   3                      CanMin.EXTID |= ((uint32)CAN_RX1ID3 >> 3);
+ 164   3                  }
+ 165   2                  else
+ 166   2                  {
+ 167   3                      CanMin.STDID  = 0;
+ 168   3                      CanMin.STDID |= ((uint32)CAN_RX1ID0 << 3);
+ 169   3                      CanMin.STDID |= (uint32)(CAN_RX1ID1 >> 5);
+ 170   3                  }
+ 171   2      
+ 172   2                  CanMin.Data0 = CAN_RX1DR0;
+ 173   2                  CanMin.Data1 = CAN_RX1DR1;
+ 174   2                  CanMin.Data2 = CAN_RX1DR2;
+ 175   2                  CanMin.Data3 = CAN_RX1DR3;
+ 176   2                  CanMin.Data4 = CAN_RX1DR4;
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/10/2026 14:41:16 PAGE 4   
+
+ 177   2                  CanMin.Data5 = CAN_RX1DR5;
+ 178   2                  CanMin.Data6 = CAN_RX1DR6;
+ 179   2                  CanMin.Data7 = CAN_RX1DR7;
+ 180   2                  break;
+ 181   2      
+ 182   2              /* ---------------------------- 接收缓冲 2 ---------------------------- */
+ 183   2              case RDPTR1:
+ 184   2                  CanMin.CAN_IDE = (CAN_RX2CR & 0x80);
+ 185   2                  CanMin.CAN_RTR = (CAN_RX2CR & 0x40);
+ 186   2                  CanMin.CAN_DLC = (CAN_RX2CR & 0x0F);
+ 187   2      
+ 188   2                  if (CanMin.CAN_IDE)
+ 189   2                  {
+ 190   3                      CanMin.EXTID  = 0;
+ 191   3                      CanMin.EXTID |= ((uint32)CAN_RX2ID0 << 21);
+ 192   3                      CanMin.EXTID |= ((uint32)CAN_RX2ID1 << 13);
+ 193   3                      CanMin.EXTID |= ((uint32)CAN_RX2ID2 << 5);
+ 194   3                      CanMin.EXTID |= ((uint32)CAN_RX2ID3 >> 3);
+ 195   3                  }
+ 196   2                  else
+ 197   2                  {
+ 198   3                      CanMin.STDID  = 0;
+ 199   3                      CanMin.STDID |= ((uint32)CAN_RX2ID0 << 3);
+ 200   3                      CanMin.STDID |= (uint32)(CAN_RX2ID1 >> 5);
+ 201   3                  }
+ 202   2      
+ 203   2                  CanMin.Data0 = CAN_RX2DR0;
+ 204   2                  CanMin.Data1 = CAN_RX2DR1;
+ 205   2                  CanMin.Data2 = CAN_RX2DR2;
+ 206   2                  CanMin.Data3 = CAN_RX2DR3;
+ 207   2                  CanMin.Data4 = CAN_RX2DR4;
+ 208   2                  CanMin.Data5 = CAN_RX2DR5;
+ 209   2                  CanMin.Data6 = CAN_RX2DR6;
+ 210   2                  CanMin.Data7 = CAN_RX2DR7;
+ 211   2                  break;
+ 212   2      
+ 213   2              default:
+ 214   2                  break;
+ 215   2          }
+ 216   1      }
+ 217          
+ 218          /* ==========================================================================
+ 219           *  五、报文分发：只认本机指令 ID 和广播 ID
+ 220           * --------------------------------------------------------------------------
+ 221           *  对应 20261030 的 CAN_MsgParse() + ext_slave_process_rx() 里的地址过滤部分。
+ 222           *  这里不做多帧组装（配置报文不用），只处理 8 字节单帧指令。
+ 223           * ========================================================================== */
+ 224          static void CanMin_MsgParse(void)
+ 225          {
+ 226   1          /* 只处理扩展帧 */
+ 227   1          if (CanMin.CAN_IDE != IDE_EXT)
+ 228   1          {
+ 229   2              g_canmin_stat.RxOther++;
+ 230   2              return;
+ 231   2          }
+ 232   1      
+ 233   1          /* 本机指令帧 0x042CF081 或广播帧 0x042CF001 */
+ 234   1          if ((CanMin.EXTID == CAN_CMD_ID) || (CanMin.EXTID == CAN_CMD_ID_BCAST))
+ 235   1          {
+ 236   2              /* 指令报文固定 8 字节，长度不对直接丢（同 20261030 的 len != 8） */
+ 237   2              if (CanMin.CAN_DLC == CAN_FRAME_DATA_LEN)
+ 238   2              {
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/10/2026 14:41:16 PAGE 5   
+
+ 239   3                  CanMin_ProcessCmd();
+ 240   3              }
+ 241   2              else
+ 242   2              {
+ 243   3                  g_canmin_stat.RxOther++;
+ 244   3              }
+ 245   2          }
+ 246   1          else
+ 247   1          {
+ 248   2              g_canmin_stat.RxOther++;
+ 249   2          }
+ 250   1      }
+ 251          
+ 252          /* ==========================================================================
+ 253           *  六、指令解析
+ 254           * --------------------------------------------------------------------------
+ 255           *  对应 20261030 CanSlave.c 的 ext_process_cmd_message()。
+ 256           *  处理顺序（和 20261030 完全一致，顺序不能乱）：
+ 257           *      ① 急停（最高优先级，急停帧不再往下处理）
+ 258           *      ② 转速模式 + 0%（raw==32767）-> 直接停机
+ 259           *      ③ 启停
+ 260           *      ④ 工作模式（只认转速模式）
+ 261           *      ⑤ 目标值
+ 262           * ========================================================================== */
+ 263          static void CanMin_ProcessCmd(void)
+ 264          {
+ 265   1          uint8  dat[CAN_FRAME_DATA_LEN];   /* 先拷成 8 字节数组，方便按协议结构体解析 */
+ 266   1          ExtCmdMsg_t *msg;
+ 267   1          uint8  ctrl;
+ 268   1          uint8  work_mode;
+ 269   1          uint8  startstop;
+ 270   1          uint8  estop;
+ 271   1          uint16 cur_raw;
+ 272   1          uint16 speed_raw;
+ 273   1      
+ 274   1          dat[0] = CanMin.Data0;
+ 275   1          dat[1] = CanMin.Data1;
+ 276   1          dat[2] = CanMin.Data2;
+ 277   1          dat[3] = CanMin.Data3;
+ 278   1          dat[4] = CanMin.Data4;
+ 279   1          dat[5] = CanMin.Data5;
+ 280   1          dat[6] = CanMin.Data6;
+ 281   1          dat[7] = CanMin.Data7;
+ 282   1      
+ 283   1          msg = (ExtCmdMsg_t *)dat;
+ 284   1      
+ 285   1          /* ---- Byte0: ctrl 位域 ---- */
+ 286   1          ctrl      = msg->ctrl.value;
+ 287   1          work_mode = EXT_GET_WORKMODE(ctrl);
+ 288   1          startstop = EXT_GET_STARTSTOP(ctrl);
+ 289   1          estop     = EXT_GET_ESTOP(ctrl);
+ 290   1      
+ 291   1          /* ---- Byte1-2 / Byte3-4: 目标转速 / 目标电流（大端，零点 32767） ----
+ 292   1           * 注意必须按无符号读：正数的 raw 一定 > 32767，用 int16 会变成大负数。 */
+ 293   1          speed_raw = EXT_GET_U16(msg->target_speed_hi,   msg->target_speed_lo);
+ 294   1          cur_raw   = EXT_GET_U16(msg->target_current_hi, msg->target_current_lo);
+ 295   1      
+ 296   1          g_canmin_stat.RxCmdOk++;
+ 297   1      
+ 298   1      #if (CAN_CMD_TIMEOUT_MS > 0)
+ 299   1          g_canmin_cmd_timeout = 0;         /* 收到有效指令，清通信超时计数 */
+ 300   1      #endif
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/10/2026 14:41:16 PAGE 6   
+
+ 301   1          g_run_state.fault_code = FAULT_NONE;   /* 清上一次“通信异常停机”的故障码 */
+ 302   1      
+ 303   1          /* ---- ① 急停：1=急停 2=非急停；0=无操作、3=无效值 -> 保持原状态 ----
+ 304   1           * 急停帧不再往下处理启停/给定。 */
+ 305   1          if (estop == EXT_ESTOP_ACTIVE)
+ 306   1          {
+ 307   2              CanMin_SetEstop(1);
+ 308   2              return;
+ 309   2          }
+ 310   1          if (estop == EXT_ESTOP_RELEASE)
+ 311   1          {
+ 312   2              CanMin_SetEstop(0);
+ 313   2          }
+ 314   1      
+ 315   1          /* ---- ② 转速模式 + 0%(raw == 32767)：直接按停机处理 ----
+ 316   1           * 必须放在“起机”之前：否则每个 0% 帧都会先 SetRun(1) 再 SetRun(0)，
+ 317   1           * 状态机会抖一下（预充电/预定位跑一半又被拉回停止）。 */
+ 318   1          if ((g_run_state.work_mode == EXT_WORK_MODE_SPEED) && (speed_raw == 32767))
+ 319   1          {
+ 320   2              CanMin_SetRun(0);                       /* 撤给定 + 进 mcStop */
+ 321   2              CanMin_SetTarget(cur_raw, speed_raw);   /* 内部把 ref 置 0 */
+ 322   2              return;                                 /* 不再走起机流程 */
+ 323   2          }
+ 324   1      
+ 325   1          /* ---- ③ 启停：1=起机 2=停机；0=无操作、3=无效值 -> 保持原状态 ---- */
+ 326   1          if (startstop == EXT_STARTSTOP_START)
+ 327   1          {
+ 328   2              CanMin_SetRun(1);
+ 329   2          }
+ 330   1          else if (startstop == EXT_STARTSTOP_STOP)
+ 331   1          {
+ 332   2              CanMin_SetRun(0);
+ 333   2          }
+ 334   1      
+ 335   1          /* ---- ④ 工作模式：最小版只支持转速模式 ----
+ 336   1           * 电流模式需要运行时切换 MOTOR_CTRL_MODE，那会改动电机控制结构，
+ 337   1           * 所以这里只接受 EXT_WORK_MODE_SPEED，收到 1(电流) 时忽略。 */
+ 338   1          if (work_mode == EXT_WORK_MODE_SPEED)
+ 339   1          {
+ 340   2              CanMin_SetMode(EXT_WORK_MODE_SPEED);
+ 341   2          }
+ 342   1      
+ 343   1          /* ---- ⑤ 目标值 ---- */
+ 344   1          CanMin_SetTarget(cur_raw, speed_raw);
+ 345   1      }
+ 346          
+ 347          /* ==========================================================================
+ 348           *  七、控制层：对应 20261030 MotorUserControl.c 的 MotorCtrl_SetXxx()
+ 349           * ========================================================================== */
+ 350          
+ 351          /**
+ 352           * @brief  设置急停状态
+ 353           * @param  state 0=非急停，1=急停
+ 354           * @note   急停时把给定清零；解除急停后需要重新发“起机+目标”。
+ 355           */
+ 356          void CanMin_SetEstop(uint8 state)
+ 357          {
+ 358   1          g_run_state.is_estop = state;
+ 359   1          if (state)
+ 360   1          {
+ 361   2              g_run_state.ref      = 0;
+ 362   2              g_run_state.run_time = 0;
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/10/2026 14:41:16 PAGE 7   
+
+ 363   2          }
+ 364   1      }
+ 365          
+ 366          /**
+ 367           * @brief  设置启停状态
+ 368           * @param  state 0=停机，1=起机
+ 369           * @note   停机时撤给定（ref=0），再起机必须重新下发速度 —— 与 20261030 一致。
+ 370           */
+ 371          void CanMin_SetRun(uint8 state)
+ 372          {
+ 373   1          if (state == g_run_state.is_started)
+ 374   1          {
+ 375   2              return;
+ 376   2          }
+ 377   1      
+ 378   1          g_run_state.is_started = state;
+ 379   1      
+ 380   1          if (g_run_state.is_started == 0)
+ 381   1          {
+ 382   2              g_run_state.run_time         = 0;
+ 383   2              g_run_state.ref              = 0.0f;
+ 384   2              g_run_state.reversal_braking = 0;
+ 385   2          }
+ 386   1      }
+ 387          
+ 388          /**
+ 389           * @brief  设置工作模式
+ 390           * @param  mode EXT_WORK_MODE_SPEED(2) 或 EXT_WORK_MODE_CURRENT(1)
+ 391           * @note   最小版只支持转速模式；电流模式需要改 MOTOR_CTRL_MODE，
+ 392           *         会破坏“不改电机控制结构”的约束，所以这里直接忽略。
+ 393           */
+ 394          void CanMin_SetMode(uint8 mode)
+ 395          {
+ 396   1          if (mode != EXT_WORK_MODE_SPEED)
+ 397   1          {
+ 398   2              return;
+ 399   2          }
+ 400   1      
+ 401   1          if (mode == g_run_state.work_mode)
+ 402   1          {
+ 403   2              return;
+ 404   2          }
+ 405   1      
+ 406   1          g_run_state.work_mode = mode;
+ 407   1      }
+ 408          
+ 409          /**
+ 410           * @brief  设置目标值（正数正转，负数反转）
+ 411           * @param  current 目标电流：0.01A，32767 = 0A
+ 412           * @param  speed   目标转速：0.01%，32767 = 0%，±10000 = ±100%
+ 413           * @note   ① 必须按无符号收：正数 raw 一定 >32767，用 int16 会变成大负数；
+ 414           *         ② 0% 只表示“目标 0”，停机由启停字段负责（见 CanMin_ProcessCmd）；
+ 415           *         ③ 20261030 用 g_motor_cfg->max_speed / idle_speed 做标定，
+ 416           *            最小版没有 EEPROM，改用 CanConfig.h 的 CAN_PCT100_RPM / CAN_IDLE_RPM。
+ 417           */
+ 418          void CanMin_SetTarget(uint16 current, uint16 speed)
+ 419          {
+ 420   1          int32 v;
+ 421   1          float mag;
+ 422   1      
+ 423   1          if (g_run_state.is_estop)
+ 424   1          {
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/10/2026 14:41:16 PAGE 8   
+
+ 425   2              return;                                 /* 急停中不接受目标 */
+ 426   2          }
+ 427   1      
+ 428   1          if (g_run_state.work_mode == EXT_WORK_MODE_CURRENT)
+ 429   1          {
+ 430   2              /* 电流模式：0.01A -> A，存绝对值，方向由符号决定 */
+ 431   2              v   = (int32)current - 32767;
+ 432   2              mag = (v >= 0) ? (float)v : (float)(-v);
+ 433   2              /* 正数目标 = FR_MODE 方向；负数 = 反方向。
+ 434   2               * 20261030 的 Customer.h 是 FR_MODE=CW，所以它写死 CW/CCW；
+ 435   2               * 本工程对齐 20260923 后 FR_MODE=CCW，这里必须跟着 FR_MODE 走。 */
+ 436   2              if (v >= 0)
+ 437   2              {
+ 438   3                  g_run_state.direction = FR_MODE;
+ 439   3              }
+ 440   2              else
+ 441   2              {
+ 442   3                  g_run_state.direction = (FR_MODE == CW) ? CCW : CW;
+ 443   3              }
+ 444   2              g_run_state.ref       = mag / 100.0f;
+ 445   2          }
+ 446   1          else
+ 447   1          {
+ 448   2              /* 转速模式：0.01% -> rpm */
+ 449   2              v   = (int32)speed - 32767;
+ 450   2              mag = (v >= 0) ? (float)v : (float)(-v);
+ 451   2              if (mag > 10000.0f)
+ 452   2              {
+ 453   3                  mag = 10000.0f;                     /* 钳到 ±100% */
+ 454   3              }
+ 455   2      
+ 456   2              /* 正数目标 = FR_MODE 方向；负数 = 反方向。
+ 457   2               * 20261030 的 Customer.h 是 FR_MODE=CW，所以它写死 CW/CCW；
+ 458   2               * 本工程对齐 20260923 后 FR_MODE=CCW，这里必须跟着 FR_MODE 走。 */
+ 459   2              if (v >= 0)
+ 460   2              {
+ 461   3                  g_run_state.direction = FR_MODE;
+ 462   3              }
+ 463   2              else
+ 464   2              {
+ 465   3                  g_run_state.direction = (FR_MODE == CW) ? CCW : CW;
+ 466   3              }
+ 467   2      
+ 468   2              if (mag <= 0.0f)
+ 469   2              {
+ 470   3                  g_run_state.ref = 0.0f;             /* 0% = 目标 0 */
+ 471   3              }
+ 472   2              else
+ 473   2              {
+ 474   3                  /* 非零指令：0.01%~100% 线性映射到 [CAN_MIN_RPM, CAN_PCT100_RPM]。
+ 475   3                   * CAN_MIN_RPM / CAN_PCT100_RPM 都来自 Customer.h 的
+ 476   3                   * MOTOR_SPEED_MIN_RPM / MOTOR_SPEED_MAX_RPM，
+ 477   3                   * 所以 0.01% 不会掉到电机稳不住的转速。 */
+ 478   3                  g_run_state.ref = CAN_MIN_RPM + (CAN_PCT100_RPM - CAN_MIN_RPM) * (mag / 10000.0f);
+ 479   3              }
+ 480   2          }
+ 481   1      }
+ 482          
+ 483          /* ==========================================================================
+ 484           *  八、状态帧组帧
+ 485           * --------------------------------------------------------------------------
+ 486           *  对应 20261030 CanSlave.c 的 ext_build_status()，字节定义见 CanProtocol.h：
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/10/2026 14:41:16 PAGE 9   
+
+ 487           *      Byte0    ctrl：工作模式 + 启停 + 急停 回显
+ 488           *      Byte1-2  实际转速（1rpm，32767=0，负=反转）
+ 489           *      Byte3-4  相电流（0.01A，32767=0）
+ 490           *      Byte5-6  功率（1W，32767=0）
+ 491           *      Byte7    故障码（0xFF=无故障）
+ 492           * ========================================================================== */
+ 493          static void CanMin_BuildStatus(uint8 *buf)
+ 494          {
+ 495   1          ExtStatusMsg_t *msg;
+ 496   1          int16 speed;
+ 497   1          int16 current;
+ 498   1          int16 power;
+ 499   1          uint8 ctrl;
+ 500   1      
+ 501   1          msg = (ExtStatusMsg_t *)buf;
+ 502   1          memset(msg, 0xFF, sizeof(ExtStatusMsg_t));
+ 503   1      
+ 504   1          /* ---- Byte0: ctrl 回显 ---- */
+ 505   1          ctrl = 0;
+ 506   1          EXT_SET_WORKMODE(ctrl, g_run_state.work_mode);
+ 507   1          EXT_SET_STARTSTOP(ctrl, (g_run_state.is_started != 0) ? EXT_STARTSTOP_START : EXT_STARTSTOP_STOP);
+ 508   1          EXT_SET_ESTOP(ctrl, (g_run_state.is_estop != 0) ? EXT_ESTOP_ACTIVE : EXT_ESTOP_RELEASE);
+ 509   1          msg->ctrl.value = ctrl;
+ 510   1      
+ 511   1          /* ---- Byte1-2: 实际转速 ---- */
+ 512   1          speed = (int16)CANMIN_S2F(mcFocCtrl.SpeedFlt);
+ 513   1          if (mcFocCtrl.FR == CCW)
+ 514   1          {
+ 515   2              speed = -speed;                         /* 协议：负值 = 反转 */
+ 516   2          }
+ 517   1          EXT_SET_I16(msg->speed_hi, msg->speed_lo, speed + 32767);
+ 518   1      
+ 519   1          /* ---- Byte3-4: 相电流（Q轴电流，0.01A） ---- */
+ 520   1          current = (int16)(CANMIN_I2F(FOC__IQ) * 100.0f);
+ 521   1          EXT_SET_I16(msg->current_hi, msg->current_lo, current + 32767);
+ 522   1      
+ 523   1          /* ---- Byte5-6: 功率（1W） ---- */
+ 524   1          power = mcFocCtrl.PowerFlt;
+ 525   1          EXT_SET_I16(msg->power_hi, msg->power_lo, power + 32767);
+ 526   1      
+ 527   1          /* ---- Byte7: 故障码 ----
+ 528   1           * 优先上报通信超时置的 g_run_state.fault_code（0x87 = 三级/通信异常停机）；
+ 529   1           * 其次是电机故障（mcFaultSource 非 0 时粗报 0x80）；
+ 530   1           * 都没有就是 0xFF。具体故障码可在 Keil 里看 mcFaultSource。 */
+ 531   1          if (g_run_state.fault_code != FAULT_NONE)
+ 532   1          {
+ 533   2              msg->fault_code = g_run_state.fault_code;
+ 534   2          }
+ 535   1          else if (mcFaultSource != FaultNoSource)
+ 536   1          {
+ 537   2              msg->fault_code = FAULT_BUILD(FAULT_LEVEL_3, 0);
+ 538   2          }
+ 539   1          else
+ 540   1          {
+ 541   2              msg->fault_code = FAULT_NONE;
+ 542   2          }
+ 543   1      }
+ 544          
+ 545          /* ==========================================================================
+ 546           *  九、发送
+ 547           * --------------------------------------------------------------------------
+ 548           *  对应 20261030 的 CAN_Send()，区别是“非阻塞”：
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/10/2026 14:41:16 PAGE 10  
+
+ 549           *     - g_canmin_tx_ready=0 表示上一帧还没发完（TXSUC=0），本周期直接跳过；
+ 550           *     - 等待超过 CAN_TX_TIMEOUT_MS 强制认为空闲，避免一次失败后永远不发；
+ 551           *     - 写 TXCR/TXID/TXDR 的字节顺序与 20261030 完全一致。
+ 552           * ========================================================================== */
+ 553          static uint8 CanMin_Send(void)
+ 554          {
+ 555   1          /* ---- 上一帧是否已发完 ---- */
+ 556   1          if (!g_canmin_tx_ready)
+ 557   1          {
+ 558   2              if (ReadBit(CAN_SR, TXSUC))
+ 559   2              {
+ 560   3                  g_canmin_tx_ready = 1;
+ 561   3                  g_canmin_tx_wait  = 0;
+ 562   3              }
+ 563   2              else if (g_canmin_tx_wait >= CAN_TX_TIMEOUT_MS)
+ 564   2              {
+ 565   3                  g_canmin_tx_ready = 1;              /* 超时强制重发 */
+ 566   3                  g_canmin_tx_wait  = 0;
+ 567   3              }
+ 568   2              else
+ 569   2              {
+ 570   3                  g_canmin_stat.TxSkip++;
+ 571   3                  return 0;
+ 572   3              }
+ 573   2          }
+ 574   1      
+ 575   1          /* ---- 控制字：IDE | RTR | DLC ---- */
+ 576   1          CAN_TXCR  = CanMinSend.CAN_IDE | CanMinSend.CAN_RTR | CanMinSend.CAN_DLC;
+ 577   1      
+ 578   1          /* ---- 29 位扩展 ID（或 11 位标准 ID） ---- */
+ 579   1          if (CanMinSend.CAN_IDE)
+ 580   1          {
+ 581   2              CAN_TXID0 = (uint8)(CanMinSend.EXTID >> 21);
+ 582   2              CAN_TXID1 = (uint8)(CanMinSend.EXTID >> 13);
+ 583   2              CAN_TXID2 = (uint8)(CanMinSend.EXTID >> 5);
+ 584   2              CAN_TXID3 = (uint8)(CanMinSend.EXTID << 3);   /* 20261030 这里也是 <<3 */
+ 585   2          }
+ 586   1          else
+ 587   1          {
+ 588   2              CAN_TXID0 = (uint8)(CanMinSend.STDID >> 3);
+ 589   2              CAN_TXID1 = (uint8)(CanMinSend.STDID << 5);
+ 590   2              CAN_TXID2 = 0;
+ 591   2              CAN_TXID3 = 0;
+ 592   2          }
+ 593   1      
+ 594   1          /* ---- 8 字节数据 ---- */
+ 595   1          CAN_TXDR0 = CanMinSend.Data0;
+ 596   1          CAN_TXDR1 = CanMinSend.Data1;
+ 597   1          CAN_TXDR2 = CanMinSend.Data2;
+ 598   1          CAN_TXDR3 = CanMinSend.Data3;
+ 599   1          CAN_TXDR4 = CanMinSend.Data4;
+ 600   1          CAN_TXDR5 = CanMinSend.Data5;
+ 601   1          CAN_TXDR6 = CanMinSend.Data6;
+ 602   1          CAN_TXDR7 = CanMinSend.Data7;
+ 603   1      
+ 604   1          /* ---- 启动发送 ---- */
+ 605   1          ClrBit(CAN_IFR, TXIF);
+ 606   1          SetBit(CAN_CR1, TXREQ);
+ 607   1      
+ 608   1          g_canmin_tx_ready = 0;
+ 609   1          g_canmin_tx_wait  = 0;
+ 610   1          g_canmin_stat.TxFrames++;
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/10/2026 14:41:16 PAGE 11  
+
+ 611   1          return 1;
+ 612   1      }
+ 613          
+ 614          /* ==========================================================================
+ 615           *  IAP 专用发送：IAP 帧 ID 虽然 <=0x7FF，但必须是 29 位扩展帧
+ 616           * ========================================================================== */
+ 617          uint8 CanMin_IapSend(uint16 can_id, uint8 *dat, uint8 len)
+ 618          {
+ 619   1          uint16 to = 3000;
+ 620   1      
+ 621   1          if ((len != CAN_FRAME_DATA_LEN) || (dat == 0))
+ 622   1              return 0;
+ 623   1      
+ 624   1          while (!ReadBit(CAN_SR, TXSUC))
+ 625   1          {
+ 626   2              if (--to == 0) break;
+ 627   2          }
+ 628   1      
+ 629   1          g_canmin_tx_ready = 1;
+ 630   1          g_canmin_tx_wait  = 0;
+ 631   1      
+ 632   1          CanMinSend.CAN_IDE = IDE_EXT;
+ 633   1          CanMinSend.CAN_RTR = RTR_DAT;
+ 634   1          CanMinSend.CAN_DLC = len;
+ 635   1          CanMinSend.EXTID   = can_id;
+ 636   1          CanMinSend.STDID   = can_id;
+ 637   1      
+ 638   1          CanMinSend.Data0 = dat[0];
+ 639   1          CanMinSend.Data1 = dat[1];
+ 640   1          CanMinSend.Data2 = dat[2];
+ 641   1          CanMinSend.Data3 = dat[3];
+ 642   1          CanMinSend.Data4 = dat[4];
+ 643   1          CanMinSend.Data5 = dat[5];
+ 644   1          CanMinSend.Data6 = dat[6];
+ 645   1          CanMinSend.Data7 = dat[7];
+ 646   1      
+ 647   1          return CanMin_Send();
+ 648   1      }
+ 649          
+ 650          /* ==========================================================================
+ 651           *  十、按 ID + 数据发送一帧（对应 20261030 的 can_hw_send()）
+ 652           * --------------------------------------------------------------------------
+ 653           *  @param can_id 29 位扩展 ID（>0x7FF 自动用扩展帧）
+ 654           *  @param dat    8 字节数据
+ 655           *  @param len    必须是 8
+ 656           *  @retval 1=已提交发送，0=上一帧没发完/参数错
+ 657           * ========================================================================== */
+ 658          static uint8 CanMin_HwSend(uint32 can_id, uint8 *dat, uint8 len)
+ 659          {
+ 660   1          if ((len != CAN_FRAME_DATA_LEN) || (dat == 0))
+ 661   1          {
+ 662   2              return 0;
+ 663   2          }
+ 664   1      
+ 665   1          if (can_id > 0x7FFUL)
+ 666   1          {
+ 667   2              CanMinSend.CAN_IDE = IDE_EXT;           /* 扩展帧 */
+ 668   2          }
+ 669   1          else
+ 670   1          {
+ 671   2              CanMinSend.CAN_IDE = IDE_STD;           /* 标准帧 */
+ 672   2          }
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/10/2026 14:41:16 PAGE 12  
+
+ 673   1      
+ 674   1          CanMinSend.CAN_RTR = RTR_DAT;               /* 数据帧 */
+ 675   1          CanMinSend.CAN_DLC = len;
+ 676   1          CanMinSend.EXTID   = can_id;
+ 677   1          CanMinSend.STDID   = can_id;
+ 678   1      
+ 679   1          CanMinSend.Data0 = dat[0];
+ 680   1          CanMinSend.Data1 = dat[1];
+ 681   1          CanMinSend.Data2 = dat[2];
+ 682   1          CanMinSend.Data3 = dat[3];
+ 683   1          CanMinSend.Data4 = dat[4];
+ 684   1          CanMinSend.Data5 = dat[5];
+ 685   1          CanMinSend.Data6 = dat[6];
+ 686   1          CanMinSend.Data7 = dat[7];
+ 687   1      
+ 688   1          return CanMin_Send();
+ 689   1      }
+ 690          
+ 691          /* ==========================================================================
+ 692           *  十一、初始化
+ 693           * --------------------------------------------------------------------------
+ 694           *  与 20261030 的 CAN_Init() 逐寄存器对照，只有两点不同：
+ 695           *    ① 不使能任何 CAN 中断（CAN_IER=0），20261030 是全开的；
+ 696           *    ② 不碰 P0.7（本板没有这个脚），20261030 里那两行本来就是注释掉的。
+ 697           * ========================================================================== */
+ 698          void CanMin_Init(void)
+ 699          {
+ 700   1          uint16 brp;
+ 701   1      
+ 702   1          /* ---- 1. 运行状态清零（对应 MotorCtrl_Init()） ---- */
+ 703   1          g_run_state.work_mode        = EXT_WORK_MODE_SPEED;
+ 704   1          g_run_state.is_started       = 0;           /* 上电不自动起机，等 CAN 的“起机” */
+ 705   1          g_run_state.is_estop         = 0;
+ 706   1          g_run_state.reversal_braking = 0;
+ 707   1          g_run_state.ref              = 0.0f;
+ 708   1          g_run_state.direction        = FR_MODE;
+ 709   1          g_run_state.fault_code       = FAULT_NONE;
+ 710   1          g_run_state.run_time         = 0;
+ 711   1          g_run_state.total_time       = 0;
+ 712   1      
+ 713   1          g_canmin_status_cnt  = 0;
+ 714   1          g_canmin_tx_ready    = 1;                   /* 上电允许发第一帧 */
+ 715   1          g_canmin_tx_wait     = 0;
+ 716   1          g_canmin_busoff_seen = 0;
+ 717   1      
+ 718   1          /* ---- 2. 位时间：BRP / SEG1 / SEG2 ---- */
+ 719   1          CAN_BTR0 = 0;                               /* 先清 0，规避寄存器写入 bug */
+ 720   1          CAN_BTR1 = 0;
+ 721   1          CAN_BTR2 = 0;
+ 722   1      
+ 723   1          brp = CAN_BRP;
+ 724   1          CAN_BTR0 |= (uint8)(brp >> 8);              /* BRP 高 2 位 */
+ 725   1          CAN_BTR1  = (uint8)brp;                     /* BRP 低 8 位 */
+ 726   1          CAN_BTR2 |= (uint8)(((CAN_SEG2 & 0x07) << 4) | (CAN_SEG1 & 0x0F));
+ 727   1      
+ 728   1          /* ---- 3. 过滤器：单过滤器模式 + 放行全部扩展帧 ----
+ 729   1           * 掩码全 1 = 全部“不关心”，所以任何扩展帧都能进来；
+ 730   1           * 真正的地址过滤在 CanMin_MsgParse() 里做（与 20261030 相同）。 */
+ 731   1          SetBit(CAN_CR0, FILMOD);                    /* 1 = 单过滤器模式 */
+ 732   1          CAN_FIR0 = 0xFF;
+ 733   1          CAN_FIR1 = 0xFF;
+ 734   1          CAN_FIR2 = 0xFF;
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/10/2026 14:41:16 PAGE 13  
+
+ 735   1          CAN_FIR3 = 0xFF;
+ 736   1          CAN_FMR0 = 0xFF;
+ 737   1          CAN_FMR1 = 0xFF;
+ 738   1          CAN_FMR2 = 0xFF;
+ 739   1          CAN_FMR3 = 0xFF;
+ 740   1      
+ 741   1          /* ---- 4. 工作模式 ---- */
+ 742   1          ClrBit(CAN_CR0, CANREV);                    /* 0 = CAN2.0A/B，支持扩展帧 */
+ 743   1          ClrBit(CAN_CR0, AWAKMOD);                   /* 不使能唤醒模式 */
+ 744   1          ClrBit(CAN_CR0, SELFTST);                   /* 不使能自测模式 */
+ 745   1          ClrBit(CAN_CR0, LISTEN);                    /* 不使能只听模式 */
+ 746   1      
+ 747   1      #if (CAN_CHANNEL)
+                  SetBit(CAN_CR0, CAN_CH);                    /* 1 = TXD->P0.5, RXD->P0.6 */
+              #else
+ 750   1          ClrBit(CAN_CR0, CAN_CH);                    /* 0 = TXD->P0.0, RXD->P0.1（本板） */
+ 751   1      #endif
+ 752   1      
+ 753   1          /* ---- 5. 关闭全部 CAN 中断（本模块的关键） ---- */
+ 754   1          CAN_IER = 0x00;                             /* 接收/发送/错误/溢出中断全关 */
+ 755   1          ClrBit(CAN_CR2, ERRIE);                     /* 错误总中断也关 */
+ 756   1          ClrBit(CAN_IFR, RXIF | TXIF | OVIF | ARBIF | ERRIF);   /* 清残留标志 */
+ 757   1      
+ 758   1          /* ---- 6. 退出复位模式 + 使能 CAN ---- */
+ 759   1          ClrBit(CAN_CR0, RSTMOD);                    /* 0 = 退出复位，开始工作 */
+ 760   1          SetBit(CAN_CR0, CANEN);                     /* 1 = CAN 模块使能 */
+ 761   1      }
+ 762          
+ 763          /* ==========================================================================
+ 764           *  bus-off 恢复（最小版）
+ 765           * --------------------------------------------------------------------------
+ 766           *  RSTMOD 置 1：CAN 内核进复位，清发送/接收错误计数、退出 bus-off；
+ 767           *  RSTMOD 清 0：回正常模式。
+ 768           *
+ 769           *  只翻 RSTMOD，不重写 BTR/过滤器（SJA1000 兼容内核在复位模式下不会清
+ 770           *  这些配置寄存器），也不动 g_run_state / 电机状态。
+ 771           * ========================================================================== */
+ 772          static void CanMin_CanRecover(void)
+ 773          {
+ 774   1          uint8 i;
+ 775   1      
+ 776   1          SetBit(CAN_CR0, RSTMOD);                    /* 进复位：清错误计数、退出 bus-off */
+ 777   1          for (i = 0; i < 10; i++)
+ 778   1          {
+ 779   2              _nop_();                                /* 等复位请求生效（约 0.4us @24MHz） */
+ 780   2          }
+ 781   1          ClrBit(CAN_CR0, RSTMOD);                    /* 回正常模式 */
+ 782   1      
+ 783   1          g_canmin_tx_ready = 1;                      /* 允许发下一帧 */
+ 784   1          g_canmin_tx_wait  = 0;
+ 785   1      }
+ 786          
+ 787          
+ 788          /* ==========================================================================
+ 789           *  十二、1ms 轮询
+ 790           * --------------------------------------------------------------------------
+ 791           *  对应 20261030 的 TickCycle_1ms() 里那三行：
+ 792           *      CAN_MsgParse();  ext_slave_periodic_send();  AlarmMonitor_Process();
+ 793           *  这里把它们合并成一个 CanMin_Poll()：
+ 794           *      ① 收帧（最多 CAN_RX_PER_TICK 帧，读一帧释放一帧）
+ 795           *      ② 统计溢出 / bus-off
+ 796           *      ③ 每 CAN_STATUS_PERIOD_MS 发一帧状态
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/10/2026 14:41:16 PAGE 14  
+
+ 797           * ========================================================================== */
+ 798          void CanMin_Poll(void)
+ 799          {
+ 800   1          uint8 dat[CAN_FRAME_DATA_LEN];
+ 801   1          uint8 n;
+ 802   1      
+ 803   1          /* ---- ① 收帧：NOEMP=1 表示接收 FIFO 非空 ---- */
+ 804   1          for (n = 0; n < CAN_RX_PER_TICK; n++)
+ 805   1          {
+ 806   2              if (!ReadBit(CAN_SR, NOEMP))
+ 807   2              {
+ 808   3                  break;
+ 809   3              }
+ 810   2      
+ 811   2              CanMin_ReadFrame();                     /* 读出最老的一帧到 CanMin */
+ 812   2              SetBit(CAN_CR1, BUFRLS);                /* 释放该接收缓冲 */
+ 813   2              ClrBit(CAN_IFR, RXIF);                  /* 清接收标志（无中断，清一下更干净） */
+ 814   2      
+ 815   2              g_canmin_stat.RxFrames++;
+ 816   2              g_canmin_stat.LastId = CanMin.EXTID;    /* 调试：最近一帧 ID */
+ 817   2      
+ 818   2              /* IAP 帧：29 位扩展帧，ID<=0x7FF（高 21 位为 0） */
+ 819   2              if ((CanMin.CAN_IDE == IDE_EXT) && ((CanMin.EXTID & 0xFFFFF800UL) == 0))
+ 820   2              {
+ 821   3                  IAPRxStdFrame((uint16)(CanMin.EXTID & 0x07FF), &CanMin.Data0, CanMin.CAN_DLC);
+ 822   3              }
+ 823   2              else
+ 824   2              {
+ 825   3                  CanMin_MsgParse();                  /* 地址过滤 + 解析指令 */
+ 826   3              }
+ 827   2          }
+ 828   1      
+ 829   1          /* ---- ② 统计 ---- */
+ 830   1          if (ReadBit(CAN_SR, BUFOV))
+ 831   1          {
+ 832   2              g_canmin_stat.RxOvif++;                 /* 接收 FIFO 溢出 */
+ 833   2          }
+ 834   1      
+ 835   1          /* ---- ② bus-off：边沿触发立即恢复，之后每 10ms 重试 ----
+ 836   1           * 检测每 1ms 做一次（只读一个 SFR，开销可忽略）；
+ 837   1           * 恢复不能每个 1ms 都做：翻 RSTMOD 会清接收 FIFO、打断控制器同步。 */
+ 838   1          if (ReadBit(CAN_ESR, BOFF))
+ 839   1          {
+ 840   2              if (!g_canmin_busoff_seen)
+ 841   2              {
+ 842   3                  g_canmin_busoff_seen = 1;
+ 843   3                  g_canmin_stat.BusOffCnt++;          /* 只在“进入”bus-off 时计数 */
+ 844   3                  g_canmin_busoff_ms = 0;
+ 845   3                  CanMin_CanRecover();                /* 一检测到就立刻恢复 */
+ 846   3              }
+ 847   2              else if (g_canmin_busoff_ms < 0xFFFF)
+ 848   2              {
+ 849   3                  g_canmin_busoff_ms++;
+ 850   3                  if (g_canmin_busoff_ms >= 10)       /* 10ms 还没退出来，再试一次 */
+ 851   3                  {
+ 852   4                      g_canmin_busoff_ms = 0;
+ 853   4                      CanMin_CanRecover();
+ 854   4                  }
+ 855   3              }
+ 856   2          }
+ 857   1          else
+ 858   1          {
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/10/2026 14:41:16 PAGE 15  
+
+ 859   2              g_canmin_busoff_seen = 0;
+ 860   2              g_canmin_busoff_ms   = 0;
+ 861   2          }
+ 862   1      
+ 863   1          /* ---- ③ 发送等待计时（给 CanMin_Send 做超时重发用） ---- */
+ 864   1          if (!g_canmin_tx_ready)
+ 865   1          {
+ 866   2              if (g_canmin_tx_wait < 0xFFFF)
+ 867   2              {
+ 868   3                  g_canmin_tx_wait++;
+ 869   3              }
+ 870   2          }
+ 871   1      
+ 872   1          /* ---- ④ 状态帧：每 150ms 一帧 ---- */
+ 873   1          g_canmin_status_cnt++;
+ 874   1          if (g_canmin_status_cnt >= CAN_STATUS_PERIOD_MS)
+ 875   1          {
+ 876   2              g_canmin_status_cnt = 0;
+ 877   2      
+ 878   2              CanMin_BuildStatus(dat);
+ 879   2              CanMin_HwSend(CAN_STATUS_ID, dat, CAN_FRAME_DATA_LEN);
+ 880   2          }
+ 881   1      
+ 882   1      #if (CAN_CMD_TIMEOUT_MS > 0)
+ 883   1          /* ---- ⑤ 指令通信超时：起机后 CAN_CMD_TIMEOUT_MS 内没收到有效指令 -> 停机 ----
+ 884   1           *   已起机且未急停时才计时；超时后 SetRun(0) 并把故障码置为
+ 885   1           *   “三级/通信异常停机”(0x87)，由状态帧 Byte7 上报。 */
+ 886   1          if (g_run_state.is_started && (!g_run_state.is_estop))
+ 887   1          {
+ 888   2              if (g_canmin_cmd_timeout < CAN_CMD_TIMEOUT_MS)
+ 889   2              {
+ 890   3                  g_canmin_cmd_timeout++;
+ 891   3              }
+ 892   2      
+ 893   2              if (g_canmin_cmd_timeout >= CAN_CMD_TIMEOUT_MS)
+ 894   2              {
+ 895   3                  CanMin_SetRun(0);                                   /* 撤给定 + 停机 */
+ 896   3                  g_run_state.fault_code = FAULT_BUILD(FAULT_LEVEL_3, FAULT3_COMM_STOP);
+ 897   3              }
+ 898   2          }
+ 899   1          else
+ 900   1          {
+ 901   2              g_canmin_cmd_timeout = 0;
+ 902   2          }
+ 903   1      #endif
+ 904   1      }
+ 905          
+ 906          /* ==========================================================================
+ 907           *  十三、指令 -> 电机给定
+ 908           * --------------------------------------------------------------------------
+ 909           *  对应 20261030 AddFunction.c 里 TargetRef_Process() 的 CANMODE 分支。
+ 910           *  调用位置：TickCycle_1ms() 中 TargetRef_Process() 之后、Speed_response() 之前。
+ 911           *  这一步不能省：NONEMODE 分支每 1ms 会把 mcFocCtrl.Ref 写成 0，
+ 912           *  必须在这之后把 CAN 的目标值覆盖回去。
+ 913           * ========================================================================== */
+ 914          void CanMin_ApplyCmd(void)
+ 915          {
+ 916   1          uint8 target_fr;
+ 917   1          int16 speed_abs;
+ 918   1      
+ 919   1          /* 起机/停机：直接决定 isCtrlPowOn，MC_Control() 据此走 mcInit / mcStop */
+ 920   1          isCtrlPowOn = g_run_state.is_started;
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/10/2026 14:41:16 PAGE 16  
+
+ 921   1      
+ 922   1          /* 急停：给定清零 + 进入停机，并清掉换向状态 */
+ 923   1          if (g_run_state.is_estop)
+ 924   1          {
+ 925   2              mcFocCtrl.Ref = 0;
+ 926   2              isCtrlPowOn   = false;
+ 927   2              g_run_state.is_started       = 0;
+ 928   2              g_run_state.reversal_braking = 0;
+ 929   2          }
+ 930   1      
+ 931   1          /* 目标方向：0=CW 1=CCW */
+ 932   1          target_fr = (g_run_state.direction == CW) ? CW : CCW;
+ 933   1      
+ 934   1          if (g_run_state.reversal_braking)
+ 935   1          {
+ 936   2              /* ---- 换向减速中 ----
+ 937   2               * 退出条件：方向已一致 / 已停机 / 目标为 0；或者实际转速已降到 50rpm �
+             -�下。 */
+ 938   2              if ((target_fr == mcFocCtrl.FR) ||
+ 939   2                  (g_run_state.is_started == 0) ||
+ 940   2                  (g_run_state.ref == 0))
+ 941   2              {
+ 942   3                  g_run_state.reversal_braking = 0;
+ 943   3              }
+ 944   2              else
+ 945   2              {
+ 946   3                  speed_abs = mcFocCtrl.SpeedFlt;
+ 947   3                  if (speed_abs < 0)
+ 948   3                  {
+ 949   4                      speed_abs = -speed_abs;
+ 950   4                  }
+ 951   3      
+ 952   3                  if (speed_abs < S_Value(50.0))
+ 953   3                  {
+ 954   4                      /* 减速到位，切方向，下一周期开始按新方向加速 */
+ 955   4                      g_run_state.reversal_braking = 0;
+ 956   4                      mcFocCtrl.FR                 = g_run_state.direction;
+ 957   4                  }
+ 958   3              }
+ 959   2          }
+ 960   1          else
+ 961   1          {
+ 962   2              /* ---- 正常模式：检测是否需要启动换向减速 ----
+ 963   2               * 条件：目标方向变了、正在运行、没急停、目标不为 0、当前速度 >= 50rpm
+             -。 */
+ 964   2              if ((target_fr != mcFocCtrl.FR) &&
+ 965   2                  g_run_state.is_started &&
+ 966   2                  (!g_run_state.is_estop) &&
+ 967   2                  (g_run_state.ref > 0))
+ 968   2              {
+ 969   3                  speed_abs = mcFocCtrl.SpeedFlt;
+ 970   3                  if (speed_abs < 0)
+ 971   3                  {
+ 972   4                      speed_abs = -speed_abs;
+ 973   4                  }
+ 974   3      
+ 975   3                  if (speed_abs >= S_Value(50.0))
+ 976   3                  {
+ 977   4                      g_run_state.reversal_braking = 1;
+ 978   4                      mcState                      = mcStop;   /* 与 20261030 的 CANMODE 分支一致 */
+ 979   4                  }
+ 980   3              }
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/10/2026 14:41:16 PAGE 17  
+
+ 981   2      
+ 982   2              /* ---- 应用目标值 ----
+ 983   2               * 转速模式：g_run_state.ref 是 rpm，转成 Q15 给速度环。
+ 984   2               * 电流模式：最小版不支持（见 CanMin_SetMode），这里不会进来。 */
+ 985   2              if (g_run_state.work_mode == EXT_WORK_MODE_SPEED)
+ 986   2              {
+ 987   3                  mcFocCtrl.Ref = S_Value(g_run_state.ref);
+ 988   3              }
+ 989   2          }
+ 990   1      }
+ 991          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   4084    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =     84      54
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

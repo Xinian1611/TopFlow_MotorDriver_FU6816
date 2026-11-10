@@ -1,0 +1,438 @@
+C51 COMPILER V9.60.7.0   IAPAPP                                                            11/10/2026 14:41:19 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE IAPAPP
+OBJECT MODULE PLACED IN .\Output\IapApp.obj
+COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\User\source\IAP\IapApp.c LARGE OMF2 OPTIMIZE(8,SPEED) BROWSE IN
+                    -CDIR(..\User\include;..\FU68xx_Hardware_Driver\Include;..\User\source\IAP;..\User\source\RingBuffer) NOINTVECTOR DEBUG P
+                    -RINT(.\Listings\IapApp.lst) TABS(2) OBJECT(.\Output\IapApp.obj)
+
+line level    source
+
+   1          #include "IapApp.h"
+   2          
+   3          union IAP_IDENTIFY IAPIdentifyTx,IAPIdentifyRx;
+   4          
+   5          uint16_t IAPCheckOverTime = 0;          /* 原来是 float 秒；现在当 1ms 倒计时用 */
+   6          uint16_t Station_ID       = 1;          /* 空片默认地址（与上位机约定）；IAPData_Init 会�
+             -�参数页的值覆盖 */
+   7          uint8_t  IAPRxFinishFlag  = 0;
+   8          
+   9          static uint8_t  IAPUpgradePending = 0;
+  10          static uint16_t IAPStopTimeout    = 0;
+  11          
+  12          // uint8_t FlashData_Page[STM_FLASH_PAGE_SIZE];
+  13          
+  14          //------------------------------------------------------------------------------------
+  15          //函数功能：数据段数据初始化
+  16          //输入参数：无
+  17          //返回参数：无
+  18          //特别说明：无
+  19          //------------------------------------------------------------------------------------
+  20          void IAPData_Init(void)
+  21          {
+  22   1        Station_ID = ReadCANID();                       /* 读 0x1708，读不到返回 0 */
+  23   1        if((0 == Station_ID) || (Station_ID > 0x7F))
+  24   1          Station_ID = 1;          /* 参数页无效（空片/校验错）→ 用默认地址 */
+  25   1      
+  26   1        IAPIdentifyTx.all  = IAP_ID_BUILD(Station_ID, 0);   /* 本机基址，命令位=0 */
+  27   1        IAPIdentifyRx.all  = IAPIdentifyTx.all;
+  28   1      
+  29   1        IAPCheckOverTime  = 0;
+  30   1        IAPRxFinishFlag   = 0;
+  31   1        IAPUpgradePending = 0;
+  32   1        IAPStopTimeout    = 0;
+  33   1      }
+  34          
+  35          #ifdef IPADataType_FLASH
+  36          //------------------------------------------------------------------------------------
+  37          //函数功能：从FLASH中读取数据
+  38          //输入参数：faddr：FLASH地址
+  39          //返回参数：无
+  40          //特别说明：无
+  41          void STMFLASH_ReadBuff(uint32_t ReadAddr,uint32_t *pBuffer,uint32_t NumToRead)
+  42          {
+  43   1        uint32_t i=0,len;
+  44   1        uint8_t *pByte = (uint8_t *)pBuffer;
+  45   1      
+  46   1        len = NumToRead;
+  47   1        for(i=0;i<len;i++)
+  48   1          pByte[i] = *(uint8_t code *)(ReadAddr + i);     /* 8051 必须走 code 空间 */
+  49   1      }
+  50          
+  51          //------------------------------------------------------------------------------------
+  52          //函数功能：从FLASH中读取1页数据
+C51 COMPILER V9.60.7.0   IAPAPP                                                            11/10/2026 14:41:19 PAGE 2   
+
+  53          //输入参数：faddr：FLASH地址
+  54          //返回参数：无
+  55          //特别说明：无
+  56          void STMFLASH_ReadPage(uint32_t ReadAddr,uint32_t *pBuffer)
+  57          {
+  58   1        uint32_t i=0,PageStartAddr;
+  59   1      
+  60   1        i = (ReadAddr - STM_FLASH_BASE)/STM_FLASH_PAGE_SIZE;
+  61   1        PageStartAddr = (i*STM_FLASH_PAGE_SIZE + STM_FLASH_BASE);
+  62   1      
+  63   1        for(i=0;i<STM_FLASH_PAGE_SIZE;i++)
+  64   1          ((uint8_t *)pBuffer)[i] = *(uint8_t code *)(PageStartAddr + i);
+  65   1      }
+  66          
+  67          //------------------------------------------------------------------------------------
+  68          //函数功能：擦除FLASH指定页数据
+  69          //输入参数：faddr：FLASH地址
+  70          //返回参数：0：擦除失败，1：擦除成功
+  71          //特别说明：无
+  72          //------------------------------------------------------------------------------------
+  73          uint8_t STMFLASH_ErashPage(uint32_t faddr)
+  74          {
+  75   1        if(FLASH_SUCCESS == Flash_SectorErase((uint16_t)faddr))
+  76   1          return 1;
+  77   1        if(FLASH_SUCCESS == Flash_SectorErase((uint16_t)faddr))   /* 原逻辑：失败再擦一次 */
+  78   1          return 1;
+  79   1        return 0;
+  80   1      }
+  81          
+  82          //------------------------------------------------------------------------------------
+  83          //函数功能：写FLASH指定数据
+  84          //输入参数：faddr：FLASH地址
+  85          //返回参数：0：写失败，1：写成功
+  86          //特别说明：无
+  87          //------------------------------------------------------------------------------------
+  88          uint8_t STMFLASH_WriteBuff(uint32_t StartAddress,uint8_t *pData,uint32_t DataNum)
+  89          {
+  90   1        uint32_t i;
+  91   1      
+  92   1        if(0 == STMFLASH_ErashPage(StartAddress))
+  93   1          return 0;
+  94   1      
+  95   1        for(i=0;i<DataNum;i++)
+  96   1        {
+  97   2          SetBit(WDT_CR, WDTRF);                              /* 原 delayus(100) */
+  98   2          Flash_byte_Write((uint16_t)(StartAddress + i), pData[i]);
+  99   2        }
+ 100   1        return 1;
+ 101   1      }
+ 102          
+ 103          //------------------------------------------------------------------------------------
+ 104          //函数功能：写FLASH指定页数据
+ 105          //输入参数：faddr：FLASH地址
+ 106          //返回参数：0：写失败，1：写成功
+ 107          //特别说明：无
+ 108          //------------------------------------------------------------------------------------
+ 109          uint8_t STMFLASH_WritePage(uint32_t StartAddress,uint8_t *pData)
+ 110          {
+ 111   1        uint32_t i,PageStartAddr;
+ 112   1      
+ 113   1        if(0 == STMFLASH_ErashPage(StartAddress))
+ 114   1          return 0;
+C51 COMPILER V9.60.7.0   IAPAPP                                                            11/10/2026 14:41:19 PAGE 3   
+
+ 115   1      
+ 116   1        i = (StartAddress - STM_FLASH_BASE)/STM_FLASH_PAGE_SIZE;
+ 117   1        PageStartAddr = (i*STM_FLASH_PAGE_SIZE + STM_FLASH_BASE);
+ 118   1      
+ 119   1        for(i=0;i<STM_FLASH_PAGE_SIZE;i++)
+ 120   1        {
+ 121   2          SetBit(WDT_CR, WDTRF);
+ 122   2          Flash_byte_Write((uint16_t)(PageStartAddr + i), pData[i]);
+ 123   2        }
+ 124   1        return 1;
+ 125   1      }
+ 126          
+ 127          //------------------------------------------------------------------------------------
+ 128          //函数功能：IAPFlag更新
+ 129          //输入参数：无
+ 130          //返回参数：0：更新失败，1：更新成功
+ 131          //特别说明：无
+ 132          //------------------------------------------------------------------------------------
+ 133          int16_t IAPFlagErase(void)
+ 134          {
+ 135   1        uint8_t  crcdata=0, TempData[8], WriteBuff[16];
+ 136   1        uint16_t temp16=0;
+ 137   1        uint32_t i;
+ 138   1      
+ 139   1        /* 1) 先看是不是已经"无效"了，是就不用再擦写 */
+ 140   1        STMFLASH_ReadBuff(IAPFlag_FLASH_OFFSET,(uint32_t*)TempData,8);
+ 141   1        *((uint8_t *)(&temp16)+1) = TempData[2];
+ 142   1        *(uint8_t *)(&temp16)     = TempData[3];
+ 143   1        for(i=0;i<4;i++)
+ 144   1          crcdata ^= TempData[i];
+ 145   1        if((0x55 == TempData[0]) && (0xaa == TempData[1]) &&
+ 146   1           (0xffff == temp16) &&
+ 147   1           (crcdata == TempData[4]))
+ 148   1        {
+ 149   2          return CPDD_TRUE;
+ 150   2        }
+ 151   1      
+ 152   1        /* 2) 只读前 16 字节（标志 5B + ID 7B + 填充），改前 5 字节，ID 原样保留 */
+ 153   1        STMFLASH_ReadBuff(IAPFlag_FLASH_OFFSET,(uint32_t*)WriteBuff,16);
+ 154   1      
+ 155   1        crcdata = 0;
+ 156   1        WriteBuff[0] = 0x55;
+ 157   1        WriteBuff[1] = 0xaa;
+ 158   1        WriteBuff[2] = 0xff;
+ 159   1        WriteBuff[3] = 0xff;
+ 160   1        for(i=0;i<4;i++)
+ 161   1          crcdata ^= WriteBuff[i];
+ 162   1        WriteBuff[4] = crcdata;
+ 163   1      
+ 164   1        /* 3) 擦掉 0x0F00 那个 256B 扇区，再写回这 16 字节 */
+ 165   1        if(0 == STMFLASH_WriteBuff(IAPFlag_FLASH_OFFSET, WriteBuff, 16))
+ 166   1          return CPDD_FALSE;
+ 167   1      
+ 168   1        return CPDD_TRUE;
+ 169   1      }
+ 170          
+ 171          //------------------------------------------------------------------------------------
+ 172          //函数功能：IAPID更新
+ 173          //输入参数：无
+ 174          //返回参数：0：更新失败，1：更新成功
+ 175          //特别说明：无
+ 176          //------------------------------------------------------------------------------------
+C51 COMPILER V9.60.7.0   IAPAPP                                                            11/10/2026 14:41:19 PAGE 4   
+
+ 177          int16_t IAPIDUpdate(void)
+ 178          {
+ 179   1        uint8_t  crcdata=0, TempData[8], WriteBuff[16];
+ 180   1        uint32_t i, temp32=0;
+ 181   1      
+ 182   1        /* 1) 先看 ID 是不是已经一致 */
+ 183   1        STMFLASH_ReadBuff(IAPID_FLASH_OFFSET,(uint32_t*)TempData,8);
+ 184   1        *((uint8_t *)(&temp32)+3) = TempData[2];
+ 185   1        *((uint8_t *)(&temp32)+2) = TempData[3];
+ 186   1        *((uint8_t *)(&temp32)+1) = TempData[4];
+ 187   1        *(uint8_t *)(&temp32)     = TempData[5];
+ 188   1        for(i=0;i<6;i++)
+ 189   1          crcdata ^= TempData[i];
+ 190   1        if((0x55 == TempData[0]) && (0xaa == TempData[1]) &&
+ 191   1           ((temp32 & 0xfffffff0) == (IAPIdentifyTx.all & 0xfffffff0)) &&
+ 192   1           (crcdata == TempData[6]))
+ 193   1        {
+ 194   2          return CPDD_TRUE;
+ 195   2        }
+ 196   1      
+ 197   1        /* 2) 读前 16 字节（标志 + ID），把标志原样带上，只改 ID */
+ 198   1        STMFLASH_ReadBuff(IAPFlag_FLASH_OFFSET,(uint32_t*)WriteBuff,16);
+ 199   1      
+ 200   1        crcdata = 0;
+ 201   1        WriteBuff[8]  = 0x55;
+ 202   1        WriteBuff[9]  = 0xaa;
+ 203   1        WriteBuff[10] = *((uint8_t *)(&IAPIdentifyTx.all)+3);
+ 204   1        WriteBuff[11] = *((uint8_t *)(&IAPIdentifyTx.all)+2);
+ 205   1        WriteBuff[12] = *((uint8_t *)(&IAPIdentifyTx.all)+1);
+ 206   1        WriteBuff[13] = *(uint8_t *)(&IAPIdentifyTx.all);
+ 207   1        for(i=8;i<14;i++)
+ 208   1          crcdata ^= WriteBuff[i];
+ 209   1        WriteBuff[14] = crcdata;
+ 210   1      
+ 211   1        /* 3) 擦扇区 + 写回 16 字节 */
+ 212   1        if(0 == STMFLASH_WriteBuff(IAPFlag_FLASH_OFFSET, WriteBuff, 16))
+ 213   1          return CPDD_FALSE;
+ 214   1      
+ 215   1        return CPDD_TRUE;
+ 216   1      }
+ 217          #endif
+ 218          
+ 219          /*------------------------------------------------------------------------------------
+ 220          函数功能：应答上位机的"在线检查"（原来由 CAN.c 置发送使能 + CANTxMsgIAP 缓冲完�
+             -��）
+ 221          输入参数：无
+ 222          返回参数：无
+ 223          特别说明：8 字节 = 版本 4B + 1,0,0,0；ID = (Station<<4)|OnlineCheck
+ 224                    这里的 1 是"我是 APP"的标志位，boot 应答时是 0,1,0...
+ 225          ------------------------------------------------------------------------------------*/
+ 226          static void IAPSendCheck(void)
+ 227          {
+ 228   1        uint8_t buf[8];
+ 229   1      
+ 230   1        buf[0] = IAP_APP_VER0;
+ 231   1        buf[1] = IAP_APP_VER1;
+ 232   1        buf[2] = IAP_APP_VER2;
+ 233   1        buf[3] = IAP_APP_VER3;
+ 234   1        buf[4] = 1;
+ 235   1        buf[5] = 0;
+ 236   1        buf[6] = 0;
+ 237   1        buf[7] = 0;
+C51 COMPILER V9.60.7.0   IAPAPP                                                            11/10/2026 14:41:19 PAGE 5   
+
+ 238   1      
+ 239   1        (void)CanMin_IapSend(IAP_ID_BUILD(Station_ID, OnlineCheck), buf, 8);  /* IAP 帧必须扩展帧 */
+ 240   1      }
+ 241          
+ 242          //------------------------------------------------------------------------------------
+ 243          //函数功能：IAP升级请求检查
+ 244          //输入参数：无
+ 245          //返回参数：无
+ 246          //特别说明：无
+ 247          //------------------------------------------------------------------------------------
+ 248          void IAPRequestCheck(void)
+ 249          {
+ 250   1        static uint8_t UpdateFlag = 0;
+ 251   1        uint8_t cmd;                    /* 命令码，必须从 .all 里取 */
+ 252   1      
+ 253   1        /* 已收到 cmd9：等电机停稳后再擦标志 */
+ 254   1        if(IAPUpgradePending)
+ 255   1        {
+ 256   2          if((mcState == mcStop) || (mcState == mcReady))
+ 257   2          {
+ 258   3            IAPUpgradePending = 0;
+ 259   3            EA = 0;
+ 260   3            if(CPDD_TRUE == IAPFlagErase())
+ 261   3            {
+ 262   4              SetBit(RST_SR, SOFTR);
+ 263   4              while(1);
+ 264   4            }
+ 265   3            EA = 1;
+ 266   3          }
+ 267   2          else if(0 == IAPStopTimeout)     /* 3s 没停稳：放弃本次升级 */
+ 268   2          {
+ 269   3            IAPUpgradePending = 0;
+ 270   3            UpdateFlag = 0;
+ 271   3          }
+ 272   2          return;
+ 273   2        }
+ 274   1      
+ 275   1        if(0 == IAPRxFinishFlag)
+ 276   1        {
+ 277   2          if((1 == UpdateFlag) && (0 == IAPCheckOverTime))
+ 278   2            UpdateFlag = 0;
+ 279   2          return ;
+ 280   2        }
+ 281   1      
+ 282   1        IAPRxFinishFlag = 0;
+ 283   1        IAPCheckOverTime = 30 * 100;
+ 284   1      
+ 285   1        /* 关键：C51 是大端，IAPIdentifyRx.all 的低 4 位才是命令码；
+ 286   1           用 bitf.IAPCmd 会读到高 16 位（恒为 0），判断永远不成立 */
+ 287   1        cmd = (uint8_t)(IAPIdentifyRx.all & 0x0F);
+ 288   1      
+ 289   1        if(OnlineCheck == cmd)
+ 290   1        {
+ 291   2          IAPSendCheck();             /* 只要握手就应答，每次都回 */
+ 292   2        }
+ 293   1      
+ 294   1        if(0 == UpdateFlag)
+ 295   1        {
+ 296   2          if(OnlineCheck == cmd)
+ 297   2          {
+ 298   3            #ifdef IPADataType_FLASH
+ 299   3            EA = 0;
+C51 COMPILER V9.60.7.0   IAPAPP                                                            11/10/2026 14:41:19 PAGE 6   
+
+ 300   3            #endif
+ 301   3      
+ 302   3            if(CPDD_TRUE == IAPIDUpdate())
+ 303   3              UpdateFlag = 1;
+ 304   3      
+ 305   3            #ifdef IPADataType_FLASH
+ 306   3            EA = 1;
+ 307   3            #endif
+ 308   3          }
+ 309   2        }
+ 310   1        else
+ 311   1        {
+ 312   2          if((ExcuteApp == cmd) || (0x0F == cmd))
+ 313   2          {
+ 314   3            CanMin_SetEstop(1);
+ 315   3            CanMin_SetRun(0);
+ 316   3            g_run_state.is_started = 0;
+ 317   3      
+ 318   3            IAPUpgradePending = 1;
+ 319   3            IAPStopTimeout    = 3000;    /* 3s 停机窗口 */
+ 320   3          }
+ 321   2        }
+ 322   1      }
+ 323          
+ 324          /*------------------------------------------------------------------------------------
+ 325          函数功能：异或校验（f105 Robert_EEPROM.c 原函数）
+ 326          输入参数：strData：数据首地址；len：参与校验的字节数
+ 327          返回参数：各字节异或结果
+ 328          特别说明：只用于参数页里的 5 字节标志 / 7 字节 ID，不做 CRC16
+ 329          ------------------------------------------------------------------------------------*/
+ 330          uint8_t CheckXor(uint8_t *strData,int len)
+ 331          {
+ 332   1        uint8_t checksum = 0;
+ 333   1        int i;
+ 334   1        for(i = 0;i < len;i++)
+ 335   1          checksum = checksum ^ strData[i];
+ 336   1        return checksum;
+ 337   1      }
+ 338          
+ 339          /*------------------------------------------------------------------------------------
+ 340          函数功能：从参数页读本机地址（对应 f105 Robert_EEPROM.c 的 ReadCANID）
+ 341          输入参数：无
+ 342          返回参数：Station_ID（0~127）；参数页全 0xFF 或校验错时返回 0
+ 343          特别说明：读的是 Flash 0x0F08 起的 7 字节：55 AA + 4B(Station<<4，大端) + XOR
+ 344                    必须用 code 指针读，否则读到的是 xdata
+ 345          ------------------------------------------------------------------------------------*/
+ 346          uint16_t ReadCANID(void)
+ 347          {
+ 348   1        uint8_t readout[StationIDSize] = {0};
+ 349   1        uint8_t CRC_Result = 0;
+ 350   1        uint32_t result = 0;
+ 351   1        uint8_t i;
+ 352   1      
+ 353   1        for(i = 0;i < StationIDSize;i++)
+ 354   1          readout[i] = *(uint8_t code *)(STM_FLASH_BASE + IAPID_FLASH_OFFSET + i);
+ 355   1      
+ 356   1        CRC_Result = CheckXor(&readout[0],StationIDSize-1);
+ 357   1        if((CRC_Result == readout[StationIDSize-1]) && (readout[0] == 0x55) && (readout[1] == 0xAA))
+ 358   1        {
+ 359   2          result = ((uint32_t)readout[2] << 24) | ((uint32_t)readout[3] << 16) |
+ 360   2                   ((uint32_t)readout[4] << 8)  | (uint32_t)readout[5];
+ 361   2          return (uint16_t)(result >> 4);
+C51 COMPILER V9.60.7.0   IAPAPP                                                            11/10/2026 14:41:19 PAGE 7   
+
+ 362   2        }
+ 363   1        return 0;
+ 364   1      }
+ 365          
+ 366          /*------------------------------------------------------------------------------------
+ 367          函数功能：CAN 层把一帧 11 位标准帧交给 IAP（替代原来的 CANRxMsgIAP 报文对象）
+ 368          输入参数：id：11 位标准 ID；data：8 字节数据；dlc：数据长度
+ 369          返回参数：无
+ 370          特别说明：APP 只认 cmd1（握手）和 cmd9（进 boot），其它命令在 APP 里不响应
+ 371                    这里只记 ID 和置完成标志，真正的 flash 操作放在 1ms 的 IAPRequestCheck 里，
+ 372                    避免在 CAN 中断/解析上下文里做 20ms 级别的擦写
+ 373          ------------------------------------------------------------------------------------*/
+ 374          void IAPRxStdFrame(uint16_t id, uint8_t *dat, uint8_t dlc)
+ 375          {
+ 376   1        uint8_t cmd;
+ 377   1      
+ 378   1        if(IAP_ID_ADDR(id) != Station_ID)   return;     /* 不是本机 */
+ 379   1        cmd = IAP_ID_CMD(id);
+ 380   1          /* 0x0F 与 cmd9 同义（F105 用 0x0F、L431 用 9，两条都收） */
+ 381   1        if((cmd != OnlineCheck) && (cmd != ExcuteApp) && (cmd != 0x0F))
+ 382   1          return;
+ 383   1      
+ 384   1        IAPIdentifyRx.all = id;
+ 385   1        IAPRxFinishFlag   = 1;
+ 386   1      }
+*** WARNING C280 IN LINE 374 OF ..\User\source\IAP\IapApp.c: 'dat': unreferenced local variable
+*** WARNING C280 IN LINE 374 OF ..\User\source\IAP\IapApp.c: 'dlc': unreferenced local variable
+ 387          
+ 388          /* 1ms 调用：3 秒握手窗口倒计时 */
+ 389          void IAPTick1ms(void)
+ 390          {
+ 391   1        if(IAPCheckOverTime) IAPCheckOverTime--;
+ 392   1        if(IAPStopTimeout)   IAPStopTimeout--;
+ 393   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   2520    ----
+   CONSTANT SIZE    =      7    ----
+   XDATA SIZE       =     17     167
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  2 WARNING(S),  0 ERROR(S)

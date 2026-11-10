@@ -1,11 +1,11 @@
-C51 COMPILER V9.60.7.0   DRIVER                                                            09/21/2026 17:11:31 PAGE 1   
+C51 COMPILER V9.60.7.0   DRIVER                                                            11/10/2026 14:41:18 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE DRIVER
 OBJECT MODULE PLACED IN .\Output\DRIVER.obj
 COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\User\source\Hardware\DRIVER.c LARGE OMF2 OPTIMIZE(8,SPEED) BROW
-                    -SE INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include) DEBUG PRINT(.\Listings\DRIVER.lst) TABS(2) OBJECT(.\Output\
-                    -DRIVER.obj)
+                    -SE INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include;..\User\source\IAP;..\User\source\RingBuffer) NOINTVECTOR DE
+                    -BUG PRINT(.\Listings\DRIVER.lst) TABS(2) OBJECT(.\Output\DRIVER.obj)
 
 line level    source
 
@@ -62,7 +62,7 @@ line level    source
                 #endif //end PWM_Level_Mode   
   52   1              
   53   1          ClrBit(DRV_SR , FGIE);  //FG中断使能      0-->Disable   1-->Enable
-C51 COMPILER V9.60.7.0   DRIVER                                                            09/21/2026 17:11:31 PAGE 2   
+C51 COMPILER V9.60.7.0   DRIVER                                                            11/10/2026 14:41:18 PAGE 2   
 
   54   1      
   55   1          /*清中断标志位，使能中断，配置比较值，设置中断优先级*/
