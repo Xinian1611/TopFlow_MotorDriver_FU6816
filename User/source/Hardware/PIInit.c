@@ -10,7 +10,8 @@
  
 /* Includes -------------------------------------------------------------------------------------*/
 #include <MyProject.h>
-#include "DevConfig.h"
+
+
 
 
 /** 
@@ -19,16 +20,8 @@
  */
 void PI_Init(void)
 {
-    if (g_motor_cfg != NULL)
-    {
-        PI1_KP          = g_motor_cfg->speed_kp;
-        PI1_KI          = g_motor_cfg->speed_ki;
-    }
-    else
-    {
-        PI1_KP          = SKP;
-        PI1_KI          = SKI;
-    }
+    PI1_KP          = SKP;
+    PI1_KI          = SKI;
     PI1_EK1         =0;
     PI1_EK          =0;
     PI1_UKH         =0;

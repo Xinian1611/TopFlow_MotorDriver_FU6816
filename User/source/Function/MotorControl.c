@@ -23,7 +23,7 @@ MotStaM     McStaSet;
  */
 void MC_Control(void)
 {
-  if (mcFaultSource != FaultNoSource) // 优先检查是否有错误，若有错误则跳转至错误状态
+    if (mcFaultSource != FaultNoSource) // 优先检查是否有错误，若有错误则跳转至错误状态
 	{
 		mcState = mcFault;
 	}

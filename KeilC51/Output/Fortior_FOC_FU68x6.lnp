@@ -1,6 +1,7 @@
 ".\Output\main.obj",
 ".\Output\AddFunction.obj",
 ".\Output\Interrupt.obj",
+".\Output\CanMin.obj",
 ".\Output\MotorControl.obj",
 ".\Output\MotorControlFunction.obj",
 ".\Output\MotorProtect.obj",

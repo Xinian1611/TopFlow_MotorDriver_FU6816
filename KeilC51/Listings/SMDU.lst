@@ -1,4 +1,4 @@
-C51 COMPILER V9.60.7.0   SMDU                                                              09/21/2026 11:30:58 PAGE 1   
+C51 COMPILER V9.60.7.0   SMDU                                                              11/10/2026 19:05:30 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE SMDU
@@ -62,7 +62,7 @@ line level    source
   48   1          return PI3_UKH;
   49   1      }
   50          
-C51 COMPILER V9.60.7.0   SMDU                                                              09/21/2026 11:30:58 PAGE 2   
+C51 COMPILER V9.60.7.0   SMDU                                                              11/10/2026 19:05:30 PAGE 2   
 
   51          /*  -------------------------------------------------------------------------------------------------
   52              Function Name  : LPFFunction
@@ -126,7 +126,7 @@ line level    source
  110   1        PI0_EK = Xn1;                                                                               // Fill in EK
  111   1        SMDU_RunBlock(0, PI);
  112   1        return PI0_UKH;
-C51 COMPILER V9.60.7.0   SMDU                                                              09/21/2026 11:30:58 PAGE 3   
+C51 COMPILER V9.60.7.0   SMDU                                                              11/10/2026 19:05:30 PAGE 3   
 
  113   1      }
  114          int16 MDU_PI1(int16 Xn1)
@@ -190,7 +190,7 @@ line level    source
  172          
  173          /**
  174           * @brief        幅值计算
-C51 COMPILER V9.60.7.0   SMDU                                                              09/21/2026 11:30:58 PAGE 4   
+C51 COMPILER V9.60.7.0   SMDU                                                              11/10/2026 19:05:30 PAGE 4   
 
  175                          U = sqrt((Usinθ)^2 +  (Ucosθ)^2) 
  176                          θ = atan(Usinθ/Ucosθ)
@@ -254,7 +254,7 @@ line level    source
  234   1        SCAT2_COS = Ucos;
  235   1        SCAT2_SIN = Usin;
  236   1        SMDU_RunBlock(2, ATAN);
-C51 COMPILER V9.60.7.0   SMDU                                                              09/21/2026 11:30:58 PAGE 5   
+C51 COMPILER V9.60.7.0   SMDU                                                              11/10/2026 19:05:30 PAGE 5   
 
  237   1        return SCAT2_RES2;
  238   1      }
@@ -318,7 +318,7 @@ line level    source
  296   1      }
  297          int16 MDU_MUL1_GetSL16(int16 Xn1, int16 Xn0)
  298          {
-C51 COMPILER V9.60.7.0   SMDU                                                              09/21/2026 11:30:58 PAGE 6   
+C51 COMPILER V9.60.7.0   SMDU                                                              11/10/2026 19:05:30 PAGE 6   
 
  299   1        MUL1_MA = Xn1;
  300   1        MUL1_MB = Xn0;
@@ -382,7 +382,7 @@ line level    source
  358          
  359          /** 
  360           * @brief     无符号乘法16x16
-C51 COMPILER V9.60.7.0   SMDU                                                              09/21/2026 11:30:58 PAGE 7   
+C51 COMPILER V9.60.7.0   SMDU                                                              11/10/2026 19:05:30 PAGE 7   
 
  361           * @param[in] Xn1 乘数0(16位)
  362           * @param[in] Xn0 乘数1(16位)
@@ -446,7 +446,7 @@ line level    source
  420          {
  421   1        MUL2_MA = Xn1;
  422   1        MUL2_MB = Xn0;
-C51 COMPILER V9.60.7.0   SMDU                                                              09/21/2026 11:30:58 PAGE 8   
+C51 COMPILER V9.60.7.0   SMDU                                                              11/10/2026 19:05:30 PAGE 8   
 
  423   1        SMDU_RunBlock(2, UMUL);
  424   1        return (uint16)MUL2_MCL;
@@ -510,7 +510,7 @@ line level    source
  482          {
  483   1        DIV0_DAH = daH;
  484   1        DIV0_DAL = daL;
-C51 COMPILER V9.60.7.0   SMDU                                                              09/21/2026 11:30:58 PAGE 9   
+C51 COMPILER V9.60.7.0   SMDU                                                              11/10/2026 19:05:30 PAGE 9   
 
  485   1        DIV0_DB = Yn;
  486   1        SMDU_RunBlock(0, DIV);
@@ -574,7 +574,7 @@ line level    source
  544   1        return* (uint32*) & DIV2_DQH;
  545   1      }
  546          uint32 MDU_DIV3_GetQ32(uint16 daH, uint16 daL, uint16 Yn)
-C51 COMPILER V9.60.7.0   SMDU                                                              09/21/2026 11:30:58 PAGE 10  
+C51 COMPILER V9.60.7.0   SMDU                                                              11/10/2026 19:05:30 PAGE 10  
 
  547          {
  548   1        DIV3_DAH = daH;

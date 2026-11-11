@@ -1,4 +1,4 @@
-C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 1   
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              11/11/2026 10:23:48 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE MOTORCONTROLFUNCTION
@@ -62,7 +62,7 @@ line level    source
   49   1          FOC_EFREQHOLD   = 0;
   50   1          /* 电流环参数配置 */
   51   1          FOC_DMAX        = DOUTMAX;
-C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 2   
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              11/11/2026 10:23:48 PAGE 2   
 
   52   1          FOC_DMIN        = DOUTMIN;
   53   1          FOC_QMAX        = QOUTMAX;
@@ -118,15 +118,15 @@ line level    source
  103   1          
  104   1          /* 过调制 */
  105   1          #if (OverModulation == Enable)
-                  {
-                      SetBit(FOC_CR1, OVMDL);                             // 过调制
-                  }
-                  #endif //end OverModulation
+ 106   1          {
+ 107   2              SetBit(FOC_CR1, OVMDL);                             // 过调制
+ 108   2          }
+ 109   1          #endif //end OverModulation
  110   1          /* 单电阻采样； 需要最小采样窗,FOC_TRGDLY为0，七段式SVPWM方式 */
  111   1          #if (Shunt_Resistor_Mode == Single_Resistor)
  112   1          {
  113   2          #if (Single_Resistor_Mode == SVPWM_OPTIM)
-C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 3   
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              11/11/2026 10:23:48 PAGE 3   
 
                   {
                     SetReg(FOC_CR1, CSM0 | CSM1, CSM1);                 // 新单电阻采样配置
@@ -190,7 +190,7 @@ line level    source
                           ClrBit(FOC_CR2, F5SEG);                         // 7段式
                       }
                       #elif (SVPMW_Mode == SVPWM_5_Segment)
-C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 4   
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              11/11/2026 10:23:48 PAGE 4   
 
                       {
                           SetBit(FOC_CR2, F5SEG);                         // 5段式
@@ -254,7 +254,7 @@ line level    source
  228   1          /*计数器比较值来源FOC*/
  229   1          SetBit(DRV_CR, DRVEN);  // 计数器使能      0-->Disable 1-->Enable
  230   1          SetBit(DRV_CR, OCS);
-C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 5   
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              11/11/2026 10:23:48 PAGE 5   
 
  231   1      }
  232          
@@ -318,7 +318,7 @@ line level    source
  286          
  287          
  288          /**
-C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 6   
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              11/11/2026 10:23:48 PAGE 6   
 
  289           * @brief     开启次功能启动时候会将电机强拉到 设定角度，之后再启动
  290           * @date      2022-07-14
@@ -382,7 +382,7 @@ line level    source
  346   2              //SetReg(FOC_CR1, EFAE | RFAE | ANGM, ANGM);
  347   2              /*使能输出*/
  348   2              //        DRV_CMR |= 0x3F;                         // U、V、W相输出
-C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 7   
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              11/11/2026 10:23:48 PAGE 7   
 
  349   2              MOE = 1;
  350   2              FOC__THETA  = mcFocCtrl.AlignAngle;
@@ -446,7 +446,7 @@ line level    source
                                   if (mcRsd.HighSpdStart == 0)
                                   {
                                       mcRsd.HighSpdStart = 1; // 设置启动
-C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 8   
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              11/11/2026 10:23:48 PAGE 8   
 
                                   }
                               }
@@ -510,7 +510,7 @@ line level    source
                           {
                               if (mcBemf.BEMFSpeed < S_Value(-100))  // 逆风
                               {
-C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 9   
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              11/11/2026 10:23:48 PAGE 9   
 
                                   mcFocCtrl.State_Count            = 2000;
                                   mcFocCtrl.Start_Mode            = HEADWIND_START;      // 逆风启动
@@ -574,7 +574,7 @@ line level    source
                                   ClrBit(CMP_CR2, CMP0EN);  // 关闭比较器
                                   ClrBit(TIM1_CR0, T1BCEN); // 关闭定时器
                               }
-C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 10  
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              11/11/2026 10:23:48 PAGE 10  
 
                           }
                       }
@@ -638,7 +638,7 @@ line level    source
  584   1          FOC__ETHETA         = mcFocCtrl.AlignAngle_Temp - 4096;
  585   1          /*启动电流、KP、KI、FOC_EKP、FOC_EKI*/
  586   1          FOC_IDREF           = ID_Start_CURRENT;                         // D轴启动电流
-C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 11  
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              11/11/2026 10:23:48 PAGE 11  
 
  587   1          mcFocCtrl.IqRef     = IQ_Start_CURRENT >> 3;                 // Q轴启动电流
  588   1          FOC__UD             = mcFocCtrl.ud_align;
@@ -702,7 +702,7 @@ line level    source
  646          
  647          
  648          /*  -------------------------------------------------------------------------------------------------
-C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 12  
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              11/11/2026 10:23:48 PAGE 12  
 
  649              Function Name  : MC_Stop
  650              Description    : inital motor control parameter
@@ -762,16 +762,16 @@ line level    source
  704   1          McStaSet.SetMode                    = 0;
  705   1          /**********电机目标方向*************/
  706   1          #if (FR_MODE == CW)
- 707   1          {
- 708   2              mcFocCtrl.FR                    = CW;
- 709   2          }
- 710   1          #else
-C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 13  
-
                   {
-                      mcFocCtrl.FR                    = CCW;
+                      mcFocCtrl.FR                    = CW;
                   }
-                  #endif //end IRMODE
+                  #else
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              11/11/2026 10:23:48 PAGE 13  
+
+ 711   1          {
+ 712   2              mcFocCtrl.FR                    = CCW;
+ 713   2          }
+ 714   1          #endif //end IRMODE
  715   1          /* -----电流偏置校准变量初始化----- */
  716   1          mcCurOffset.IuOffsetSum            = 16383;
  717   1          mcCurOffset.IvOffsetSum            = 16383;
@@ -830,7 +830,7 @@ line level    source
                       mcCurOffset.IuOffsetSum     += ((ADC0_DR & 0x7ff8));
                       mcCurOffset.IuOffset         = mcCurOffset.IuOffsetSum >> 4;
                       mcCurOffset.IuOffsetSum     -= mcCurOffset.IuOffset;
-C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 14  
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              11/11/2026 10:23:48 PAGE 14  
 
                       mcCurOffset.IvOffsetSum     += ((ADC1_DR & 0x7ff8));
                       mcCurOffset.IvOffset         = mcCurOffset.IvOffsetSum >> 4;
@@ -894,7 +894,7 @@ line level    source
  829          
  830          void SquStartInit(void)
  831          {
-C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 15  
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              11/11/2026 10:23:48 PAGE 15  
 
  832   1          if (SquStart.StartState == 1)
  833   1          {
@@ -958,7 +958,7 @@ line level    source
  889   1      }
  890          
  891          void SquToFOCInit(void)
-C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 16  
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              11/11/2026 10:23:48 PAGE 16  
 
  892          {
  893   1          if (SquStart.StartState == 4)
@@ -1022,10 +1022,10 @@ line level    source
  949          
 
 
-C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              09/21/2026 17:11:30 PAGE 17  
+C51 COMPILER V9.60.7.0   MOTORCONTROLFUNCTION                                              11/11/2026 10:23:48 PAGE 17  
 
 MODULE INFORMATION:   STATIC OVERLAYABLE
-   CODE SIZE        =   2169    ----
+   CODE SIZE        =   2180    ----
    CONSTANT SIZE    =   ----    ----
    XDATA SIZE       =     21    ----
    PDATA SIZE       =   ----    ----

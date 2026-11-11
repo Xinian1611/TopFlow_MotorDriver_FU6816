@@ -1,0 +1,266 @@
+C51 COMPILER V9.60.7.0   DEVCONFIG                                                         11/04/2026 11:32:03 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE DEVCONFIG
+OBJECT MODULE PLACED IN .\Output\DevConfig.obj
+COMPILER INVOKED BY: D:\Software\keil\C51\BIN\C51.EXE ..\User\source\Application\DevConfig.c LARGE OMF2 OPTIMIZE(8,SPEED
+                    -) BROWSE INCDIR(..\User\include;..\FU68xx_Hardware_Driver\Include;..\User\source\RingBuffer) DEBUG PRINT(.\Listings\DevC
+                    -onfig.lst) TABS(2) OBJECT(.\Output\DevConfig.obj)
+
+line level    source
+
+   1          /************************************************************************************
+   2           * @Author       : FengYu
+   3           * @Date         : 2026-07-07 14:18:18
+   4           * @LastEditors  : zhangbao zhb@wujiang.com
+   5           * @LastEditTime : 2026-07-08 13:31:17
+   6           * @Description  : 设备配置模块
+   7           * @
+   8           * @Copyright (c) 2026 by ${git_name_email}, All Rights Reserved.
+   9          *************************************************************************************/
+  10          
+  11          /******************************************************************************
+  12           * 头文件
+  13           ******************************************************************************/
+  14          #include "Myproject.h"
+  15          #include "DevConfig.h"
+  16          #include "CanProtocol.h"
+  17          
+  18          
+  19          /******************************************************************************
+  20           * 宏定义
+  21           ******************************************************************************/
+  22          
+  23          #define AT24CXX_CFG_ADDR              0x0000
+  24          #define WARNING_INFO(enable, time)    (((enable & 0x01) << 6) | (time & 0x3F))
+  25          #define VALUE2TRAN(value)             ((int16_t)(value) - 32767)
+  26          
+  27          #define MOTOR_DRV_CFG_DEFAULT() do { \
+  28                  s_dev_cfg.motor_cfg.hw_ver[0]           = 1; \
+  29                  s_dev_cfg.motor_cfg.sw_ver[0]           = 1; \
+  30                  s_dev_cfg.motor_cfg.proto_ver[0]        = 1; \  
+  31                  s_dev_cfg.motor_cfg.ctrl_type           = DEV_CTRL_TYPE; \
+  32                  s_dev_cfg.motor_cfg.speed_kp            = SKP; \
+  33                  s_dev_cfg.motor_cfg.speed_ki            = SKI; \
+  34                  s_dev_cfg.motor_cfg.speed_kd            = SKD; \
+  35                  s_dev_cfg.motor_cfg.motor_type          = MOTOR_SELECT; \
+  36                  s_dev_cfg.motor_cfg.speed_precision     = SPEED_PRECISION; \
+  37                  s_dev_cfg.motor_cfg.max_speed           = MAX_SPEED; \
+  38                  s_dev_cfg.motor_cfg.idle_speed          = IDLE_SPEED; \ 
+  39                  s_dev_cfg.motor_cfg.drv_water_alarm.value   = WARNING_INFO(0, 30); \
+  40                  s_dev_cfg.motor_cfg.drv_water_stop.value    = WARNING_INFO(0, 30); \
+  41                  s_dev_cfg.motor_cfg.mot_water_alarm.value   = WARNING_INFO(0, 30); \
+  42                  s_dev_cfg.motor_cfg.mot_water_stop.value    = WARNING_INFO(0, 30); \
+  43                  s_dev_cfg.motor_cfg.max_speed_inc       = 100; \
+  44                  s_dev_cfg.motor_cfg.min_speed_inc       = 10; \
+  45                  s_dev_cfg.motor_cfg.rated_voltage       = 3600; \
+  46                  s_dev_cfg.motor_cfg.rated_current       = 10000; \
+  47                  s_dev_cfg.motor_cfg.fwd_power_pct       = 100; \
+  48                  s_dev_cfg.motor_cfg.rev_power_pct       = 100; \  
+  49                  s_dev_cfg.motor_cfg.max_voltage         =  3600; \
+  50                  s_dev_cfg.motor_cfg.min_voltage         =  3000; \  
+  51                  s_dev_cfg.motor_cfg.max_current         = 10000; \
+  52                  s_dev_cfg.motor_cfg.volt_high_alarm     = VALUE2TRAN(3600); \
+  53                  s_dev_cfg.motor_cfg.volt_low_alarm      = VALUE2TRAN(3000); \
+C51 COMPILER V9.60.7.0   DEVCONFIG                                                         11/04/2026 11:32:03 PAGE 2   
+
+  54                  s_dev_cfg.motor_cfg.volt_high_stop      = VALUE2TRAN(3600); \
+  55                  s_dev_cfg.motor_cfg.volt_alarm.value    = WARNING_INFO(0, 30); \
+  56                  s_dev_cfg.motor_cfg.volt_stop.value     = WARNING_INFO(0, 30); \
+  57                  s_dev_cfg.motor_cfg.curr_high_alarm     = VALUE2TRAN(10000); \
+  58                  s_dev_cfg.motor_cfg.curr_low_alarm      = VALUE2TRAN(0); \
+  59                  s_dev_cfg.motor_cfg.curr_high_stop      = VALUE2TRAN(0); \
+  60                  s_dev_cfg.motor_cfg.curr_alarm.value    = WARNING_INFO(0, 30); \
+  61                  s_dev_cfg.motor_cfg.curr_stop.value     = WARNING_INFO(0, 30); \
+  62                  s_dev_cfg.motor_cfg.drv_temp_high_alarm = VALUE2TRAN(100); \
+  63                  s_dev_cfg.motor_cfg.drv_temp_low_alarm  = VALUE2TRAN(0); \
+  64                  s_dev_cfg.motor_cfg.drv_temp_high_stop  = VALUE2TRAN(0); \  
+  65                  s_dev_cfg.motor_cfg.drv_temp_alarm.value= WARNING_INFO(0, 30); \
+  66                  s_dev_cfg.motor_cfg.drv_temp_stop.value = WARNING_INFO(0, 30); \    
+  67                  s_dev_cfg.motor_cfg.mot_temp_high_alarm = VALUE2TRAN(100); \
+  68                  s_dev_cfg.motor_cfg.mot_temp_low_alarm  = VALUE2TRAN(0); \
+  69                  s_dev_cfg.motor_cfg.mot_temp_high_stop  = VALUE2TRAN(0); \
+  70                  s_dev_cfg.motor_cfg.mot_temp_alarm.value= WARNING_INFO(0, 30); \
+  71                  s_dev_cfg.motor_cfg.mot_temp_stop.value = WARNING_INFO(0, 30); \
+  72                  s_dev_cfg.motor_cfg.overspeed_alarm     = VALUE2TRAN(100); \
+  73                  s_dev_cfg.motor_cfg.stall_alarm         = VALUE2TRAN(0); \
+  74                  s_dev_cfg.motor_cfg.overspeed_stop      = VALUE2TRAN(0); \
+  75                  s_dev_cfg.motor_cfg.speed_alarm.value   = WARNING_INFO(0, 30); \
+  76                  s_dev_cfg.motor_cfg.speed_stop.value    = WARNING_INFO(0, 30); \
+  77              } while(0)
+  78          
+  79          /******************************************************************************
+  80           * 函数声明
+  81           ******************************************************************************/
+  82          
+  83          static uint32_t DevConfig_CalcCRC(const uint8_t *dat, uint16_t len);
+  84          
+  85          
+  86          /******************************************************************************
+  87           * 内部变量
+  88           ******************************************************************************/
+  89          static DevConfig_t xdata s_dev_cfg; ///< 设备配置参数结构体
+  90          MotorDrvCfg_t xdata *g_motor_cfg; ///< 电机驱动配置参数指针
+  91          
+  92          
+  93          /******************************************************************************
+  94           * 参数读写接口
+  95           ******************************************************************************/
+  96          
+  97          /// @brief 载入本地参数
+  98          /// @param cfg 配置参数结构体指针
+  99          /// @retval None
+ 100          void DevConfig_LoadParam(void)
+ 101          {
+ 102   1          AT24Cxx_Init();
+ 103   1          
+ 104   1          AT24Cxx_ReadBytes(AT24CXX_CFG_ADDR, (uint8 *)&s_dev_cfg, sizeof(DevConfig_t));
+ 105   1      
+ 106   1          if (s_dev_cfg.magic != DEV_CONFIG_MAGIC_NUMBER ||
+ 107   1              s_dev_cfg.crc != DevConfig_CalcCRC((const uint8_t *)&s_dev_cfg.motor_cfg, sizeof(MotorDrvCfg_t)))
+ 108   1          {
+ 109   2              memset(&s_dev_cfg, 0, sizeof(DevConfig_t));
+ 110   2              s_dev_cfg.magic = DEV_CONFIG_MAGIC_NUMBER;
+ 111   2              MOTOR_DRV_CFG_DEFAULT();
+ 112   2              s_dev_cfg.crc = 0;
+ 113   2          }
+ 114   1      
+ 115   1          g_motor_cfg = &s_dev_cfg.motor_cfg;
+C51 COMPILER V9.60.7.0   DEVCONFIG                                                         11/04/2026 11:32:03 PAGE 3   
+
+ 116   1      
+ 117   1      }
+ 118          
+ 119          /// @brief 写入设备配置参数
+ 120          /// @param cfg 配置参数结构体指针
+ 121          /// @retval None
+ 122          void DevConfig_WriteParam(const void *cfg)
+ 123          {
+ 124   1          if (cfg == NULL)
+ 125   1              return;
+ 126   1      
+ 127   1          if (memcmp(&s_dev_cfg.motor_cfg, cfg, sizeof(MotorDrvCfg_t)) == 0)
+ 128   1              return;
+ 129   1      
+ 130   1          s_dev_cfg.crc = DevConfig_CalcCRC((const uint8_t *)cfg, sizeof(MotorDrvCfg_t));
+ 131   1      
+ 132   1          memcpy(&s_dev_cfg.motor_cfg, cfg, sizeof(MotorDrvCfg_t));
+ 133   1      
+ 134   1          AT24Cxx_WriteBytes(AT24CXX_CFG_ADDR, (const uint8 *)&s_dev_cfg, sizeof(DevConfig_t));
+ 135   1      }
+ 136          
+ 137          /// @brief 获取设备配置参数指针
+ 138          /// @param None
+ 139          /// @return 配置参数结构体指针
+ 140          void *DevConfig_GetParam(void)
+ 141          {
+ 142   1          return g_motor_cfg;
+ 143   1      }
+ 144          
+ 145          /// @brief 将配置中的速度环PI参数写入硬件寄存器
+ 146          /// @param None
+ 147          /// @retval None
+ 148          void DevConfig_ApplySpeedPI(void)
+ 149          {
+ 150   1          PI1_KP = g_motor_cfg->speed_kp;
+ 151   1          PI1_KI = g_motor_cfg->speed_ki;
+ 152   1      }
+ 153          
+ 154          
+ 155          /******************************************************************************
+ 156           * 内存读写接口(已注释)
+ 157           ******************************************************************************/
+ 158          
+ 159          /*
+ 160          /// @brief 从内存读取配置数据
+ 161          /// @param addr 内存地址
+ 162          /// @param buf 数据缓冲区指针
+ 163          /// @param len 数据长度
+ 164          /// @retval 实际读取的字节数
+ 165          uint16 DevConfig_MemRead(uint32_t addr, uint8_t *buf, uint16_t len)
+ 166          {
+ 167              uint16_t i;
+ 168              if (buf == NULL || len == 0) {
+ 169                  return 0;
+ 170              }
+ 171          
+ 172              for (i = 0; i < len; i++) {
+ 173                  buf[i] = *((uint8_t *)(addr + i));
+ 174              }
+ 175          
+ 176              return len;
+ 177          }
+C51 COMPILER V9.60.7.0   DEVCONFIG                                                         11/04/2026 11:32:03 PAGE 4   
+
+ 178          
+ 179          /// @brief 向内存写入配置数据
+ 180          /// @param addr 内存地址
+ 181          /// @param buf 数据缓冲区指针
+ 182          /// @param len 数据长度
+ 183          /// @retval 实际写入的字节数
+ 184          uint16 DevConfig_MemWrite(uint32_t addr, const uint8_t *buf, uint16_t len)
+ 185          {
+ 186              uint16_t i;
+ 187              if (buf == NULL || len == 0) {
+ 188                  return 0;
+ 189              }
+ 190          
+ 191              for (i = 0; i < len; i++) {
+ 192                  *((uint8_t *)(addr + i)) = buf[i];
+ 193              }
+ 194          
+ 195              return len;
+ 196          }
+ 197          */
+ 198          
+ 199          /******************************************************************************
+ 200           * CRC计算函数
+ 201           ******************************************************************************/
+ 202          
+ 203          /// @brief 计算配置参数CRC32校验码
+ 204          /// @param cfg 配置参数结构体指针
+ 205          /// @retval CRC32校验码
+ 206          static uint32_t DevConfig_CalcCRC(const uint8_t *dat, uint16_t len)
+ 207          {
+ 208   1          uint32_t crc = 0xFFFFFFFF;
+ 209   1          uint16_t i, j;
+ 210   1      
+ 211   1          for (i = 0; i < len; i++)
+ 212   1          {
+ 213   2              crc ^= (uint32_t)dat[i];
+ 214   2              for (j = 0; j < 8; j++)
+ 215   2              {
+ 216   3                  if (crc & 0x01)
+ 217   3                  {
+ 218   4                      crc = (crc >> 1) ^ 0xEDB88320;
+ 219   4                  }
+ 220   3                  else
+ 221   3                  {
+ 222   4                      crc >>= 1;
+ 223   4                  }
+ 224   3              }
+ 225   2          }
+ 226   1      
+ 227   1          return crc ^ 0xFFFFFFFF;
+ 228   1      }
+ 229          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    852    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =     98      14
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+C51 COMPILER V9.60.7.0   DEVCONFIG                                                         11/04/2026 11:32:03 PAGE 5   
+
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

@@ -5,8 +5,8 @@
  * @note      Last modify author is Kris.huang
  * @since     2017-12-27
  * @date      2022-07-14
- * @brief     This file contains all the common data types used for Motor Control.
- *
+ * @brief     This file contains all the common data types used for Motor Control.  
+ *                      
  */
 
 
@@ -42,7 +42,6 @@
 #include <FU68xx_6_Flash.h>
 #include "WDT_INIT.h"
 
-#include <24cxx.h>
 #include <AddFunction.h>
 #include <RSDDetect.h>
 #include <MotorControlFunction.h>
@@ -51,5 +50,5 @@
 #include <SMDU.h>
 #include <BEMFDetect.h>
 #include <SquStart.h>
-#include <MotorUserControl.h>
+#include <CanMin.h>
 #endif

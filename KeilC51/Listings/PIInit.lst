@@ -1,4 +1,4 @@
-C51 COMPILER V9.60.7.0   PIINIT                                                            09/21/2026 17:11:31 PAGE 1   
+C51 COMPILER V9.60.7.0   PIINIT                                                            11/11/2026 10:23:49 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE PIINIT
@@ -62,7 +62,7 @@ line level    source
   51              @brief        PI3用于弱磁增速
   52              @date         2022-07-14
   53          */
-C51 COMPILER V9.60.7.0   PIINIT                                                            09/21/2026 17:11:31 PAGE 2   
+C51 COMPILER V9.60.7.0   PIINIT                                                            11/11/2026 10:23:49 PAGE 2   
 
   54          void PI3_Init(void)
   55          {
@@ -78,7 +78,7 @@ line level    source
 
 
 MODULE INFORMATION:   STATIC OVERLAYABLE
-   CODE SIZE        =    166    ----
+   CODE SIZE        =    165    ----
    CONSTANT SIZE    =   ----    ----
    XDATA SIZE       =   ----    ----
    PDATA SIZE       =   ----    ----

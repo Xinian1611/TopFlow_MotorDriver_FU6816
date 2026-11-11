@@ -1,11 +1,11 @@
-A51 MACRO ASSEMBLER  STARTUP_FU6816                                                       09/21/2026 10:12:05 PAGE     1
+A51 MACRO ASSEMBLER  STARTUP_FU6816                                                       11/10/2026 19:05:31 PAGE     1
 
 
-MACRO ASSEMBLER A51 V8.02b
+MACRO ASSEMBLER A51 V8.2.7.0
 OBJECT MODULE PLACED IN .\Output\STARTUP_FU6816.obj
-ASSEMBLER INVOKED BY: C:\Keil_v5\C51\BIN\A51.EXE ..\FU68xx_Hardware_Driver\Source\STARTUP_FU6816.A51 INCDIR(..\User\incl
-                      ude;..\FU68xx_Hardware_Driver\Include) SET(LARGE) DEBUG PRINT(.\Listings\STARTUP_FU6816.lst) OBJEC
-                      T(.\Output\STARTUP_FU6816.obj) EP
+ASSEMBLER INVOKED BY: D:\Software\keil\C51\BIN\A51.EXE ..\FU68xx_Hardware_Driver\Source\STARTUP_FU6816.A51 INCDIR(..\Use
+                      r\include;..\FU68xx_Hardware_Driver\Include) SET(LARGE) DEBUG PRINT(.\Listings\STARTUP_FU6816.lst)
+                       OBJECT(.\Output\STARTUP_FU6816.obj) EP
 
 LOC  OBJ            LINE     SOURCE
 
@@ -65,7 +65,7 @@ LOC  OBJ            LINE     SOURCE
 0010 DFFC             54                     DJNZ    R7,XDATALOOP
 0012 DEFA             55                     DJNZ    R6,XDATALOOP
                       56     ENDIF
-A51 MACRO ASSEMBLER  STARTUP_FU6816                                                       09/21/2026 10:12:05 PAGE     2
+A51 MACRO ASSEMBLER  STARTUP_FU6816                                                       11/10/2026 19:05:31 PAGE     2
 
                       57     
                       58     IF IBPSTACK <> 0
@@ -82,7 +82,7 @@ LOC  OBJ            LINE     SOURCE
 0017 020000   F       69                     LJMP    ?C_START
                       70     
                       71                     END
-A51 MACRO ASSEMBLER  STARTUP_FU6816                                                       09/21/2026 10:12:05 PAGE     3
+A51 MACRO ASSEMBLER  STARTUP_FU6816                                                       11/10/2026 19:05:31 PAGE     3
 
 SYMBOL TABLE LISTING
 ------ ----- -------

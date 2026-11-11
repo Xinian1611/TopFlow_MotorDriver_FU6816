@@ -1,4 +1,4 @@
-C51 COMPILER V9.60.7.0   CAN                                                               09/21/2026 17:11:32 PAGE 1   
+C51 COMPILER V9.60.7.0   CAN                                                               11/11/2026 10:23:50 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE CAN
@@ -62,7 +62,7 @@ line level    source
   50   1              tRESYN=tq*(RESYN[1:0]+1)                                                                          
              -                  */
   51   1          //  SetBit(CAN_BTR0,SJW1);
-C51 COMPILER V9.60.7.0   CAN                                                               09/21/2026 17:11:32 PAGE 2   
+C51 COMPILER V9.60.7.0   CAN                                                               11/11/2026 10:23:50 PAGE 2   
 
   52   1          //  SetBit(CAN_BTR0,SJW0);
   53   1          /*****************  时间触发采样模式        0：禁止     1：使能     *****************/
@@ -126,7 +126,7 @@ line level    source
                       {
                           EXTID1 = 0x1FFFFFFF;                                             //0-0x1FFF8000，只可更改
              -EXTID1[15]-[28]
-C51 COMPILER V9.60.7.0   CAN                                                               09/21/2026 17:11:32 PAGE 3   
+C51 COMPILER V9.60.7.0   CAN                                                               11/11/2026 10:23:50 PAGE 3   
 
                           EXTID2 = 0x1FFFFFFF;                                             //0-0x1FFF8000，只可更改
              -EXTID1[15]-[28]
@@ -190,7 +190,7 @@ line level    source
  159           * 参数说明：
  160           * 注意事项：若开启中断，需要注释掉SetBit(CAN_CR1, BUFRLS);
  161           */
-C51 COMPILER V9.60.7.0   CAN                                                               09/21/2026 17:11:32 PAGE 4   
+C51 COMPILER V9.60.7.0   CAN                                                               11/11/2026 10:23:50 PAGE 4   
 
  162          void CAN_Read(void)
  163          {
@@ -254,7 +254,7 @@ line level    source
  221   2                  Can.Data0 = CAN_RX1DR0;
  222   2                  Can.Data1 = CAN_RX1DR1;
  223   2                  Can.Data2 = CAN_RX1DR2;
-C51 COMPILER V9.60.7.0   CAN                                                               09/21/2026 17:11:32 PAGE 5   
+C51 COMPILER V9.60.7.0   CAN                                                               11/11/2026 10:23:50 PAGE 5   
 
  224   2                  Can.Data3 = CAN_RX1DR3;
  225   2                  Can.Data4 = CAN_RX1DR4;
@@ -318,7 +318,7 @@ line level    source
  283   2              CAN_TXID1 = Can.EXTID >> 13;
  284   2              CAN_TXID2 = Can.EXTID >> 5;
  285   2              CAN_TXID3 = Can.EXTID << 4;
-C51 COMPILER V9.60.7.0   CAN                                                               09/21/2026 17:11:32 PAGE 6   
+C51 COMPILER V9.60.7.0   CAN                                                               11/11/2026 10:23:50 PAGE 6   
 
  286   2          }
  287   1          else

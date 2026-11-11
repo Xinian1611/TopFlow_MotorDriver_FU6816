@@ -1,4 +1,4 @@
-C51 COMPILER V9.60.7.0   DMA                                                               09/21/2026 11:30:57 PAGE 1   
+C51 COMPILER V9.60.7.0   DMA                                                               11/10/2026 19:05:29 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE DMA
@@ -62,7 +62,7 @@ line level    source
   51   1      
   52   1          if (ReadBit(DMA0_CR0 , DMAEN))
   53   1          {
-C51 COMPILER V9.60.7.0   DMA                                                               09/21/2026 11:30:57 PAGE 2   
+C51 COMPILER V9.60.7.0   DMA                                                               11/10/2026 19:05:29 PAGE 2   
 
   54   2              bTmp = true;
   55   2      
@@ -126,7 +126,7 @@ line level    source
  113   1      
  114   1          if (!EA) EA = 1;
  115   1      
-C51 COMPILER V9.60.7.0   DMA                                                               09/21/2026 11:30:57 PAGE 3   
+C51 COMPILER V9.60.7.0   DMA                                                               11/10/2026 19:05:29 PAGE 3   
 
  116   1          if (eIRQ) SetReg(IP1 , PDMA1 | PDMA0 , (uint8)eIP);
  117   1      }
@@ -190,7 +190,7 @@ line level    source
  173   1          if (bTmp) SetBit(DMA1_CR0, DMAEN);
  174   1      }
  175          
-C51 COMPILER V9.60.7.0   DMA                                                               09/21/2026 11:30:57 PAGE 4   
+C51 COMPILER V9.60.7.0   DMA                                                               11/10/2026 19:05:29 PAGE 4   
 
  176          void EnableRun_DMA0(void)
  177          {
