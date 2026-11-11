@@ -7,7 +7,7 @@
  * @date      2022-07-14
  * @brief     This file contains customer parameter used for Motor Control.  
  */
- 
+
 
 /* Define to prevent recursive inclusion -------------------------------------------------------- */
 #ifndef __CUSTOMER_H_
