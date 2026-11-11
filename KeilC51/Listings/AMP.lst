@@ -1,4 +1,4 @@
-C51 COMPILER V9.60.7.0   AMP                                                               11/10/2026 14:41:17 PAGE 1   
+C51 COMPILER V9.60.7.0   AMP                                                               11/11/2026 13:59:24 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE AMP
@@ -62,7 +62,7 @@ line level    source
                           {
                               ClrBit(AMP_CR1, AMP0_GAIN2);
                               SetBit(AMP_CR1, AMP0_GAIN1);
-C51 COMPILER V9.60.7.0   AMP                                                               11/10/2026 14:41:17 PAGE 2   
+C51 COMPILER V9.60.7.0   AMP                                                               11/11/2026 13:59:24 PAGE 2   
 
                               ClrBit(AMP_CR1, AMP0_GAIN0);
                           }
@@ -126,7 +126,7 @@ line level    source
                           {
                               ClrBit(AMP_CR1, AMP0_GAIN2);
                               SetBit(AMP_CR1, AMP0_GAIN1);
-C51 COMPILER V9.60.7.0   AMP                                                               11/10/2026 14:41:17 PAGE 3   
+C51 COMPILER V9.60.7.0   AMP                                                               11/11/2026 13:59:24 PAGE 3   
 
                               ClrBit(AMP_CR1, AMP0_GAIN0);
                   

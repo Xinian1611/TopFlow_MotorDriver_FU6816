@@ -36,7 +36,43 @@
 /* ----------------------------------------------------------------------------------------------------------------------------
                                              2.电机参数                                                 
 ---------------------------------------------------------------------------------------------------------------------------- */
-/*电机参数值*/
+/* ---- 电机型号选择：改 MOTOR_SELECT 即可切换整套电机参数 ---- */
+#define MOTOR_12V_600W                 (1)
+#define MOTOR_24V_1200W                (2)
+#define MOTOR_36V_2400W                (3)
+
+#ifndef MOTOR_SELECT
+#define MOTOR_SELECT                   MOTOR_24V_1200W     ///< 当前选用的电机
+#endif
+
+#if   (MOTOR_SELECT == MOTOR_12V_600W)
+/* ---- 12V 600W ---- */
+#define Pole_Pairs                     (7.0)                                    ///<      电机 极对数
+#define RS                             (0.0163)//0.019    //(0.025*0.4)                                    ///< (Ω)  电机 相电阻
+#define LD                             (0.0000639)//(0.000100*0.4)								    ///< (H)  电机 相电感
+#define LQ                             (0.0000655)                                     ///< (H)  电机 相电感
+#define MOTOR_SPEED_BASE               (4096.0)                                ///< (RPM) 速度基准
+// 若选择AO自适应观测器 则无需填写Ke
+#define KeVpp                           (7.6832)                                 ///< (V)      反电动势测量的峰峰值
+#define KeT                             (100.40)                                 ///< (ms)     反电动势测量的周期
+#define Ke                              (Pole_Pairs * KeVpp * KeT / 207.84)     ///< (V/KRPM) 反电动势常数
+
+
+#elif (MOTOR_SELECT == MOTOR_24V_1200W)
+/* ---- 24V 1200W ---- */
+#define Pole_Pairs                     (7.0)                                    ///<      电机 极对数
+#define RS                             (0.0163)//0.019    //(0.025*0.4)                                    ///< (Ω)  电机 相电阻
+#define LD                             (0.0000573)//(0.000100*0.4)								    ///< (H)  电机 相电感
+#define LQ                             (0.0000562)                                     ///< (H)  电机 相电感
+#define MOTOR_SPEED_BASE               (4096.0)                                ///< (RPM) 速度基准
+// 若选择AO自适应观测器 则无需填写Ke
+#define KeVpp                           (7.6832)                                 ///< (V)      反电动势测量的峰峰值
+#define KeT                             (100.40)                                 ///< (ms)     反电动势测量的周期
+#define Ke                              (Pole_Pairs * KeVpp * KeT / 207.84)     ///< (V/KRPM) 反电动势常数
+
+
+#elif (MOTOR_SELECT == MOTOR_36V_2400W)
+/* ---- 36V 2400W ---- */
 #define Pole_Pairs                     (7.0)                                    ///<      电机 极对数
 #define RS                             (0.0163)//0.019    //(0.025*0.4)                                    ///< (Ω)  电机 相电阻
 #define LD                             (0.000143)//(0.000100*0.4)								    ///< (H)  电机 相电感
@@ -47,6 +83,10 @@
 #define KeT                             (100.40)                                 ///< (ms)     反电动势测量的周期
 #define Ke                              (Pole_Pairs * KeVpp * KeT / 207.84)     ///< (V/KRPM) 反电动势常数
 
+
+#else
+#error "MOTOR_SELECT invalid: MOTOR_12V_600W / MOTOR_24V_1200W / MOTOR_36V_2400W"
+#endif
 /* ----------------------------------------------------------------------------------------------------------------------------
                                              3.电流采样参数                                                   
 ---------------------------------------------------------------------------------------------------------------------------- */
@@ -334,16 +374,40 @@
 
 #define LOOP_TIME                       (1)                 ///< (ms) 外环环调节周期,默认为 1m
 
+#if   (MOTOR_SELECT == MOTOR_12V_600W)
+#define MOTOR_SPEED_MIN_RPM            S_Value(150.0)        ///< (RPM) 运行最小转速
+#define MOTOR_SPEED_MAX_RPM            S_Value(1100.0)       ///< (RPM) 运行最大转速
+#define MOTOR_SPEED_STOP_RPM           S_Value(100.0)       ///< (RPM) 运行最小转速  
+#elif (MOTOR_SELECT == MOTOR_24V_1200W)
+/* ---- 24V 1200W ---- */
+#define MOTOR_SPEED_MIN_RPM            S_Value(150.0)        ///< (RPM) 运行最小转速
+#define MOTOR_SPEED_MAX_RPM            S_Value(1385.0)       ///< (RPM) 运行最大转速
+#define MOTOR_SPEED_STOP_RPM           S_Value(100.0)       ///< (RPM) 运行最小转速
+
+#elif (MOTOR_SELECT == MOTOR_36V_2400W)
+/* ---- 36V 2400W ---- */
 #define MOTOR_SPEED_MIN_RPM            S_Value(150.0)        ///< (RPM) 运行最小转速
 #define MOTOR_SPEED_MAX_RPM            S_Value(1800.0)       ///< (RPM) 运行最大转速
-#define MOTOR_SPEED_STOP_RPM           S_Value(100.0)       ///< (RPM) 运行最小转速  
+#define MOTOR_SPEED_STOP_RPM           S_Value(100.0)       ///< (RPM) 运行最小转速
+#endif
 
 #define SKP                            _Q12(0.6)            ///< 外环KP     
 #define SKI                            _Q15(0.004)           ///< 外环KI
 #define SKD                            _Q12(0.0)            ///< 外环KD
 
+
+#if   (MOTOR_SELECT == MOTOR_12V_600W)
+#define SOUTMAX                        I_Value(70.0)        ///< (A) 外环电流最大限幅值
+#define SOUTMIN                        I_Value(1.5)        ///< (A) 外环电流最小限幅值 
+#elif (MOTOR_SELECT == MOTOR_24V_1200W)
+/* ---- 24V 1200W ---- */
+#define SOUTMAX                        I_Value(70.0)        ///< (A) 外环电流最大限幅值
+#define SOUTMIN                        I_Value(1.5)        ///< (A) 外环电流最小限幅值
+#elif (MOTOR_SELECT == MOTOR_36V_2400W)
+/* ---- 36V 2400W ---- */
 #define SOUTMAX                        I_Value(90.0)        ///< (A) 外环电流最大限幅值
 #define SOUTMIN                        I_Value(1.5)        ///< (A) 外环电流最小限幅值
+#endif
 
 /* -----环路爬坡增量----- */
 #if (MOTOR_CTRL_MODE == CURRENT_LOOP_CONTROL) 

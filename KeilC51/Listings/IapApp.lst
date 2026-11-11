@@ -1,4 +1,4 @@
-C51 COMPILER V9.60.7.0   IAPAPP                                                            11/10/2026 14:41:19 PAGE 1   
+C51 COMPILER V9.60.7.0   IAPAPP                                                            11/11/2026 13:59:25 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE IAPAPP
@@ -62,7 +62,7 @@ line level    source
   50          
   51          //------------------------------------------------------------------------------------
   52          //函数功能：从FLASH中读取1页数据
-C51 COMPILER V9.60.7.0   IAPAPP                                                            11/10/2026 14:41:19 PAGE 2   
+C51 COMPILER V9.60.7.0   IAPAPP                                                            11/11/2026 13:59:25 PAGE 2   
 
   53          //输入参数：faddr：FLASH地址
   54          //返回参数：无
@@ -126,7 +126,7 @@ line level    source
  112   1      
  113   1        if(0 == STMFLASH_ErashPage(StartAddress))
  114   1          return 0;
-C51 COMPILER V9.60.7.0   IAPAPP                                                            11/10/2026 14:41:19 PAGE 3   
+C51 COMPILER V9.60.7.0   IAPAPP                                                            11/11/2026 13:59:25 PAGE 3   
 
  115   1      
  116   1        i = (StartAddress - STM_FLASH_BASE)/STM_FLASH_PAGE_SIZE;
@@ -190,7 +190,7 @@ line level    source
  174          //返回参数：0：更新失败，1：更新成功
  175          //特别说明：无
  176          //------------------------------------------------------------------------------------
-C51 COMPILER V9.60.7.0   IAPAPP                                                            11/10/2026 14:41:19 PAGE 4   
+C51 COMPILER V9.60.7.0   IAPAPP                                                            11/11/2026 13:59:25 PAGE 4   
 
  177          int16_t IAPIDUpdate(void)
  178          {
@@ -254,7 +254,7 @@ line level    source
  235   1        buf[5] = 0;
  236   1        buf[6] = 0;
  237   1        buf[7] = 0;
-C51 COMPILER V9.60.7.0   IAPAPP                                                            11/10/2026 14:41:19 PAGE 5   
+C51 COMPILER V9.60.7.0   IAPAPP                                                            11/11/2026 13:59:25 PAGE 5   
 
  238   1      
  239   1        (void)CanMin_IapSend(IAP_ID_BUILD(Station_ID, OnlineCheck), buf, 8);  /* IAP 帧必须扩展帧 */
@@ -318,7 +318,7 @@ line level    source
  297   2          {
  298   3            #ifdef IPADataType_FLASH
  299   3            EA = 0;
-C51 COMPILER V9.60.7.0   IAPAPP                                                            11/10/2026 14:41:19 PAGE 6   
+C51 COMPILER V9.60.7.0   IAPAPP                                                            11/11/2026 13:59:25 PAGE 6   
 
  300   3            #endif
  301   3      
@@ -382,7 +382,7 @@ line level    source
  359   2          result = ((uint32_t)readout[2] << 24) | ((uint32_t)readout[3] << 16) |
  360   2                   ((uint32_t)readout[4] << 8)  | (uint32_t)readout[5];
  361   2          return (uint16_t)(result >> 4);
-C51 COMPILER V9.60.7.0   IAPAPP                                                            11/10/2026 14:41:19 PAGE 7   
+C51 COMPILER V9.60.7.0   IAPAPP                                                            11/11/2026 13:59:25 PAGE 7   
 
  362   2        }
  363   1        return 0;
