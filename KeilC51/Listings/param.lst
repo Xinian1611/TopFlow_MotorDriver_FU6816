@@ -1,0 +1,34 @@
+A51 MACRO ASSEMBLER  PARAM                                                                11/12/2026 16:48:53 PAGE     1
+
+
+MACRO ASSEMBLER A51 V8.2.7.0
+OBJECT MODULE PLACED IN .\Objects\param.obj
+ASSEMBLER INVOKED BY: D:\Software\keil\C51\BIN\A51.EXE param.a51 SET(LARGE) DEBUG PRINT(.\Listings\param.lst) OBJECT(.\O
+                      bjects\param.obj) EP
+
+LOC  OBJ            LINE     SOURCE
+
+                       1     ; param.a51 - IAP parameter page at 0x1700
+                       2     ; station 1 = drive motor (change the 6th data byte + XOR for other station)
+                       3                     NAME    IAP_PARAM
+----                   4             CSEG    AT      1700H
+1700 55AA1234          5             DB      55H,0AAH,12H,34H,0D9H,0FFH,0FFH,0FFH
+1704 D9FFFFFF                
+1708 55AA0000          6             DB      55H,0AAH,00H,00H,00H,10H,0EFH,0FFH
+170C 0010EFFF                
+                       7             END
+A51 MACRO ASSEMBLER  PARAM                                                                11/12/2026 16:48:53 PAGE     2
+
+SYMBOL TABLE LISTING
+------ ----- -------
+
+
+N A M E             T Y P E  V A L U E   ATTRIBUTES
+
+IAP_PARAM. . . . .  N NUMB   -----       
+
+
+REGISTER BANK(S) USED: 0 
+
+
+ASSEMBLY COMPLETE.  0 WARNING(S), 0 ERROR(S)

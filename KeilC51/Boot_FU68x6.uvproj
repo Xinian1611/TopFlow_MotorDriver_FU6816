@@ -243,7 +243,7 @@
               <Ocm1>
                 <Type>0</Type>
                 <StartAddress>0x0</StartAddress>
-                <Size>0x0</Size>
+                <Size>0x1700</Size>
               </Ocm1>
               <Ocm2>
                 <Type>0</Type>
@@ -410,6 +410,11 @@
               <FileName>STARTUP.A51</FileName>
               <FileType>2</FileType>
               <FilePath>..\Boot\STARTUP.A51</FilePath>
+            </File>
+            <File>
+              <FileName>param.a51</FileName>
+              <FileType>2</FileType>
+              <FilePath>.\param.a51</FilePath>
             </File>
           </Files>
         </Group>

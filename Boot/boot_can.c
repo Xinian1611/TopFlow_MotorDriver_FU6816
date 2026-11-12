@@ -50,9 +50,9 @@ void CAN_Read(void)                 /* 填 RxMessage[0] */
 	{
 	case (0 | 0):                                   /* 邮箱 0 */
 		if((CAN_RX0CR & 0x80) == 0) break;                          /* 只收扩展帧 */
-		if(CAN_RX0ID0 || CAN_RX0ID1 || (CAN_RX0ID2 & 0xC0)) break;  /* 只认 ID<=0x7FF(addr<=0x7F) */
 		RxMessage[0].DLC   = (uint8)(CAN_RX0CR & 0x0F);
-		RxMessage[0].ExtId = ((uint16_t)CAN_RX0ID2 << 5) | ((uint16_t)CAN_RX0ID3 >> 3);
+		RxMessage[0].ExtId = ((uint32_t)CAN_RX0ID0 << 21) | ((uint32_t)CAN_RX0ID1 << 13)
+					| ((uint32_t)CAN_RX0ID2 << 5)  | ((uint32_t)CAN_RX0ID3 >> 3);
 		RxMessage[0].Data[0]=CAN_RX0DR0; RxMessage[0].Data[1]=CAN_RX0DR1;
 		RxMessage[0].Data[2]=CAN_RX0DR2; RxMessage[0].Data[3]=CAN_RX0DR3;
 		RxMessage[0].Data[4]=CAN_RX0DR4; RxMessage[0].Data[5]=CAN_RX0DR5;
@@ -62,9 +62,9 @@ void CAN_Read(void)                 /* 填 RxMessage[0] */
 
 	case (0 | RDPTR0):                              /* 邮箱 1 */
 		if((CAN_RX1CR & 0x80) == 0) break;
-		if(CAN_RX1ID0 || CAN_RX1ID1 || (CAN_RX1ID2 & 0xC0)) break;
 		RxMessage[0].DLC   = (uint8)(CAN_RX1CR & 0x0F);
-		RxMessage[0].ExtId = ((uint16_t)CAN_RX1ID2 << 5) | ((uint16_t)CAN_RX1ID3 >> 3);
+		RxMessage[0].ExtId = ((uint32_t)CAN_RX1ID0 << 21) | ((uint32_t)CAN_RX1ID1 << 13)
+		                   | ((uint32_t)CAN_RX1ID2 << 5)  | ((uint32_t)CAN_RX1ID3 >> 3);
 		RxMessage[0].Data[0]=CAN_RX1DR0; RxMessage[0].Data[1]=CAN_RX1DR1;
 		RxMessage[0].Data[2]=CAN_RX1DR2; RxMessage[0].Data[3]=CAN_RX1DR3;
 		RxMessage[0].Data[4]=CAN_RX1DR4; RxMessage[0].Data[5]=CAN_RX1DR5;
@@ -74,9 +74,9 @@ void CAN_Read(void)                 /* 填 RxMessage[0] */
 
 	case (RDPTR1 | 0):                              /* 邮箱 2 */
 		if((CAN_RX2CR & 0x80) == 0) break;
-		if(CAN_RX2ID0 || CAN_RX2ID1 || (CAN_RX2ID2 & 0xC0)) break;
 		RxMessage[0].DLC   = (uint8)(CAN_RX2CR & 0x0F);
-		RxMessage[0].ExtId = ((uint16_t)CAN_RX2ID2 << 5) | ((uint16_t)CAN_RX2ID3 >> 3);
+		RxMessage[0].ExtId = ((uint32_t)CAN_RX2ID0 << 21) | ((uint32_t)CAN_RX2ID1 << 13)
+		                   | ((uint32_t)CAN_RX2ID2 << 5)  | ((uint32_t)CAN_RX2ID3 >> 3);
 		RxMessage[0].Data[0]=CAN_RX2DR0; RxMessage[0].Data[1]=CAN_RX2DR1;
 		RxMessage[0].Data[2]=CAN_RX2DR2; RxMessage[0].Data[3]=CAN_RX2DR3;
 		RxMessage[0].Data[4]=CAN_RX2DR4; RxMessage[0].Data[5]=CAN_RX2DR5;
@@ -120,7 +120,7 @@ void CANSendMsgCheck(uint8_t index,struct CANTxStc *Data,uint16_t Length)
 	uint16 id;
 	uint16 to = 3000;
 
-	id = (uint16)(Data->IdentifyID.all & 0x07FF);
+	id = Data->IdentifyID.all & 0x1FFFFFFFUL;      /* 29 位全用，不再截到 0x7FF */
 
 	while(ReadBit(CAN_SR, TXING))    /* 上一帧没发完，最多等 3000 次，不死等 */
 	{

@@ -371,7 +371,7 @@ void CAN_BOOT_ExecutiveCommand(uint8_t can_cmd)
 
 void CAN_BOOT_Command(void)
 {
-	uint16_t can_addr=0;
+	uint32_t can_addr=0;      /* 29 位 ID 全比较，避免 >>4 后被截断 */
 	uint8_t can_cmd=0;
 	
 	if(CAN1_CanRxMsgFlag && RxMessage[0].valid)

@@ -4,7 +4,9 @@
 ".\Objects\crc16.obj",
 ".\Objects\main.obj",
 ".\Objects\Robert_EEPROM.obj",
-".\Objects\STARTUP.obj" 
+".\Objects\STARTUP.obj",
+".\Objects\param.obj" 
 TO ".\Objects\Boot_FU68x6" 
 
-PRINT(".\Listings\Boot_FU68x6.map")
+PRINT(".\Listings\Boot_FU68x6.map") CLASSES (CODE (C:0x0-C:0x16FF), CONST (C:0x0-C:0x16FF), 
+ECODE (C:0x0-C:0x16FF), HCONST (C:0x0-C:0x16FF)) 
