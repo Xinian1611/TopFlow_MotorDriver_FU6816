@@ -6,9 +6,6 @@ uint16_t IAPCheckOverTime = 0;          /* 原来是 float 秒；现在当 1ms �
 uint16_t Station_ID       = 1;          /* 空片默认地址（与上位机约定）；IAPData_Init 会用参数页的值覆盖 */
 uint8_t  IAPRxFinishFlag  = 0;
 
-static uint8_t  IAPUpgradePending = 0;
-static uint16_t IAPStopTimeout    = 0;
-
 // uint8_t FlashData_Page[STM_FLASH_PAGE_SIZE];
 
 //------------------------------------------------------------------------------------
@@ -28,8 +25,6 @@ void IAPData_Init(void)
 
 	IAPCheckOverTime  = 0;
 	IAPRxFinishFlag   = 0;
-	IAPUpgradePending = 0;
-	IAPStopTimeout    = 0;
 }
 
 #ifdef IPADataType_FLASH
@@ -181,10 +176,9 @@ int16_t IAPIDUpdate(void)
 
 	/* 1) 先看 ID 是不是已经一致 */
 	STMFLASH_ReadBuff(IAPID_FLASH_OFFSET,(uint32_t*)TempData,8);
-	*((uint8_t *)(&temp32)+3) = TempData[2];
-	*((uint8_t *)(&temp32)+2) = TempData[3];
-	*((uint8_t *)(&temp32)+1) = TempData[4];
-	*(uint8_t *)(&temp32)     = TempData[5];
+	/* 按大端拼装（与 ReadCANID / param.a51 一致） */
+	temp32 = ((uint32_t)TempData[2] << 24) | ((uint32_t)TempData[3] << 16) |
+	         ((uint32_t)TempData[4] << 8)  | ((uint32_t)TempData[5]);
 	for(i=0;i<6;i++)
 		crcdata ^= TempData[i];
 	if((0x55 == TempData[0]) && (0xaa == TempData[1]) &&
@@ -200,10 +194,11 @@ int16_t IAPIDUpdate(void)
 	crcdata = 0;
 	WriteBuff[8]  = 0x55;
 	WriteBuff[9]  = 0xaa;
-	WriteBuff[10] = *((uint8_t *)(&IAPIdentifyTx.all)+3);
-	WriteBuff[11] = *((uint8_t *)(&IAPIdentifyTx.all)+2);
-	WriteBuff[12] = *((uint8_t *)(&IAPIdentifyTx.all)+1);
-	WriteBuff[13] = *(uint8_t *)(&IAPIdentifyTx.all);
+	/* 按大端写：(addr<<4) 4 字节，高字节在前 */
+	WriteBuff[10] = (uint8_t)((IAPIdentifyTx.all >> 24) & 0xFF);
+	WriteBuff[11] = (uint8_t)((IAPIdentifyTx.all >> 16) & 0xFF);
+	WriteBuff[12] = (uint8_t)((IAPIdentifyTx.all >> 8)  & 0xFF);
+	WriteBuff[13] = (uint8_t)((IAPIdentifyTx.all)       & 0xFF);
 	for(i=8;i<14;i++)
 		crcdata ^= WriteBuff[i];
 	WriteBuff[14] = crcdata;
@@ -250,28 +245,6 @@ void IAPRequestCheck(void)
 	static uint8_t UpdateFlag = 0;
 	uint8_t cmd;                    /* 命令码，必须从 .all 里取 */
 
-	/* 已收到 cmd9：等电机停稳后再擦标志 */
-	if(IAPUpgradePending)
-	{
-		if((mcState == mcStop) || (mcState == mcReady))
-		{
-			IAPUpgradePending = 0;
-			EA = 0;
-			if(CPDD_TRUE == IAPFlagErase())
-			{
-				SetBit(RST_SR, SOFTR);
-				while(1);
-			}
-			EA = 1;
-		}
-		else if(0 == IAPStopTimeout)     /* 3s 没停稳：放弃本次升级 */
-		{
-			IAPUpgradePending = 0;
-			UpdateFlag = 0;
-		}
-		return;
-	}
-
 	if(0 == IAPRxFinishFlag)
 	{
 		if((1 == UpdateFlag) && (0 == IAPCheckOverTime))
@@ -307,16 +280,24 @@ void IAPRequestCheck(void)
 			#endif
 		}
 	}
-	else
+		else
 	{
 		if((ExcuteApp == cmd) || (0x0F == cmd))
 		{
-			CanMin_SetEstop(1);
-			CanMin_SetRun(0);
-			g_run_state.is_started = 0;
+			#ifdef IPADataType_FLASH
+			EA = 0;
+			#endif
 
-			IAPUpgradePending = 1;
-			IAPStopTimeout    = 3000;    /* 3s 停机窗口 */
+			if(CPDD_TRUE == IAPFlagErase())
+			{
+				UpdateFlag = 0;
+				SetBit(RST_SR, SOFTR);   /* 软复位 → 交给 boot */
+				while(1);
+			}
+
+			#ifdef IPADataType_FLASH
+			EA = 1;
+			#endif
 		}
 	}
 }
@@ -389,5 +370,4 @@ void IAPRxStdFrame(uint16_t id, uint8_t *dat, uint8_t dlc)
 void IAPTick1ms(void)
 {
 	if(IAPCheckOverTime) IAPCheckOverTime--;
-	if(IAPStopTimeout)   IAPStopTimeout--;
 }

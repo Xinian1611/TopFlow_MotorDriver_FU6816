@@ -1,4 +1,4 @@
-A51 MACRO ASSEMBLER  STARTUP_APP1800                                                      11/10/2026 14:41:19 PAGE     1
+A51 MACRO ASSEMBLER  STARTUP_APP1800                                                      11/12/2026 16:48:44 PAGE     1
 
 
 MACRO ASSEMBLER A51 V8.2.7.0
@@ -65,7 +65,7 @@ LOC  OBJ            LINE     SOURCE
   0000                48     XDATASTART      EQU     0               ; 外部 RAM(xdata) 清零起始
   1000                49     XDATALEN        EQU     4096            ; 外部 RAM 清零字节数（与原文件一致）
                       50     
-A51 MACRO ASSEMBLER  STARTUP_APP1800                                                      11/10/2026 14:41:19 PAGE     2
+A51 MACRO ASSEMBLER  STARTUP_APP1800                                                      11/12/2026 16:48:44 PAGE     2
 
   0000                51     IBPSTACK        EQU     0
   0100                52     IBPSTACKTOP     EQU     IDATALEN
@@ -133,7 +133,7 @@ LOC  OBJ            LINE     SOURCE
 1843 020000   F      113                     LJMP    CAN_INT
                      114     
 ----                 115                     CSEG    AT      184BH   ; INT9  TIM3
-A51 MACRO ASSEMBLER  STARTUP_APP1800                                                      11/10/2026 14:41:19 PAGE     3
+A51 MACRO ASSEMBLER  STARTUP_APP1800                                                      11/12/2026 16:48:44 PAGE     3
 
 184B 020000   F      116                     LJMP    TIM3_INT
                      117     
@@ -201,12 +201,12 @@ LOC  OBJ            LINE     SOURCE
                      179     
 0015 758100   F      180                     MOV     SP,#?STACK-1    ; 设栈顶（boot 是 LCALL 跳进来，这里会�
                              ��返回地址丢掉，正常）
-A51 MACRO ASSEMBLER  STARTUP_APP1800                                                      11/10/2026 14:41:19 PAGE     4
+A51 MACRO ASSEMBLER  STARTUP_APP1800                                                      11/12/2026 16:48:44 PAGE     4
 
 0018 020000   F      181                     LJMP    ?C_START
                      182     
                      183                     END
-A51 MACRO ASSEMBLER  STARTUP_APP1800                                                      11/10/2026 14:41:19 PAGE     5
+A51 MACRO ASSEMBLER  STARTUP_APP1800                                                      11/12/2026 16:48:44 PAGE     5
 
 SYMBOL TABLE LISTING
 ------ ----- -------

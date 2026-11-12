@@ -51,4 +51,5 @@
 #include <BEMFDetect.h>
 #include <SquStart.h>
 #include <CanMin.h>
+#include <IapApp.h>      /* IAPTick1ms 原型 */
 #endif

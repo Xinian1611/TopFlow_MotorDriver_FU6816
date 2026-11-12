@@ -1,4 +1,4 @@
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/11/2026 13:59:22 PAGE 1   
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/12/2026 16:48:39 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE ADDFUNCTION
@@ -62,7 +62,7 @@ line level    source
   51   1          {
   52   2              return (-value);
   53   2          }
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/11/2026 13:59:22 PAGE 2   
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/12/2026 16:48:39 PAGE 2   
 
   54   1          else
   55   1          {
@@ -126,7 +126,7 @@ line level    source
  110   3      
  111   3                  // 转速曲线计算
  112   3                  if (isCtrlPowOn == true)
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/11/2026 13:59:22 PAGE 3   
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/12/2026 16:48:39 PAGE 3   
 
  113   3                  {
  114   4                      if (dutyTemp <= MINPWMDuty)
@@ -190,7 +190,7 @@ line level    source
  171   3                  else // 最大转速运行
  172   3                  {
  173   4                      mcFocCtrl.Ref = MOTOR_SPEED_MAX_RPM;
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/11/2026 13:59:22 PAGE 4   
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/12/2026 16:48:39 PAGE 4   
 
  174   4                  }
  175   3              }
@@ -254,7 +254,7 @@ line level    source
  233   4                      //                else
  234   4                      //                {
  235   4                      //                    mcFocCtrl.FR        = CW;
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/11/2026 13:59:22 PAGE 5   
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/12/2026 16:48:39 PAGE 5   
 
  236   4                      //                }
  237   4                  }
@@ -318,7 +318,7 @@ line level    source
                       }
               #elif (MOTOR_CTRL_MODE == CURRENT_LOOP_CONTROL)
                       {
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/11/2026 13:59:22 PAGE 6   
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/12/2026 16:48:39 PAGE 6   
 
                           mcFocCtrl.Ref = ONOFFTEST_CurrentREF; // 固定相电流赋值
                       }
@@ -382,7 +382,7 @@ line level    source
                                   {
                                       mcRefRamp.OutValue_float = mcFocCtrl.PowerFlt;
                                   }
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/11/2026 13:59:22 PAGE 7   
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/12/2026 16:48:39 PAGE 7   
 
               #elif (MOTOR_CTRL_MODE == UQ_LOOP_CONTROL)
                                   {
@@ -446,7 +446,7 @@ line level    source
                                       }
               #endif
                                       FOC_IQREF = mcFocCtrl.IqRef;
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/11/2026 13:59:22 PAGE 8   
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/12/2026 16:48:39 PAGE 8   
 
                                   }
               #else
@@ -510,7 +510,7 @@ line level    source
                           }
                           else if ((FOC__UQ < Single_Resistor_Mode_SwitchDuty2) && (Flag_Single_Mode == 1))
                           {
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/11/2026 13:59:22 PAGE 9   
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/12/2026 16:48:39 PAGE 9   
 
                               Flag_Single_Mode = 0;
                               SetReg(FOC_CR1, CSM0 | CSM1, CSM1); // 新单电阻采样配置
@@ -574,7 +574,7 @@ line level    source
  533   2      
  534   2              if (mcFocCtrl.FR == CW)
  535   2              {
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/11/2026 13:59:22 PAGE 10  
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/12/2026 16:48:39 PAGE 10  
 
  536   3                  mcFocCtrl.AlignAngle += 5;
  537   3                  FOC__THETA = mcFocCtrl.AlignAngle;
@@ -638,7 +638,7 @@ line level    source
  595   3                  if (mcFocCtrl.MDU_TEMP > 32767)
  596   3                  {
  597   4                      mcFocCtrl.align_theta_acc = (MUL0_MCH << 8) + (MUL0_MCL >> 8) + 1;
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/11/2026 13:59:22 PAGE 11  
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/12/2026 16:48:39 PAGE 11  
 
  598   4                  }
  599   3                  else
@@ -702,7 +702,7 @@ line level    source
                               FOC_EKLPFMIN = OBS_EA_KS2;
                               FOC_EKP = OBSW_KP_GAIN_RUN2; // 估算器里的PI的KP
                               FOC_EKI = OBSW_KI_GAIN_RUN2; // 估算器里的PI的KI
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/11/2026 13:59:22 PAGE 12  
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/12/2026 16:48:39 PAGE 12  
 
                           }
                           else if (mcFocCtrl.State_Count == (ATO_RAMP_PERIOD << 1))
@@ -766,7 +766,7 @@ line level    source
  716   2              mcFocCtrl.EsValue = MDU_LPF0(FOC__EMF << 2, mcFocCtrl.EsValue, 50); /* -----估算器估算的反�
              -��动势值滤波--- */
  717   2      
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/11/2026 13:59:22 PAGE 13  
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/12/2026 16:48:39 PAGE 13  
 
  718   2              if (mcState == mcRun)
  719   2              {
@@ -830,7 +830,7 @@ line level    source
  771   2              mcFocCtrl.State_Count--;
  772   2          }
  773   1          /* PWM信号滤波 */
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/11/2026 13:59:22 PAGE 14  
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/12/2026 16:48:39 PAGE 14  
 
  774   1          if (mcPwmInput.MotorOnFilter > 0)
  775   1          {
@@ -894,7 +894,7 @@ line level    source
  833   1          SCAT3_SIN = 0;
  834   1          SCAT3_THE = Theta;
  835   1          SMDU_RunBlock(3, SIN_COS);
-C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/11/2026 13:59:22 PAGE 15  
+C51 COMPILER V9.60.7.0   ADDFUNCTION                                                       11/12/2026 16:48:39 PAGE 15  
 
  836   1          *Cos = SCAT3_RES1;
  837   1          *Sin = SCAT3_RES2;

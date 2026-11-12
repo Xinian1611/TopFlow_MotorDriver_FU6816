@@ -1,4 +1,4 @@
-C51 COMPILER V9.60.7.0   UART                                                              11/10/2026 14:41:18 PAGE 1   
+C51 COMPILER V9.60.7.0   UART                                                              11/12/2026 16:48:43 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE UART
@@ -62,7 +62,7 @@ line level    source
   49   1          ClrBit(UT2_BAUD , UART2IEN); //UART2中断使能0-->Disable  1-->Enable
   50   1          UT2_BAUD = 0x000c;           //波特率可设置 = 24000000/(16/(1+ UT_BAUD[BAUD_SEL]))/(UT_BAUD+1)
   51   1                                       //9B-->9600 0x000c-->115200 0x0005-->256000
-C51 COMPILER V9.60.7.0   UART                                                              11/10/2026 14:41:18 PAGE 2   
+C51 COMPILER V9.60.7.0   UART                                                              11/12/2026 16:48:43 PAGE 2   
 
   52   1      }
   53          
