@@ -1,0 +1,1 @@
+"..\Boot\can_bootloader.c" LARGE OMF2 OPTIMIZE (8,SPEED) BROWSE INCDIR(..\Boot;..\FU68xx_Hardware_Driver\Include) DEBUG PRINT(.\Listings\can_bootloader.lst) TABS (2) OBJECT(.\Objects\can_bootloader.obj)

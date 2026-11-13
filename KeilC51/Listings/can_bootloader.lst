@@ -1,4 +1,4 @@
-C51 COMPILER V9.60.7.0   CAN_BOOTLOADER                                                    11/12/2026 16:48:52 PAGE 1   
+C51 COMPILER V9.60.7.0   CAN_BOOTLOADER                                                    11/13/2026 09:20:03 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE CAN_BOOTLOADER
@@ -62,7 +62,7 @@ line level    source
   51            * @param  Address Flash起始地址。
   52            * @param  Data 数据存储区起始地址。
   53            * @param  DataNum 数据字节数。
-C51 COMPILER V9.60.7.0   CAN_BOOTLOADER                                                    11/12/2026 16:48:52 PAGE 2   
+C51 COMPILER V9.60.7.0   CAN_BOOTLOADER                                                    11/13/2026 09:20:03 PAGE 2   
 
   54            * @retval 数据烧写状态。
   55            */
@@ -126,7 +126,7 @@ line level    source
  113   2          for(i = 0;i < NbPages;i++)
  114   2          {
  115   3            SetBit(WDT_CR, WDTRF);                       /* 原 delayus(100) */
-C51 COMPILER V9.60.7.0   CAN_BOOTLOADER                                                    11/12/2026 16:48:52 PAGE 3   
+C51 COMPILER V9.60.7.0   CAN_BOOTLOADER                                                    11/13/2026 09:20:03 PAGE 3   
 
  116   3            j = (APP_START_ADDR + (0x800 * i));
  117   3            FLASHStatus = FLASH_ErasePage(j);
@@ -190,7 +190,7 @@ line level    source
  175   1        Cantest.Buff[7] = 0;
  176   1        
  177   1        CANSendMsgCheck(0,&Cantest,1);
-C51 COMPILER V9.60.7.0   CAN_BOOTLOADER                                                    11/12/2026 16:48:52 PAGE 4   
+C51 COMPILER V9.60.7.0   CAN_BOOTLOADER                                                    11/13/2026 09:20:03 PAGE 4   
 
  178   1      }
  179          
@@ -254,7 +254,7 @@ line level    source
  237   1        TxMessage.Buff[6] = 0;
  238   1        TxMessage.Buff[7] = 0;
  239   1        
-C51 COMPILER V9.60.7.0   CAN_BOOTLOADER                                                    11/12/2026 16:48:52 PAGE 5   
+C51 COMPILER V9.60.7.0   CAN_BOOTLOADER                                                    11/13/2026 09:20:03 PAGE 5   
 
  240   1        for(i=0;i<8;i++)
  241   1        Data[i] = RxMessage[0].Data[i];
@@ -318,7 +318,7 @@ line level    source
  298   1      
  299   1        if(data_index >= data_size)         /* 一块收齐（data_size 含 2 字节 CRC）*/
  300   1        {
-C51 COMPILER V9.60.7.0   CAN_BOOTLOADER                                                    11/12/2026 16:48:52 PAGE 6   
+C51 COMPILER V9.60.7.0   CAN_BOOTLOADER                                                    11/13/2026 09:20:03 PAGE 6   
 
  301   2          data_index    = 0;
  302   2          writeInfoDone = 0;              /* 下一块必须重新 WriteInfo（本方案每块都带地址）*/
@@ -382,7 +382,7 @@ line level    source
  356   2          CMD_Check();
  357   2          return;
  358   2        }
-C51 COMPILER V9.60.7.0   CAN_BOOTLOADER                                                    11/12/2026 16:48:52 PAGE 7   
+C51 COMPILER V9.60.7.0   CAN_BOOTLOADER                                                    11/13/2026 09:20:03 PAGE 7   
 
  359   1        
  360   1        //CMD_List.Excute，控制程序跳转到指定地址执行
@@ -399,7 +399,7 @@ line level    source
  371          
  372          void CAN_BOOT_Command(void)
  373          {
- 374   1        uint16_t can_addr=0;
+ 374   1        uint32_t can_addr=0;      /* 29 位 ID 全比较，避免 >>4 后被截断 */
  375   1        uint8_t can_cmd=0;
  376   1        
  377   1        if(CAN1_CanRxMsgFlag && RxMessage[0].valid)
@@ -422,9 +422,9 @@ line level    source
 
 
 MODULE INFORMATION:   STATIC OVERLAYABLE
-   CODE SIZE        =   2112    ----
+   CODE SIZE        =   2161    ----
    CONSTANT SIZE    =      8    ----
-   XDATA SIZE       =   1044     121
+   XDATA SIZE       =   1044     126
    PDATA SIZE       =   ----    ----
    DATA SIZE        =   ----    ----
    IDATA SIZE       =   ----    ----
