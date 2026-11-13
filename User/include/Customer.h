@@ -42,7 +42,7 @@
 #define MOTOR_36V_2400W                (3)
 
 #ifndef MOTOR_SELECT
-#define MOTOR_SELECT                   MOTOR_24V_1200W     ///< 当前选用的电机
+#define MOTOR_SELECT                   MOTOR_36V_2400W     ///< 当前选用的电机
 #endif
 
 #if   (MOTOR_SELECT == MOTOR_12V_600W)

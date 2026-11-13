@@ -3,7 +3,7 @@
 union IAP_IDENTIFY IAPIdentifyTx,IAPIdentifyRx;
 
 uint16_t IAPCheckOverTime = 0;          /* 原来是 float 秒；现在当 1ms 倒计时用 */
-uint16_t Station_ID       = 1;          /* 空片默认地址（与上位机约定）；IAPData_Init 会用参数页的值覆盖 */
+uint16_t Station_ID       = 4;          /* 空片默认地址（与上位机约定）；IAPData_Init 会用参数页的值覆盖 */
 uint8_t  IAPRxFinishFlag  = 0;
 
 // uint8_t FlashData_Page[STM_FLASH_PAGE_SIZE];
@@ -17,14 +17,17 @@ uint8_t  IAPRxFinishFlag  = 0;
 void IAPData_Init(void)
 {
 	Station_ID = ReadCANID();                       /* 读 0x1708，读不到返回 0 */
-	if((0 == Station_ID) || (Station_ID > 0x7F))
-		Station_ID = 1;          /* 参数页无效（空片/校验错）→ 用默认地址 */
+	if((0 == Station_ID) || (Station_ID > 7))       /* 合法地址只有 1~7 */
+		Station_ID = 1;
 
 	IAPIdentifyTx.all  = IAP_ID_BUILD(Station_ID, 0);   /* 本机基址，命令位=0 */
 	IAPIdentifyRx.all  = IAPIdentifyTx.all;
 
-	IAPCheckOverTime  = 0;
-	IAPRxFinishFlag   = 0;
+	/* 参数区与当前 ID 不一致（空/校验错/旧格式）→ 立即写回，与电源板一致 */
+	IAPIDUpdate();
+
+	IAPCheckOverTime = 0;
+	IAPRxFinishFlag  = 0;
 }
 
 #ifdef IPADataType_FLASH

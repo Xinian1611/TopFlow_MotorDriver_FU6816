@@ -1,4 +1,4 @@
-C51 COMPILER V9.60.7.0   SLEEP                                                             11/12/2026 16:48:40 PAGE 1   
+C51 COMPILER V9.60.7.0   SLEEP                                                             11/13/2026 09:18:18 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE SLEEP
@@ -62,7 +62,7 @@ line level    source
   46   1              IT10 = 0;                               // 00: posedge mode interrupt，01: negedge mode interrupt
              -，1x: edge-change mode interrupt
   47   1              SetBit(IP0, PX11);
-C51 COMPILER V9.60.7.0   SLEEP                                                             11/12/2026 16:48:40 PAGE 2   
+C51 COMPILER V9.60.7.0   SLEEP                                                             11/13/2026 09:18:18 PAGE 2   
 
   48   1              SetBit(IP0, PX10);                      // 外部中断1中断优先级别3，中断优先级最�
              -�
@@ -126,7 +126,7 @@ line level    source
  101   2      //            
  102   2      //            P3_PU = P34 | P35| P36| P37;                         // 需确认这些端口能接受上拉
  103   2      //            P3_OE = P30 | P31| P32| P33;
-C51 COMPILER V9.60.7.0   SLEEP                                                             11/12/2026 16:48:40 PAGE 3   
+C51 COMPILER V9.60.7.0   SLEEP                                                             11/13/2026 09:18:18 PAGE 3   
 
  104   2      //            GP30 = 0; GP31 = 0;GP32 = 0;GP33 = 0;
  105   2      //            

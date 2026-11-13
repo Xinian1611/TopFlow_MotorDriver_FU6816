@@ -1,4 +1,4 @@
-C51 COMPILER V9.60.7.0   CANMIN                                                            11/12/2026 16:48:39 PAGE 1   
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/13/2026 09:18:17 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE CANMIN
@@ -62,7 +62,7 @@ line level    source
   50          
   51          /* ==========================================================================
   52           *  二、全局变量
-C51 COMPILER V9.60.7.0   CANMIN                                                            11/12/2026 16:48:39 PAGE 2   
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/13/2026 09:18:17 PAGE 2   
 
   53           * ========================================================================== */
   54          
@@ -126,7 +126,7 @@ line level    source
  112          {
  113   1          uint8 rdptr;
  114   1      
-C51 COMPILER V9.60.7.0   CANMIN                                                            11/12/2026 16:48:39 PAGE 3   
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/13/2026 09:18:17 PAGE 3   
 
  115   1          /* 读指针：0x00=RX0, 0x40=RX1, 0x80=RX2 */
  116   1          rdptr = CAN_CR2 & (RDPTR1 | RDPTR0);
@@ -190,7 +190,7 @@ line level    source
  174   2                  CanMin.Data2 = CAN_RX1DR2;
  175   2                  CanMin.Data3 = CAN_RX1DR3;
  176   2                  CanMin.Data4 = CAN_RX1DR4;
-C51 COMPILER V9.60.7.0   CANMIN                                                            11/12/2026 16:48:39 PAGE 4   
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/13/2026 09:18:17 PAGE 4   
 
  177   2                  CanMin.Data5 = CAN_RX1DR5;
  178   2                  CanMin.Data6 = CAN_RX1DR6;
@@ -254,7 +254,7 @@ line level    source
  236   2              /* 指令报文固定 8 字节，长度不对直接丢（同 20261030 的 len != 8） */
  237   2              if (CanMin.CAN_DLC == CAN_FRAME_DATA_LEN)
  238   2              {
-C51 COMPILER V9.60.7.0   CANMIN                                                            11/12/2026 16:48:39 PAGE 5   
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/13/2026 09:18:17 PAGE 5   
 
  239   3                  CanMin_ProcessCmd();
  240   3              }
@@ -318,7 +318,7 @@ line level    source
  298   1      #if (CAN_CMD_TIMEOUT_MS > 0)
  299   1          g_canmin_cmd_timeout = 0;         /* 收到有效指令，清通信超时计数 */
  300   1      #endif
-C51 COMPILER V9.60.7.0   CANMIN                                                            11/12/2026 16:48:39 PAGE 6   
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/13/2026 09:18:17 PAGE 6   
 
  301   1          g_run_state.fault_code = FAULT_NONE;   /* 清上一次“通信异常停机”的故障码 */
  302   1      
@@ -382,7 +382,7 @@ line level    source
  360   1          {
  361   2              g_run_state.ref      = 0;
  362   2              g_run_state.run_time = 0;
-C51 COMPILER V9.60.7.0   CANMIN                                                            11/12/2026 16:48:39 PAGE 7   
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/13/2026 09:18:17 PAGE 7   
 
  363   2          }
  364   1      }
@@ -446,7 +446,7 @@ line level    source
  422   1      
  423   1          if (g_run_state.is_estop)
  424   1          {
-C51 COMPILER V9.60.7.0   CANMIN                                                            11/12/2026 16:48:39 PAGE 8   
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/13/2026 09:18:17 PAGE 8   
 
  425   2              return;                                 /* 急停中不接受目标 */
  426   2          }
@@ -510,7 +510,7 @@ line level    source
  484           *  八、状态帧组帧
  485           * --------------------------------------------------------------------------
  486           *  对应 20261030 CanSlave.c 的 ext_build_status()，字节定义见 CanProtocol.h：
-C51 COMPILER V9.60.7.0   CANMIN                                                            11/12/2026 16:48:39 PAGE 9   
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/13/2026 09:18:17 PAGE 9   
 
  487           *      Byte0    ctrl：工作模式 + 启停 + 急停 回显
  488           *      Byte1-2  实际转速（1rpm，32767=0，负=反转）
@@ -574,7 +574,7 @@ line level    source
  546           *  九、发送
  547           * --------------------------------------------------------------------------
  548           *  对应 20261030 的 CAN_Send()，区别是“非阻塞”：
-C51 COMPILER V9.60.7.0   CANMIN                                                            11/12/2026 16:48:39 PAGE 10  
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/13/2026 09:18:17 PAGE 10  
 
  549           *     - g_canmin_tx_ready=0 表示上一帧还没发完（TXSUC=0），本周期直接跳过；
  550           *     - 等待超过 CAN_TX_TIMEOUT_MS 强制认为空闲，避免一次失败后永远不发；
@@ -638,7 +638,7 @@ line level    source
  608   1          g_canmin_tx_ready = 0;
  609   1          g_canmin_tx_wait  = 0;
  610   1          g_canmin_stat.TxFrames++;
-C51 COMPILER V9.60.7.0   CANMIN                                                            11/12/2026 16:48:39 PAGE 11  
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/13/2026 09:18:17 PAGE 11  
 
  611   1          return 1;
  612   1      }
@@ -702,7 +702,7 @@ line level    source
  670   1          {
  671   2              CanMinSend.CAN_IDE = IDE_STD;           /* 标准帧 */
  672   2          }
-C51 COMPILER V9.60.7.0   CANMIN                                                            11/12/2026 16:48:39 PAGE 12  
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/13/2026 09:18:17 PAGE 12  
 
  673   1      
  674   1          CanMinSend.CAN_RTR = RTR_DAT;               /* 数据帧 */
@@ -766,7 +766,7 @@ line level    source
  732   1          CAN_FIR0 = 0xFF;
  733   1          CAN_FIR1 = 0xFF;
  734   1          CAN_FIR2 = 0xFF;
-C51 COMPILER V9.60.7.0   CANMIN                                                            11/12/2026 16:48:39 PAGE 13  
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/13/2026 09:18:17 PAGE 13  
 
  735   1          CAN_FIR3 = 0xFF;
  736   1          CAN_FMR0 = 0xFF;
@@ -830,7 +830,7 @@ line level    source
  794           *      ① 收帧（最多 CAN_RX_PER_TICK 帧，读一帧释放一帧）
  795           *      ② 统计溢出 / bus-off
  796           *      ③ 每 CAN_STATUS_PERIOD_MS 发一帧状态
-C51 COMPILER V9.60.7.0   CANMIN                                                            11/12/2026 16:48:39 PAGE 14  
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/13/2026 09:18:17 PAGE 14  
 
  797           * ========================================================================== */
  798          void CanMin_Poll(void)
@@ -894,7 +894,7 @@ line level    source
  856   2          }
  857   1          else
  858   1          {
-C51 COMPILER V9.60.7.0   CANMIN                                                            11/12/2026 16:48:39 PAGE 15  
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/13/2026 09:18:17 PAGE 15  
 
  859   2              g_canmin_busoff_seen = 0;
  860   2              g_canmin_busoff_ms   = 0;
@@ -958,7 +958,7 @@ line level    source
  918   1      
  919   1          /* 起机/停机：直接决定 isCtrlPowOn，MC_Control() 据此走 mcInit / mcStop */
  920   1          isCtrlPowOn = g_run_state.is_started;
-C51 COMPILER V9.60.7.0   CANMIN                                                            11/12/2026 16:48:39 PAGE 16  
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/13/2026 09:18:17 PAGE 16  
 
  921   1      
  922   1          /* 急停：给定清零 + 进入停机，并清掉换向状态 */
@@ -1022,7 +1022,7 @@ line level    source
  978   4                      mcState                      = mcStop;   /* 与 20261030 的 CANMODE 分支一致 */
  979   4                  }
  980   3              }
-C51 COMPILER V9.60.7.0   CANMIN                                                            11/12/2026 16:48:39 PAGE 17  
+C51 COMPILER V9.60.7.0   CANMIN                                                            11/13/2026 09:18:17 PAGE 17  
 
  981   2      
  982   2              /* ---- 应用目标值 ----

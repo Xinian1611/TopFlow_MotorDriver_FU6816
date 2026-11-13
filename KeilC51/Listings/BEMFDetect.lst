@@ -1,4 +1,4 @@
-C51 COMPILER V9.60.7.0   BEMFDETECT                                                        11/12/2026 16:48:40 PAGE 1   
+C51 COMPILER V9.60.7.0   BEMFDETECT                                                        11/13/2026 09:18:18 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE BEMFDETECT
@@ -62,7 +62,7 @@ line level    source
                   #endif
                   /*  -------------------------------------------------------------------------------------------------
                       CMP0_MOD：
-C51 COMPILER V9.60.7.0   BEMFDETECT                                                        11/12/2026 16:48:40 PAGE 2   
+C51 COMPILER V9.60.7.0   BEMFDETECT                                                        11/13/2026 09:18:18 PAGE 2   
 
                       00：  无内置虚拟中心点电阻的BEMF模式
                       01：  内置虚拟中心点电阻的BEMF模式
@@ -126,7 +126,7 @@ line level    source
                   /*  -------------------------------------------------------------------------------------------------
                       时钟分频设置(T2PSC)
                       000:cpuclk(24MHz)         001:cpuclk/2^1(12MHz)   010:cpuclk/2^2(6MHz)    011:cpuclk/2^3(3MHz)
-C51 COMPILER V9.60.7.0   BEMFDETECT                                                        11/12/2026 16:48:40 PAGE 3   
+C51 COMPILER V9.60.7.0   BEMFDETECT                                                        11/13/2026 09:18:18 PAGE 3   
 
                       100:cpuclk/2^4(1.5MHz)    101:cpuclk/2^5(750KHz)  110:cpuclk/2^6(375KHz)  111:cpuclk/2^7(187.5KHz)
                       -------------------------------------------------------------------------------------------------*
@@ -190,7 +190,7 @@ line level    source
               /**
                   @brief        bemf顺序为 5,1,3,2,6,4
                   @param        bemfStatus 当前bemf状态
-C51 COMPILER V9.60.7.0   BEMFDETECT                                                        11/12/2026 16:48:40 PAGE 4   
+C51 COMPILER V9.60.7.0   BEMFDETECT                                                        11/13/2026 09:18:18 PAGE 4   
 
                   @return       BEMF_FR_CCW 反转
                   @return       BEMF_FR_CW  正转
@@ -254,7 +254,7 @@ line level    source
                   static uint8 temp_SumCnt = 0;
                   uint16 temp_Sum = 0;
                   int16 temp_speedCal;
-C51 COMPILER V9.60.7.0   BEMFDETECT                                                        11/12/2026 16:48:40 PAGE 5   
+C51 COMPILER V9.60.7.0   BEMFDETECT                                                        11/13/2026 09:18:18 PAGE 5   
 
                   mcBemf.FRPre = mcBemf.FR;               // 获取上一次的转向
                   mcBemf.FR = FR_Detect(CMP_SR & 0x07, mcBemf.FR_SET);  // 获取当前转向
@@ -318,7 +318,7 @@ line level    source
                               for (temp_SumCnt = 0; temp_SumCnt < 6; temp_SumCnt++)
                               {
                                   temp_Sum += (mcBemf.SectorTime[temp_SumCnt] >> 3); // 防止溢出
-C51 COMPILER V9.60.7.0   BEMFDETECT                                                        11/12/2026 16:48:40 PAGE 6   
+C51 COMPILER V9.60.7.0   BEMFDETECT                                                        11/13/2026 09:18:18 PAGE 6   
 
                               }
                               
@@ -382,7 +382,7 @@ line level    source
               {
                   MotStateType returnStatus;
                   returnStatus = mcTailWind;
-C51 COMPILER V9.60.7.0   BEMFDETECT                                                        11/12/2026 16:48:40 PAGE 7   
+C51 COMPILER V9.60.7.0   BEMFDETECT                                                        11/13/2026 09:18:18 PAGE 7   
 
                   
                   if (mcBemf.SpeedUpdate == 1)
@@ -446,7 +446,7 @@ line level    source
               {
                   /* FOC初始化 */
                   FOC_Init();
-C51 COMPILER V9.60.7.0   BEMFDETECT                                                        11/12/2026 16:48:40 PAGE 8   
+C51 COMPILER V9.60.7.0   BEMFDETECT                                                        11/13/2026 09:18:18 PAGE 8   
 
                   /* 启动电流、KP、KI */
                   FOC_IDREF           = ID_RUN_CURRENT;                      // D轴启动电流

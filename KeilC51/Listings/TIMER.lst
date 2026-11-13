@@ -1,4 +1,4 @@
-C51 COMPILER V9.60.7.0   TIMER                                                             11/12/2026 16:48:42 PAGE 1   
+C51 COMPILER V9.60.7.0   TIMER                                                             11/13/2026 09:18:19 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE TIMER
@@ -62,7 +62,7 @@ line level    source
   51              Date           : 2021-11-08
   52              Parameter      : None
   53          ------------------------------------------------------------------------------------------------- */
-C51 COMPILER V9.60.7.0   TIMER                                                             11/12/2026 16:48:42 PAGE 2   
+C51 COMPILER V9.60.7.0   TIMER                                                             11/13/2026 09:18:19 PAGE 2   
 
   54          void Timer3_Init(void)
   55          {
@@ -126,7 +126,7 @@ MODULE INFORMATION:   STATIC OVERLAYABLE
    CONSTANT SIZE    =   ----    ----
    XDATA SIZE       =   ----    ----
    PDATA SIZE       =   ----    ----
-C51 COMPILER V9.60.7.0   TIMER                                                             11/12/2026 16:48:42 PAGE 3   
+C51 COMPILER V9.60.7.0   TIMER                                                             11/13/2026 09:18:19 PAGE 3   
 
    DATA SIZE        =   ----    ----
    IDATA SIZE       =   ----    ----

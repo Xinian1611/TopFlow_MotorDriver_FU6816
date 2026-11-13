@@ -1,4 +1,4 @@
-C51 COMPILER V9.60.7.0   RSDDETECT                                                         11/12/2026 16:48:40 PAGE 1   
+C51 COMPILER V9.60.7.0   RSDDETECT                                                         11/13/2026 09:18:17 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE RSDDETECT
@@ -62,7 +62,7 @@ line level    source
                   ClrBit(DRV_CR, FOCEN);      // 关闭FOC
                   CMP_RSD_Init();
                   Time2_RSD_Init();           // RSD用的是Time2
-C51 COMPILER V9.60.7.0   RSDDETECT                                                         11/12/2026 16:48:40 PAGE 2   
+C51 COMPILER V9.60.7.0   RSDDETECT                                                         11/13/2026 09:18:17 PAGE 2   
 
               }
               
@@ -126,7 +126,7 @@ line level    source
                       10：只在on采样，根据CMP_SAMR延迟采样开启
                       11：在on和off均采样，根据CMP_SAMR延迟采样开启
                       ---------------------------------------------------------**/
-C51 COMPILER V9.60.7.0   RSDDETECT                                                         11/12/2026 16:48:40 PAGE 3   
+C51 COMPILER V9.60.7.0   RSDDETECT                                                         11/13/2026 09:18:17 PAGE 3   
 
                   //    SetReg(CMP_CR3, SAMSEL0 | SAMSEL1, SAMSEL1);
                   /* 采样延迟设置 */
@@ -190,7 +190,7 @@ line level    source
                   TIM2__CNTR = 0;
                   /*-----------启动计数------------------------------------------------*/
                   SetBit(TIM2_CR1, T2CEN);            //启动计数
-C51 COMPILER V9.60.7.0   RSDDETECT                                                         11/12/2026 16:48:40 PAGE 4   
+C51 COMPILER V9.60.7.0   RSDDETECT                                                         11/13/2026 09:18:17 PAGE 4   
 
               }
               
@@ -254,7 +254,7 @@ line level    source
                               /* 连续单方向转动，则取出周期时。 一个周期反电势是4个RSD跳变状�
              -�� */
                               mcRsd.Period = (mcRsd.StepTime[0]>>2) + (mcRsd.StepTime[1]>>2) + (mcRsd.StepTime[2]>>2) + 
-C51 COMPILER V9.60.7.0   RSDDETECT                                                         11/12/2026 16:48:40 PAGE 5   
+C51 COMPILER V9.60.7.0   RSDDETECT                                                         11/13/2026 09:18:17 PAGE 5   
 
              -(mcRsd.StepTime[3]>>2);
                               if (mcRsd.SetFR == CW)
@@ -318,7 +318,7 @@ line level    source
                       if (mcRsd.Status == 0x03)           // 03状态 对应90启动
                       {
                           ClrBit(CMP_CR2, CMP0EN);        // 关闭比较器
-C51 COMPILER V9.60.7.0   RSDDETECT                                                         11/12/2026 16:48:40 PAGE 6   
+C51 COMPILER V9.60.7.0   RSDDETECT                                                         11/13/2026 09:18:17 PAGE 6   
 
                           ClrBit(TIM2_CR1, T2CEN);        // 0，停止计数；1,使能计数
               
@@ -382,7 +382,7 @@ MODULE INFORMATION:   STATIC OVERLAYABLE
    IDATA SIZE       =   ----    ----
    BIT SIZE         =   ----    ----
    EDATA SIZE       =   ----    ----
-C51 COMPILER V9.60.7.0   RSDDETECT                                                         11/12/2026 16:48:40 PAGE 7   
+C51 COMPILER V9.60.7.0   RSDDETECT                                                         11/13/2026 09:18:17 PAGE 7   
 
    HDATA SIZE       =   ----    ----
    XDATA CONST SIZE =   ----    ----

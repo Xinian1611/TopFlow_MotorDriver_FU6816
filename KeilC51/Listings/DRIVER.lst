@@ -1,4 +1,4 @@
-C51 COMPILER V9.60.7.0   DRIVER                                                            11/12/2026 16:48:42 PAGE 1   
+C51 COMPILER V9.60.7.0   DRIVER                                                            11/13/2026 09:18:18 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE DRIVER
@@ -62,7 +62,7 @@ line level    source
                 #endif //end PWM_Level_Mode   
   52   1              
   53   1          ClrBit(DRV_SR , FGIE);  //FG中断使能      0-->Disable   1-->Enable
-C51 COMPILER V9.60.7.0   DRIVER                                                            11/12/2026 16:48:42 PAGE 2   
+C51 COMPILER V9.60.7.0   DRIVER                                                            11/13/2026 09:18:18 PAGE 2   
 
   54   1      
   55   1          /*清中断标志位，使能中断，配置比较值，设置中断优先级*/

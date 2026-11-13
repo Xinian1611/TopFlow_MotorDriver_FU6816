@@ -1,4 +1,4 @@
-C51 COMPILER V9.60.7.0   CMP                                                               11/12/2026 16:48:41 PAGE 1   
+C51 COMPILER V9.60.7.0   CMP                                                               11/13/2026 09:18:18 PAGE 1   
 
 
 C51 COMPILER V9.60.7.0, COMPILATION OF MODULE CMP
@@ -62,7 +62,7 @@ line level    source
                       SetBit(CMP_CR1 , CMP3MOD1);     // 00-->P27-单比较器模式    01-->P20/P23-双比较器模式
                       SetBit(CMP_CR1 , CMP3MOD0);     // 1X-->P20/P23/P27-三比较器模式
                   }
-C51 COMPILER V9.60.7.0   CMP                                                               11/12/2026 16:48:41 PAGE 2   
+C51 COMPILER V9.60.7.0   CMP                                                               11/13/2026 09:18:18 PAGE 2   
 
                   #endif  //end Shunt_Resistor_Mode
   55   1          
@@ -126,7 +126,7 @@ line level    source
  113           * Function      : CMP3_Interrupt_Init
  114           * Description   : CMP3中断配置
  115           * Input         : void  
-C51 COMPILER V9.60.7.0   CMP                                                               11/12/2026 16:48:41 PAGE 3   
+C51 COMPILER V9.60.7.0   CMP                                                               11/13/2026 09:18:18 PAGE 3   
 
  116           * Output        : None
  117           * Return        : 
